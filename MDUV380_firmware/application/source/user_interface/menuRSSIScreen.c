@@ -32,6 +32,19 @@
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
 #include "hardware/radioHardwareInterface.h"
+#include "functions/sound.h"
+#if defined(HAS_GPS)
+#include "interfaces/gps.h"
+#endif
+
+// Fox-hunt mode (fork): '#' toggles it on the RSSI screen.
+//  - periodic beep whose pitch follows the signal strength,
+//  - max-hold of the dBm value, with a marker on the S-meter,
+//  - the GPS position of that maximum, shown as distance/bearing from here,
+//  - '0' resets the max-hold.
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+#define FOX_HUNT_SUPPORTED
+#endif
 
 
 #if defined(PLATFORM_MD2017)
@@ -71,6 +84,30 @@ static uint8_t rawNoise[RADIO_DEVICE_MAX] =
 
 static bool displayRawValues = false;
 
+#if defined(FOX_HUNT_SUPPORTED)
+#define FOX_BEEP_INTERVAL_MS     600
+#define FOX_BEEP_DURATION_MS      50
+#define FOX_DBM_FLOOR           -130
+#define FOX_DBM_CEIL             -40
+#define FOX_FREQ_MIN             300
+#define FOX_FREQ_MAX            2400
+#define FOX_INFO_Y_POS          (DISPLAY_Y_POS_RSSI_BAR + 26) // Just below the S-meter scale labels
+#define FOX_INFO_LINE2_Y_POS    (FOX_INFO_Y_POS + FONT_SIZE_3_HEIGHT + 1)
+_Static_assert((FOX_INFO_LINE2_Y_POS + FONT_SIZE_1_HEIGHT) <= DISPLAY_SIZE_Y, "Fox-hunt info does not fit on screen");
+
+static bool foxHuntEnabled = false;
+static int foxMaxDbm = INT16_MIN;
+static bool foxMaxHasPosition = false;
+static double foxMaxLat = 0.0;
+static double foxMaxLon = 0.0;
+static uint32_t foxLastBeepTime = 0;
+static int16_t foxBeepMelody[] = { 0, FOX_BEEP_DURATION_MS, -1, -1 };
+
+static void foxHuntReset(void);
+static void foxHuntUpdate(uint32_t now);
+static void foxHuntDrawInfo(void);
+#endif
+
 static const int barX = 9;
 DECLARE_SMETER_ARRAY(rssiMeterBar, (DISPLAY_SIZE_X - (barX - 1)));
 
@@ -82,6 +119,9 @@ menuStatus_t menuRSSIScreen(uiEvent_t *ev, bool isFirstRun)
 	{
 		//calibrationGetRSSIMeterParams(&rssiCalibration); // UNUSED
 		menuDataGlobal.numItems = 0;
+#if defined(FOX_HUNT_SUPPORTED)
+		foxHuntReset();
+#endif
 		displayClearBuf();
 		menuDisplayTitle(currentLanguage->rssi);
 		displayRenderRows(0, 2);
@@ -101,6 +141,13 @@ menuStatus_t menuRSSIScreen(uiEvent_t *ev, bool isFirstRun)
 			m = ev->time;
 			updateScreen(false, false);
 		}
+
+#if defined(FOX_HUNT_SUPPORTED)
+		if (foxHuntEnabled)
+		{
+			foxHuntUpdate(ev->time);
+		}
+#endif
 	}
 
 	return menuRSSIExitCode;
@@ -294,11 +341,42 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 		}
 #endif
 
+#if defined(FOX_HUNT_SUPPORTED)
+		// Max-hold marker on the S-meter (same scaling as the live bar).
+		if (foxHuntEnabled && (device == RADIO_DEVICE_PRIMARY) && (foxMaxDbm != INT16_MIN))
+		{
+			int maxRssi = foxMaxDbm;
+
+			if ((maxRssi > SMETER_S9) && (trxGetMode() == RADIO_MODE_ANALOG))
+			{
+				maxRssi = ((maxRssi - SMETER_S9) / STRONG_SIGNAL_RESCALE) + SMETER_S9;
+			}
+			maxRssi = (maxRssi - SMETER_S0) * 2;
+
+			int maxWidth = CLAMP((((maxRssi * rssiMeterBarNumUnits) / rssiMeterBarDivider) - 1), 0, (DISPLAY_SIZE_X - barX - 2));
+
+			displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+			displayFillRect((barX + maxWidth), yBarPos, 2, 8, false);
+			displayThemeResetToDefault();
+		}
+#endif
+
 #if defined(PLATFORM_MD2017)
 		yValuePos += SECONDARY_DISPLAY_OFFSET;
 		yBarPos += SECONDARY_DISPLAY_OFFSET;
 #endif
 	}
+
+#if defined(FOX_HUNT_SUPPORTED)
+	if (foxHuntEnabled)
+	{
+		foxHuntDrawInfo();
+	}
+	else if (forceRedraw)
+	{
+		displayFillRect(0, FOX_INFO_Y_POS, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - FOX_INFO_Y_POS), true);
+	}
+#endif
 
 	if (forceRedraw || uiNotificationIsVisible())
 	{
@@ -322,6 +400,12 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 		{
 			displayRenderRows((yStartValuePos / 8), (yValuePos / 8) + 1);
 			displayRenderRows((yStartBarPos / 8), (yBarPos / 8) + 1);
+#if defined(FOX_HUNT_SUPPORTED)
+			if (foxHuntEnabled)
+			{
+				displayRenderRows((FOX_INFO_Y_POS / 8), DISPLAY_NUMBER_OF_ROWS);
+			}
+#endif
 
 #if defined(PLATFORM_MD2017)
 			yStartValuePos += SECONDARY_DISPLAY_OFFSET;
@@ -374,6 +458,24 @@ static void handleEvent(uiEvent_t *ev)
 		displayRawValues = !displayRawValues;
 		updateScreen(true, false);
 	}
+#if defined(FOX_HUNT_SUPPORTED)
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH))
+	{
+		char buf[SCREEN_LINE_BUFFER_SIZE];
+
+		foxHuntEnabled = !foxHuntEnabled;
+		foxHuntReset();
+		snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "Fox hunt: %s", (foxHuntEnabled ? currentLanguage->on : currentLanguage->off));
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, buf, false);
+		updateScreen(true, false);
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_0) && foxHuntEnabled && (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == 0))
+	{
+		foxHuntReset();
+		soundSetMelody(MELODY_ACK_BEEP);
+		updateScreen(true, false);
+	}
+#endif
 	else if (KEYCHECK_SHORTUP_NUMBER(ev->keys) && (BUTTONCHECK_DOWN(ev, BUTTON_SK2)))
 	{
 		saveQuickkeyMenuIndex(ev->keys.key, menuSystemGetCurrentMenuNumber(), 0, 0);
@@ -410,3 +512,96 @@ static void updateVoicePrompts(bool flushIt, bool spellIt)
 		}
 	}
 }
+
+#if defined(FOX_HUNT_SUPPORTED)
+static void foxHuntReset(void)
+{
+	foxMaxDbm = INT16_MIN;
+	foxMaxHasPosition = false;
+	foxLastBeepTime = 0;
+}
+
+static bool foxHuntGetPosition(double *lat, double *lon)
+{
+#if defined(HAS_GPS)
+	if ((SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF) &&
+			((gpsData.Status & (GPS_STATUS_HAS_FIX | GPS_STATUS_HAS_POSITION)) == (GPS_STATUS_HAS_FIX | GPS_STATUS_HAS_POSITION)))
+	{
+		*lat = gpsData.LatitudeHiRes;
+		*lon = gpsData.LongitudeHiRes;
+		return true;
+	}
+#endif
+	UNUSED_PARAMETER(lat);
+	UNUSED_PARAMETER(lon);
+	return false;
+}
+
+// Called every UI tick while fox-hunt mode is on: max-hold and the pitch beep.
+static void foxHuntUpdate(uint32_t now)
+{
+	int dbm = dBm[RADIO_DEVICE_PRIMARY];
+
+	if (dbm > foxMaxDbm)
+	{
+		double lat, lon;
+
+		foxMaxDbm = dbm;
+		if (foxHuntGetPosition(&lat, &lon))
+		{
+			foxMaxLat = lat;
+			foxMaxLon = lon;
+			foxMaxHasPosition = true;
+		}
+	}
+
+	if (((now - foxLastBeepTime) >= FOX_BEEP_INTERVAL_MS) && (trxTransmissionEnabled == false) &&
+			(soundMelodyIsPlaying() == false) && (voicePromptsIsPlaying() == false))
+	{
+		int level = CLAMP(dbm, FOX_DBM_FLOOR, FOX_DBM_CEIL) - FOX_DBM_FLOOR;
+
+		foxBeepMelody[0] = FOX_FREQ_MIN + ((level * (FOX_FREQ_MAX - FOX_FREQ_MIN)) / (FOX_DBM_CEIL - FOX_DBM_FLOOR));
+		soundSetMelody(foxBeepMelody);
+		foxLastBeepTime = now;
+	}
+}
+
+static void foxHuntDrawInfo(void)
+{
+	char buf[LOCATION_TEXT_BUFFER_SIZE];
+
+	displayFillRect(0, FOX_INFO_Y_POS, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - FOX_INFO_Y_POS), true);
+
+	if (foxMaxDbm == INT16_MIN)
+	{
+		snprintf(buf, sizeof(buf), "Max: --");
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "Max: %ddBm", foxMaxDbm);
+	}
+	displayPrintCentered(FOX_INFO_Y_POS, buf, FONT_SIZE_3);
+
+	double lat, lon;
+
+	if (foxMaxHasPosition && foxHuntGetPosition(&lat, &lon))
+	{
+		int meters = (int)distanceBetweenTwoCoords(lat, lon, foxMaxLat, foxMaxLon, false);
+		int bearing = (int)courseTo(lat, lon, foxMaxLat, foxMaxLon);
+
+		if (meters < 10000)
+		{
+			snprintf(buf, sizeof(buf), "Max @ %dm %03d deg", meters, bearing);
+		}
+		else
+		{
+			snprintf(buf, sizeof(buf), "Max @ %dkm %03d deg", (meters / 1000), bearing);
+		}
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), (foxMaxHasPosition ? "Max @ (no GPS fix)" : "Max @ no position"));
+	}
+	displayPrintCentered(FOX_INFO_LINE2_Y_POS, buf, FONT_SIZE_1);
+}
+#endif

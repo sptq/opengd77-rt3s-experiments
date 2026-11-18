@@ -173,6 +173,18 @@ Start it with long `#` in VFO mode. `*` toggles between waterfall and bars.
 * **`SK1 + 0`**: re-centre the VFO on that carrier, rounded to the VFO step.
   The waterfall history slides along instead of being cleared.
 
+### Fox-hunt mode — *RSSI screen*
+
+Press `#` on the RSSI screen to toggle it.
+
+* A short beep every 0.6 s. Its pitch rises with the signal: 300 Hz at
+  −130 dBm, 2.4 kHz at −40 dBm.
+* **Max-hold**: the strongest reading so far is shown as `Max: … dBm` and as a
+  marker on the S-meter.
+* With a GPS fix, the position of that maximum is stored. The screen then shows
+  the distance and bearing from where you are now (`Max @ 120m 045 deg`).
+* `0` resets the max-hold.
+
 Plans and the on-radio test checklist are in [`PLANS/`](PLANS/).
 
 ## Local experiments
