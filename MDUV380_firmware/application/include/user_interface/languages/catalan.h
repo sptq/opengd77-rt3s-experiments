@@ -328,6 +328,7 @@ const stringsTable_t catalanLanguage=
 .last_talker				= "Last talker", // MaxLen: 16 (with ':' + .off or 2 digits value + 's')
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reinicia config.", // MaxLen: 16
+.quickkeys				= "Tecles rapides", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
 };
 /********************************************************************
  *

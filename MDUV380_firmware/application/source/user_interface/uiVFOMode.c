@@ -132,7 +132,15 @@ static bool vfoSweepSavedBandwidth;
 static uint16_t vfoSweepWaterfallPalette[32];	// RSSI-to-colour LUT in native pixel format
 static uint16_t vfoSweepBarPalette[32];		// Same gradient at 150% brightness (clamped), used for the band-scope bars
 static bool vfoSweepWaterfallEnabled = true;	// short-press * toggles waterfall vs full-height bar view
+static uint8_t vfoSweepPeakHold[VFO_SWEEP_NUM_SAMPLES];	// Per-column decaying maximum (raw RSSI units), drawn as a dot on the band scope
+static int16_t vfoSweepPeakIndex = -1;			// Strongest column of the last complete sweep, -1 when nothing stands out
+#define VFO_SWEEP_PEAK_HOLD_DECAY       2	// Raw RSSI units the peak-hold trace drops per completed sweep
+#define VFO_SWEEP_PEAK_MIN_LEVEL        6	// Minimum palette level (0..31) for a column to be marked as "strongest signal"
+static void vfoSweepPeaksReset(void);
+static void vfoSweepPeaksSweepCompleted(void);
 #endif
+static bool vfoSweepRequested = false;	// Set by uiVFOModeRequestSweep() (quickkey action), consumed on the next VFO tick
+static void vfoSweepUpdateSamplesPixels(int pixelOffset, bool forceRedraw, int bandwidthRescale);
 const int VFO_SWEEP_SCAN_FREQ_STEP_TABLE[7] 		= {125,250,500,1000,2500,5000,10000};
 static uint8_t previousVFONumber = 0xFF; // Keep track of the currently loaded channel data
 
@@ -286,6 +294,24 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 			return menuVFOExitStatus;
 		}
 #endif
+
+		// Band scope requested by a quickkey action (possibly from the Channel screen).
+		if (vfoSweepRequested)
+		{
+			vfoSweepRequested = false;
+
+			if ((trxTransmissionEnabled == false) && (screenOperationMode[nonVolatileSettings.currentVFONumber] != VFO_SCREEN_OPERATION_SWEEP))
+			{
+				if (uiDataGlobal.Scan.active)
+				{
+					uiVFOModeStopScanning();
+				}
+
+				sweepScanInit();
+				soundSetMelody(MELODY_KEY_LONG_BEEP);
+				return menuVFOExitStatus;
+			}
+		}
 
 		if (ev->events == NO_EVENT)
 		{
@@ -2090,7 +2116,15 @@ static void handleEvent(uiEvent_t *ev)
 #if !defined(PLATFORM_GD77S)
 				if ((keyval < 10) && BUTTONCHECK_DOWN(ev, BUTTON_SK1) && (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == false))
 				{
-					if (keyval == 1)
+					if ((keyval == 0) && uiVFOModeSweepScanning(true))
+					{
+						// SK1 + 0 while sweeping: tune to the strongest signal.
+						if (uiVFOModeSweepTuneToPeak() == false)
+						{
+							soundSetMelody(MELODY_NACK_BEEP);
+						}
+					}
+					else if (keyval == 1)
 					{
 						aprsBeaconingToggles();
 					}
@@ -2394,6 +2428,30 @@ static void vfoSweepDrawWaterfallSample(int offset)
 		fb[(y * DISPLAY_SIZE_X) + offset] = barColour;
 	}
 
+	// Peak-hold: a single dot at the decaying maximum, when it sits above the live bar.
+	int holdRssi = MAX(vfoSweepPeakHold[offset] - vfoSweepRssiNoiseFloor, 0);
+	int16_t holdHeight = MIN(VFO_SWEEP_BARS_HEIGHT, (holdRssi * VFO_SWEEP_BARS_HEIGHT) / vfoSweepGain);
+	if (holdHeight > barHeight)
+	{
+		fb[(((VFO_SWEEP_GRAPH_START_Y + VFO_SWEEP_BARS_HEIGHT) - holdHeight) * DISPLAY_SIZE_X) + offset] = vfoSweepBarPalette[MIN(31, (holdRssi * 31) / vfoSweepGain)];
+	}
+
+	// Strongest-signal marker: a small downward triangle at the top of the band scope.
+	if (vfoSweepPeakIndex >= 0)
+	{
+		int d = ((offset > vfoSweepPeakIndex) ? (offset - vfoSweepPeakIndex) : (vfoSweepPeakIndex - offset));
+
+		if (d <= 2)
+		{
+			displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+			for (int16_t r = 0; r < (3 - d); r++)
+			{
+				displaySetPixel(offset, (VFO_SWEEP_GRAPH_START_Y + r), true);
+			}
+			displayThemeResetToDefault();
+		}
+	}
+
 	// Centre-frequency marker: a dotted line down the middle of the centre bar,
 	// which spans vfoSweepResolution pixels starting at the centre column.
 	if (offset == ((DISPLAY_SIZE_X >> 1) + (vfoSweepResolution >> 1)))
@@ -2457,7 +2515,26 @@ static void vfoSweepDrawSample(int offset)
 static void vfoSweepUpdateSamples(int offset, bool forceRedraw, int bandwidthRescale)
 {
 	const int SHIFT_DISTANCE[7] = {6,6,6,6,8,8,8};
-	offset *= SHIFT_DISTANCE[uiDataGlobal.Scan.sweepStepSizeIndex];// real offset in samples;
+
+	vfoSweepUpdateSamplesPixels((offset * SHIFT_DISTANCE[uiDataGlobal.Scan.sweepStepSizeIndex]), forceRedraw, bandwidthRescale);// real offset in samples
+}
+
+// Same as vfoSweepUpdateSamples(), but the shift is expressed in samples (pixels)
+// rather than in frequency steps. A shift wider than the screen just restarts
+// the sweep with empty history.
+static void vfoSweepUpdateSamplesPixels(int offset, bool forceRedraw, int bandwidthRescale)
+{
+	if ((offset >= VFO_SWEEP_NUM_SAMPLES) || (offset <= -VFO_SWEEP_NUM_SAMPLES))
+	{
+		memset(vfoSweepSamples, 0x00, VFO_SWEEP_NUM_SAMPLES);
+#if defined(VFO_SWEEP_WATERFALL)
+		vfoSweepPeaksReset();
+		vfoSweepWaterfallClear();
+#endif
+		uiDataGlobal.Scan.sweepSampleIndex = 0;
+		offset = 0;
+		forceRedraw = true;
+	}
 
 	if (offset != 0)
 	{
@@ -2467,12 +2544,26 @@ static void vfoSweepUpdateSamples(int offset, bool forceRedraw, int bandwidthRes
 			// Scroll the waterfall history sideways with the band scope, rather than resetting it.
 			vfoSweepWaterfallShift(offset);
 		}
+
+		// Peak data follows the band scope.
+		if (vfoSweepPeakIndex >= 0)
+		{
+			vfoSweepPeakIndex -= offset;
+			if ((vfoSweepPeakIndex < 0) || (vfoSweepPeakIndex >= VFO_SWEEP_NUM_SAMPLES))
+			{
+				vfoSweepPeakIndex = -1;
+			}
+		}
 #endif
 		if (offset > 0)
 		{
 			uiDataGlobal.Scan.sweepSampleIndex = VFO_SWEEP_NUM_SAMPLES - 1 - offset;
-			memcpy(&vfoSweepSamples[0], &vfoSweepSamples[offset], VFO_SWEEP_NUM_SAMPLES - offset);
+			memmove(&vfoSweepSamples[0], &vfoSweepSamples[offset], VFO_SWEEP_NUM_SAMPLES - offset);
 			memset(&vfoSweepSamples[VFO_SWEEP_NUM_SAMPLES - offset], 0x00,  offset);
+#if defined(VFO_SWEEP_WATERFALL)
+			memmove(&vfoSweepPeakHold[0], &vfoSweepPeakHold[offset], VFO_SWEEP_NUM_SAMPLES - offset);
+			memset(&vfoSweepPeakHold[VFO_SWEEP_NUM_SAMPLES - offset], 0x00,  offset);
+#endif
 		}
 		else
 		{
@@ -2480,6 +2571,10 @@ static void vfoSweepUpdateSamples(int offset, bool forceRedraw, int bandwidthRes
 			offset *= -1;
 			memmove(&vfoSweepSamples[offset], &vfoSweepSamples[0], VFO_SWEEP_NUM_SAMPLES - offset);
 			memset(&vfoSweepSamples[0], 0x00, offset);
+#if defined(VFO_SWEEP_WATERFALL)
+			memmove(&vfoSweepPeakHold[offset], &vfoSweepPeakHold[0], VFO_SWEEP_NUM_SAMPLES - offset);
+			memset(&vfoSweepPeakHold[0], 0x00, offset);
+#endif
 		}
 	}
 
@@ -2488,6 +2583,7 @@ static void vfoSweepUpdateSamples(int offset, bool forceRedraw, int bandwidthRes
 #if defined(VFO_SWEEP_WATERFALL)
 		// A zoom changes the Hz-per-pixel scale, so the old history no longer lines up.
 		vfoSweepWaterfallClear();
+		vfoSweepPeaksReset();
 #endif
 		uint8_t tmp[VFO_SWEEP_NUM_SAMPLES];
 		memset(tmp, 0x00, VFO_SWEEP_NUM_SAMPLES);
@@ -2686,6 +2782,103 @@ static void vfoSweepChangeResolution(bool finer)
 	char buf[SCREEN_LINE_BUFFER_SIZE];
 	snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "%u.%01ukHz/step", (binHz / 1000), ((binHz % 1000) / 100));
 	uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000, buf, true);
+}
+
+#if defined(VFO_SWEEP_WATERFALL)
+static void vfoSweepPeaksReset(void)
+{
+	memset(vfoSweepPeakHold, 0x00, VFO_SWEEP_NUM_SAMPLES);
+	vfoSweepPeakIndex = -1;
+}
+
+// Called once per completed sweep: decay the peak-hold trace and locate the
+// strongest column, moving the marker if needed.
+static void vfoSweepPeaksSweepCompleted(void)
+{
+	int bestIndex = -1;
+	int bestValue = -1;
+
+	for (int i = 0; i < VFO_SWEEP_NUM_SAMPLES; i++)
+	{
+		vfoSweepPeakHold[i] = ((vfoSweepPeakHold[i] > VFO_SWEEP_PEAK_HOLD_DECAY) ? (vfoSweepPeakHold[i] - VFO_SWEEP_PEAK_HOLD_DECAY) : 0);
+
+		if (vfoSweepSamples[i] > bestValue)
+		{
+			bestValue = vfoSweepSamples[i];
+			bestIndex = i;
+		}
+	}
+
+	int level = (MAX(bestValue - vfoSweepRssiNoiseFloor, 0) * 31) / vfoSweepGain;
+	int16_t newPeakIndex = ((level >= VFO_SWEEP_PEAK_MIN_LEVEL) ? bestIndex : -1);
+
+	if (newPeakIndex != vfoSweepPeakIndex)
+	{
+		int16_t oldPeakIndex = vfoSweepPeakIndex;
+
+		vfoSweepPeakIndex = newPeakIndex;
+
+		// Redraw the columns around the old and the new marker position.
+		for (int i = -2; i <= 2; i++)
+		{
+			if ((oldPeakIndex >= 0) && ((oldPeakIndex + i) >= 0) && ((oldPeakIndex + i) < VFO_SWEEP_NUM_SAMPLES))
+			{
+				vfoSweepDrawSample(oldPeakIndex + i);
+			}
+
+			if ((newPeakIndex >= 0) && ((newPeakIndex + i) >= 0) && ((newPeakIndex + i) < VFO_SWEEP_NUM_SAMPLES))
+			{
+				vfoSweepDrawSample(newPeakIndex + i);
+			}
+		}
+	}
+}
+#endif
+
+void uiVFOModeRequestSweep(void)
+{
+	vfoSweepRequested = true;
+}
+
+// Re-centre the VFO on the strongest signal of the last sweep (rounded to the
+// VFO step). The band scope and waterfall history slide with the retune.
+bool uiVFOModeSweepTuneToPeak(void)
+{
+#if defined(VFO_SWEEP_WATERFALL)
+	if ((uiVFOModeSweepScanning(true) == false) || (vfoSweepPeakIndex < 0))
+	{
+		return false;
+	}
+
+	int sweepRange = VFO_SWEEP_SCAN_RANGE_SAMPLE_STEP_TABLE[uiDataGlobal.Scan.sweepStepSizeIndex];
+	int vfoStep = VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)];
+	int oldFreq = (int)currentChannelData->rxFreq;
+	int targetFreq = oldFreq + ((sweepRange * (vfoSweepPeakIndex - (VFO_SWEEP_NUM_SAMPLES / 2))) / VFO_SWEEP_PIXELS_PER_STEP);
+
+	targetFreq = ((targetFreq + (vfoStep / 2)) / vfoStep) * vfoStep;
+
+	if (trxGetBandFromFrequency(targetFreq) == FREQUENCY_OUT_OF_BAND)
+	{
+		return false;
+	}
+
+	if (targetFreq != oldFreq)
+	{
+		stepFrequency(targetFreq - oldFreq);
+	}
+
+	int moved = ((int)currentChannelData->rxFreq - oldFreq);
+	int pixels = ((moved * VFO_SWEEP_PIXELS_PER_STEP) + ((moved >= 0) ? (sweepRange / 2) : -(sweepRange / 2))) / sweepRange;
+
+	uiDataGlobal.displayQSOState = QSO_DISPLAY_DEFAULT_SCREEN;// The idle path of uiVFOModeUpdateScreen() would leave the frequency labels blank
+	uiVFOModeUpdateScreen(0);
+	vfoSweepUpdateSamplesPixels(pixels, true, 0);
+	settingsSetVFODirty();
+
+	return true;
+#else
+	return false;
+#endif
 }
 
 static void stepFrequency(int increment)
@@ -3743,6 +3936,9 @@ static void sweepScanInit(void)
 	uiDataGlobal.displayQSOState = QSO_DISPLAY_DEFAULT_SCREEN;
 
 	memset(vfoSweepSamples, 0x00, VFO_SWEEP_NUM_SAMPLES * sizeof(uint8_t));
+#if defined(VFO_SWEEP_WATERFALL)
+	vfoSweepPeaksReset();
+#endif
 
 	menuSystemPopAllAndDisplaySpecificRootMenu(UI_VFO_MODE, true);
 
@@ -3782,6 +3978,12 @@ static void sweepScanStep(void)
 			for (int j = 0; (j < vfoSweepResolution) && ((uiDataGlobal.Scan.sweepSampleIndex + j) < VFO_SWEEP_NUM_SAMPLES); j++)
 			{
 				vfoSweepSamples[uiDataGlobal.Scan.sweepSampleIndex + j] = sweepSignal;
+#if defined(VFO_SWEEP_WATERFALL)
+				if (sweepSignal > vfoSweepPeakHold[uiDataGlobal.Scan.sweepSampleIndex + j])
+				{
+					vfoSweepPeakHold[uiDataGlobal.Scan.sweepSampleIndex + j] = sweepSignal;
+				}
+#endif
 				vfoSweepDrawSample(uiDataGlobal.Scan.sweepSampleIndex + j);
 			}
 
@@ -3806,6 +4008,9 @@ static void sweepScanStep(void)
 		else
 		{
 #if defined(VFO_SWEEP_WATERFALL)
+			// Track the strongest signal in both views, so SK1 + 0 always has fresh data.
+			vfoSweepPeaksSweepCompleted();
+
 			if (vfoSweepWaterfallEnabled)
 			{
 				// A full sweep just completed: push it down as a new waterfall row.

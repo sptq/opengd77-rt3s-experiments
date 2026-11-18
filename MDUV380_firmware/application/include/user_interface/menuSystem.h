@@ -193,6 +193,8 @@ bool uiVFOModeDualWatchIsScanning(void);
 bool uiVFOModeSweepScanning(bool includePaused);
 void uiVFOSweepScanModePause(bool pause, bool forceDigitalOnPause);
 bool uiVFOModeFrequencyScanningIsActiveAndEnabled(uint32_t *lowFreq, uint32_t *highFreq);
+void uiVFOModeRequestSweep(void);
+bool uiVFOModeSweepTuneToPeak(void);
 void uiChannelModeStopScanning(void);
 bool uiChannelModeIsScanning(void);
 void uiChannelInitializeCurrentZone(void);
@@ -321,6 +323,7 @@ enum MENU_SCREENS
 	MENU_APRS,
 #endif
 	MENU_RESET_CUSTOM_DATA,// Format the OpenGD77 custom-data flash region (themes/boot image/beep/TLE)
+	MENU_QUICKKEYS,// View / edit the SK2 + digit quickkey slots
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 	UI_MESSAGE_BOX,
 	UI_HOTSPOT_MODE,
@@ -391,6 +394,28 @@ enum VFO_SCREEN_QUICK_MENU_ITEMS
 #define QUICKKEY_MENUVALUE(m, e, f)   ((QUICKKEY_MENU << 15) | ((m & 0x1f) << 10) | ((e & 0x1f) << 5) | (f & 0x1f))
 #define QUICKKEY_MENULONGVALUE(m, e)  ((QUICKKEY_MENU << 15) | ((m & 0x1f) << 10) | (e & 0x1ff))
 #define QUICKKEY_CONTACTVALUE(c)      (c)
+
+// Quickkey actions (this fork). Stored as a QUICKKEY_CONTACT value in a reserved
+// range above CODEPLUG_CONTACTS_MAX, so upstream firmware (which validates the
+// contact index) simply ignores them.
+#define QUICKKEY_ACTION_BASE          0x7F00
+#define QUICKKEY_ACTIONVALUE(a)       (QUICKKEY_ACTION_BASE | ((a) & 0xFF))
+#define QUICKKEY_IS_ACTION(f)         ((((f) & 0x8000) == 0) && (((f) & 0xFF00) == QUICKKEY_ACTION_BASE))
+#define QUICKKEY_ACTIONID(f)          ((f) & 0xFF)
+
+typedef enum
+{
+	QUICKKEY_ACTION_NONE = 0,
+	QUICKKEY_ACTION_APRS_BEACON,
+	QUICKKEY_ACTION_APRS_TOGGLE,
+	QUICKKEY_ACTION_DAY_NIGHT,
+	QUICKKEY_ACTION_BAND_SCOPE,
+	QUICKKEY_ACTION_SWEEP_TUNE_PEAK,
+	QUICKKEY_ACTION_MAX
+} quickkeyAction_t;
+
+const char *quickkeyActionGetName(quickkeyAction_t action);
+bool quickkeyActionExecute(quickkeyAction_t action, bool isChannelMode);
 
 enum QUICK_FUNCTIONS
 {
@@ -467,6 +492,7 @@ menuStatus_t menuContactListSubMenu(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuContactDetails(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuLanguage(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuResetCustomData(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuQuickkeys(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuPrivateCall(uiEvent_t *event, bool isFirstRun);
 menuStatus_t uiMessageBox(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuSatelliteScreen(uiEvent_t *ev, bool isFirstRun);

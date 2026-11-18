@@ -61,7 +61,11 @@ spare *menu id* instead could push e.g. the TX screen on upstream builds).
 ## Out of scope / later
 
 GPS track log to SPI flash, fox-hunt RSSI tone, APRS RX decode, DMR SMS — see
-the idea list in the session notes; each gets its own plan.
+[`rt3s_ideas_backlog.md`](rt3s_ideas_backlog.md); each gets its own plan.
+
+## Status
+
+Implemented on branch `feature/sk-shortcuts-waterfall`; builds clean for all three variants. **Not yet tested on hardware** — run the checklist below.
 
 ## Verification
 
@@ -72,5 +76,8 @@ the idea list in the session notes; each gets its own plan.
   2. Assign "APRS beacon" to 5, GREEN, exit; `SK2+5` on channel screen sends.
   3. RED in the menu discards changes.
   4. `SK2+long 5` still clears the slot; menu shows `None`.
-  5. Sweep: peak-hold dots decay; marker follows strongest carrier;
+  5. Assign an action to a slot, then in a menu press SK2+that digit: the
+     action must NOT be silently overwritten (clear with SK2+long digit first).
+  6. Start a channel scan, trigger "Band scope": scan stops, VFO sweep starts.
+  7. Sweep: peak-hold dots decay; marker follows strongest carrier;
      `SK1+0` re-centres on it, waterfall history shifts rather than clears.

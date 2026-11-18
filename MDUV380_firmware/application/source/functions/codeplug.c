@@ -1591,6 +1591,13 @@ static bool quickkeyIsEmpty(char key, uint16_t functionId)
 
 	uint16_t data = codeplugGetQuickkeyFunctionID(key);
 
+	// Fork quickkey actions (0x7Fxx) live in the out-of-range contact space:
+	// protect them like menu/contact slots, so they need an explicit clear.
+	if (((data & 0x8000) == 0) && ((data & 0xFF00) == 0x7F00) && ((data & 0xFF) != 0))
+	{
+		return false;
+	}
+
 	if ((data == 0x8000) ||
 			(((data & 0x8000) == 0) && ((data < CODEPLUG_CONTACTS_MIN) || (data > CODEPLUG_CONTACTS_MAX))))
 	{

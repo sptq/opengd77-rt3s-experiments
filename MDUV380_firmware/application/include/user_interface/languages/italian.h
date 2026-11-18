@@ -328,6 +328,7 @@ const stringsTable_t italianLanguage =
 .last_talker				= "Ultimo OM RX", // MaxLen: 16 (with ':' + .off or 2 digits value + 's')
 .mute					= "Muto", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reset config.", // MaxLen: 16
+.quickkeys				= "Tasti rapidi", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
 };
 /********************************************************************
  *

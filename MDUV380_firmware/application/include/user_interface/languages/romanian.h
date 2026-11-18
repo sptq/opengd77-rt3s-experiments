@@ -328,6 +328,7 @@ const stringsTable_t romanianLanguage =
 .last_talker				= "Last talker", // MaxLen: 16 (with ':' + .off or 2 digits value + 's')
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reset config.", // MaxLen: 16
+.quickkeys				= "Taste rapide", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
 };
 /********************************************************************
  *
