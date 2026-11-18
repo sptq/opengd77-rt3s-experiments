@@ -173,7 +173,8 @@ Start it with long `#` in VFO mode. `*` toggles between waterfall and bars.
 * **`SK1 + 0`**: re-centre the VFO on that carrier, rounded to the VFO step.
   The waterfall history slides along instead of being cleared.
 * **`SK1 + 3`**: jump to the next band preset. The presets are 144.800 APRS,
-  145.500 2 m, 433.925 LPD, 438.800 70 cm repeaters and 446.100 PMR446. Each
+  145.500 2 m, 401/403/405 MHz radiosondes, 433.925 LPD, 438.800 70 cm
+  repeaters and 446.100 PMR446. Each
   press goes to the next preset above the current frequency and wraps around
   after the last one.
 
@@ -197,6 +198,36 @@ Press `#` on the RSSI screen to toggle it.
   * when moving, the arrow is relative to your direction of travel (ahead = up);
   * when standing still, it is north-up.
 * Within 5 m of the waypoint the arrow turns into a dot.
+* **`#`** opens a keypad editor for the waypoint, for example to enter a
+  radiosonde landing prediction from SondeHub:
+  * coordinates are in decimal degrees;
+  * `#` types the decimal point and `*` toggles the minus sign (S / W);
+  * ▲ / ▼ switch between the lat and lon fields, RED deletes a character;
+  * GREEN sets the waypoint.
+
+### Radiosonde hunting
+
+The radio cannot decode RS41 / M20 telemetry. Its only digital audio path to
+the MCU runs at 8 kHz through a voice-band filter, while the sondes send
+4800 / 9600 bd GFSK. You can still find a sonde:
+
+1. Find the carrier: VFO → long `#` → `SK1 + 3` to the 401/403/405 MHz presets.
+   Use `SK2 + ▲` to widen the span to 2 MHz.
+2. Tune to it with `SK1 + 0`.
+3. Enter the landing prediction as a waypoint: GPS → waypoint page → `#`.
+4. Close in with fox-hunt mode on the RSSI screen.
+
+### RX audio probe (APRS RX feasibility test) — *RSSI screen, key `9`*
+
+This is a diagnostic. In FM mode it records 0.5 s of whatever the HR-C6000
+sends over I2S, once per second, and shows the peak level (`Aud pk`) and a
+rough dominant frequency.
+
+* If the reading follows the received FM audio (for example APRS on 144.800
+  shows about 1200–2200 Hz), the received audio reaches the MCU, and APRS RX
+  decoding is possible.
+* `I2S: no clock` or a flat reading means the received audio does not reach
+  the MCU this way.
 
 ### Trip computer — *GPS menu, last page*
 

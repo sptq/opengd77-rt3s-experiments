@@ -33,6 +33,7 @@
 #include "user_interface/uiLocalisation.h"
 #include "hardware/radioHardwareInterface.h"
 #include "functions/sound.h"
+#include "interfaces/i2s.h"
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
 #endif
@@ -106,6 +107,16 @@ static int16_t foxBeepMelody[] = { 0, FOX_BEEP_DURATION_MS, -1, -1 };
 static void foxHuntReset(void);
 static void foxHuntUpdate(uint32_t now);
 static void foxHuntDrawInfo(void);
+
+#if defined(I2S_RX_AUDIO_PROBE)
+// Fork: '9' toggles the RX audio probe (diagnostic for APRS RX, see i2s.c)
+#define AUDIO_PROBE_INTERVAL_MS 1000U
+static bool audioProbeEnabled = false;
+static uint32_t audioProbeLastTime = 0;
+static i2sProbeStatus_t audioProbeStatus = I2S_PROBE_STARTED;
+static void audioProbeUpdate(uint32_t now);
+static void audioProbeDrawInfo(void);
+#endif
 #endif
 
 static const int barX = 9;
@@ -121,6 +132,9 @@ menuStatus_t menuRSSIScreen(uiEvent_t *ev, bool isFirstRun)
 		menuDataGlobal.numItems = 0;
 #if defined(FOX_HUNT_SUPPORTED)
 		foxHuntReset();
+#if defined(I2S_RX_AUDIO_PROBE)
+		audioProbeEnabled = false;
+#endif
 #endif
 		displayClearBuf();
 		menuDisplayTitle(currentLanguage->rssi);
@@ -147,6 +161,12 @@ menuStatus_t menuRSSIScreen(uiEvent_t *ev, bool isFirstRun)
 		{
 			foxHuntUpdate(ev->time);
 		}
+#if defined(I2S_RX_AUDIO_PROBE)
+		else if (audioProbeEnabled)
+		{
+			audioProbeUpdate(ev->time);
+		}
+#endif
 #endif
 	}
 
@@ -372,6 +392,12 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 	{
 		foxHuntDrawInfo();
 	}
+#if defined(I2S_RX_AUDIO_PROBE)
+	else if (audioProbeEnabled)
+	{
+		audioProbeDrawInfo();
+	}
+#endif
 	else if (forceRedraw)
 	{
 		displayFillRect(0, FOX_INFO_Y_POS, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - FOX_INFO_Y_POS), true);
@@ -401,7 +427,11 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 			displayRenderRows((yStartValuePos / 8), (yValuePos / 8) + 1);
 			displayRenderRows((yStartBarPos / 8), (yBarPos / 8) + 1);
 #if defined(FOX_HUNT_SUPPORTED)
-			if (foxHuntEnabled)
+			if (foxHuntEnabled
+#if defined(I2S_RX_AUDIO_PROBE)
+					|| audioProbeEnabled
+#endif
+			)
 			{
 				displayRenderRows((FOX_INFO_Y_POS / 8), DISPLAY_NUMBER_OF_ROWS);
 			}
@@ -451,6 +481,9 @@ static void handleEvent(uiEvent_t *ev)
 
 	if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN) || KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
+#if defined(I2S_RX_AUDIO_PROBE)
+		audioProbeEnabled = false; // a running burst stops by itself within 0.5 s
+#endif
 		menuSystemPopPreviousMenu();
 	}
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
@@ -465,10 +498,26 @@ static void handleEvent(uiEvent_t *ev)
 
 		foxHuntEnabled = !foxHuntEnabled;
 		foxHuntReset();
+#if defined(I2S_RX_AUDIO_PROBE)
+		audioProbeEnabled = false; // fox-hunt beeps need the I2S
+#endif
 		snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "Fox hunt: %s", (foxHuntEnabled ? currentLanguage->on : currentLanguage->off));
 		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, buf, false);
 		updateScreen(true, false);
 	}
+#if defined(I2S_RX_AUDIO_PROBE)
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_9) && (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == 0))
+	{
+		audioProbeEnabled = !audioProbeEnabled;
+		if (audioProbeEnabled)
+		{
+			foxHuntEnabled = false;
+			audioProbeStatus = I2S_PROBE_STARTED;
+			audioProbeLastTime = ev->time; // first burst after the key beep has finished
+		}
+		updateScreen(true, false);
+	}
+#endif
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_0) && foxHuntEnabled && (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == 0))
 	{
 		foxHuntReset();
@@ -604,4 +653,56 @@ static void foxHuntDrawInfo(void)
 	}
 	displayPrintCentered(FOX_INFO_LINE2_Y_POS, buf, FONT_SIZE_1);
 }
+#if defined(I2S_RX_AUDIO_PROBE)
+static void audioProbeUpdate(uint32_t now)
+{
+	if ((now - audioProbeLastTime) < AUDIO_PROBE_INTERVAL_MS)
+	{
+		return;
+	}
+	audioProbeLastTime = now;
+
+	if ((trxGetMode() != RADIO_MODE_ANALOG) || trxTransmissionEnabled ||
+			soundMelodyIsPlaying() || voicePromptsIsPlaying())
+	{
+		audioProbeStatus = I2S_PROBE_BUSY;
+		return;
+	}
+
+	audioProbeStatus = i2sProbeStart();
+}
+
+static void audioProbeDrawInfo(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE];
+	uint16_t peak;
+	uint32_t zc;
+	uint32_t bursts;
+
+	i2sProbeGetLast(&peak, &zc, &bursts);
+
+	displayFillRect(0, FOX_INFO_Y_POS, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - FOX_INFO_Y_POS), true);
+
+	if (trxGetMode() != RADIO_MODE_ANALOG)
+	{
+		snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "Probe: FM only");
+	}
+	else if (audioProbeStatus == I2S_PROBE_NO_CLOCK)
+	{
+		snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "I2S: no clock");
+	}
+	else
+	{
+		snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "Aud pk:%u", peak);
+	}
+	displayPrintCentered(FOX_INFO_Y_POS, buf, FONT_SIZE_3);
+
+	// Zero crossings per second ~ 2 x dominant frequency
+	snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "f~%uHz n:%u%s", (unsigned)(zc / 2U), (unsigned)bursts,
+			((audioProbeStatus == I2S_PROBE_BUSY) ? " busy" : ""));
+	displayPrintCentered(FOX_INFO_LINE2_Y_POS, buf, FONT_SIZE_1);
+}
 #endif
+
+#endif
+

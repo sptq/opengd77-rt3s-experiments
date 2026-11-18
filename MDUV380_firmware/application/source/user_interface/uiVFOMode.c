@@ -2901,6 +2901,9 @@ static const uint32_t VFO_SWEEP_PRESETS[] =
 {
 	14480000U, // 144.800 APRS (EU)
 	14550000U, // 145.500 2 m FM simplex / repeaters
+	40100000U, // 401.000 radiosondes (400-406 MHz, use SK2 + UP for the 2 MHz span)
+	40300000U, // 403.000 radiosondes
+	40500000U, // 405.000 radiosondes
 	43392500U, // 433.925 LPD433
 	43880000U, // 438.800 70 cm repeaters
 	44610000U, // 446.100 PMR446

@@ -48,6 +48,15 @@ static double waypointLat = 0.0;
 static double waypointLon = 0.0;
 static bool displayWaypoint(bool isFirstRun, bool forceRedraw);
 static bool waypointMarkHere(void);
+
+// Keypad entry of the waypoint (e.g. a radiosonde landing prediction).
+// '#' on the waypoint page starts it; decimal degrees, '-' for S / W.
+#define WAYPOINT_EDIT_FIELD_LEN 11
+static bool waypointEditActive = false;
+static uint8_t waypointEditFieldIndex = 0; // 0: latitude, 1: longitude
+static char waypointEditFields[2][WAYPOINT_EDIT_FIELD_LEN + 1];
+static bool waypointEditHandleEvent(uiEvent_t *ev);
+static void waypointEditDraw(void);
 #endif
 
 // Fork: trip computer page (distance, moving time, avg/max speed, altitude
@@ -286,6 +295,9 @@ menuStatus_t menuGPS(uiEvent_t *ev, bool isFirstRun)
 	if (isFirstRun)
 	{
 		menuDataGlobal.numItems = PAGES_MAX;
+#if defined(GPS_WAYPOINT_PAGE)
+		waypointEditActive = false;
+#endif
 
 		// Prepare directions from cardinals
 		char N = currentLanguageGetSymbol(SYMBOLS_NORTH);
@@ -1283,11 +1295,44 @@ static void handleEvent(uiEvent_t *ev)
 		}
 		else if (QUICKKEY_TYPE(ev->function) == QUICKKEY_MENU)
 		{
+#if defined(GPS_WAYPOINT_PAGE)
+			waypointEditActive = false;
+#endif
 			menuDataGlobal.currentItemIndex = QUICKKEY_ENTRYID(ev->function);
 			isDirty = true;
 			goto eventHanderExit;
 		}
 	}
+
+#if defined(GPS_WAYPOINT_PAGE)
+	if (waypointEditActive)
+	{
+		if (waypointEditHandleEvent(ev))
+		{
+			updateScreen(false, true);
+		}
+		return;
+	}
+
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH) && (menuDataGlobal.currentItemIndex == PAGE_WAYPOINT))
+	{
+		// Pre-fill with the current waypoint so it can be tweaked, otherwise start empty.
+		if (waypointIsSet)
+		{
+			snprintf(waypointEditFields[0], sizeof(waypointEditFields[0]), "%.5f", waypointLat);
+			snprintf(waypointEditFields[1], sizeof(waypointEditFields[1]), "%.5f", waypointLon);
+		}
+		else
+		{
+			waypointEditFields[0][0] = 0;
+			waypointEditFields[1][0] = 0;
+		}
+		waypointEditFieldIndex = 0;
+		waypointEditActive = true;
+		isDirty = true;
+		goto eventHanderExit;
+	}
+#endif
 
 	if (KEYCHECK_SHORTUP(ev->keys, KEY_UP))
 	{
@@ -1408,6 +1453,11 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 {
 	char buffer[SCREEN_LINE_BUFFER_SIZE];
 
+	if (waypointEditActive && ((isFirstRun || forceRedraw) == false))
+	{
+		return false; // the editor only changes on key presses
+	}
+
 	if (((isFirstRun || forceRedraw) == false) &&
 			((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_POSITION_UPDATED | GPS_STATUS_COURSE_UPDATED | GPS_STATUS_SPEED_UPDATED)) == 0))
 	{
@@ -1417,10 +1467,17 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 	// Clear everything below the title
 	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT), true);
 
+	if (waypointEditActive)
+	{
+		waypointEditDraw();
+		return true;
+	}
+
 	if (waypointIsSet == false)
 	{
 		displayPrintCentered((WAYPOINT_ARROW_CY - FONT_SIZE_3_HEIGHT), "No waypoint", FONT_SIZE_3);
 		displayPrintCentered((WAYPOINT_ARROW_CY + 4), "GREEN: mark here", FONT_SIZE_1);
+		displayPrintCentered((WAYPOINT_ARROW_CY + 14), "#: enter lat/lon", FONT_SIZE_1);
 		return true;
 	}
 
@@ -1484,6 +1541,149 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 	displayThemeResetToDefault();
 
 	return true;
+}
+#endif
+
+#if defined(GPS_WAYPOINT_PAGE)
+#define WAYPOINT_EDIT_Y(n)   (MENU_HEADER_HEIGHT + 6 + ((n) * 22))
+
+static void waypointEditDraw(void)
+{
+	char buffer[SCREEN_LINE_BUFFER_SIZE];
+
+	for (int i = 0; i < 2; i++)
+	{
+		bool active = (i == waypointEditFieldIndex);
+
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%s%s%s", ((i == 0) ? "Lat " : "Lon "), waypointEditFields[i], (active ? "_" : ""));
+
+		if (active)
+		{
+			displayFillRect(0, (WAYPOINT_EDIT_Y(i) - 2), DISPLAY_SIZE_X, (FONT_SIZE_3_HEIGHT + 4), false);
+			displayPrintCore(2, WAYPOINT_EDIT_Y(i), buffer, FONT_SIZE_3, TEXT_ALIGN_LEFT, true);
+		}
+		else
+		{
+			displayPrintAt(2, WAYPOINT_EDIT_Y(i), buffer, FONT_SIZE_3);
+		}
+	}
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintAt(2, WAYPOINT_EDIT_Y(2), "# .   * -(S/W)", FONT_SIZE_1);
+	displayPrintAt(2, (WAYPOINT_EDIT_Y(2) + 10), "UP/DN field RED del", FONT_SIZE_1);
+	displayPrintAt(2, (WAYPOINT_EDIT_Y(2) + 20), "GREEN set", FONT_SIZE_1);
+	displayThemeResetToDefault();
+}
+
+static bool waypointEditParse(const char *str, double limit, double *out)
+{
+	char *end = NULL;
+
+	if ((str[0] == 0) || ((str[0] == '-') && (str[1] == 0)))
+	{
+		return false;
+	}
+
+	double v = strtod(str, &end);
+
+	if ((end == str) || (*end != 0) || (v > limit) || (v < -limit))
+	{
+		return false;
+	}
+
+	*out = v;
+	return true;
+}
+
+// Returns true when the screen needs a redraw.
+static bool waypointEditHandleEvent(uiEvent_t *ev)
+{
+	if ((ev->events & KEY_EVENT) == 0)
+	{
+		return false;
+	}
+
+	char *field = waypointEditFields[waypointEditFieldIndex];
+	size_t len = strlen(field);
+
+	if (KEYCHECK_SHORTUP_NUMBER(ev->keys))
+	{
+		if (len < WAYPOINT_EDIT_FIELD_LEN)
+		{
+			field[len] = (char)ev->keys.key;
+			field[len + 1] = 0;
+			return true;
+		}
+		soundSetMelody(MELODY_NACK_BEEP);
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH))
+	{
+		if ((strchr(field, '.') == NULL) && (len < WAYPOINT_EDIT_FIELD_LEN))
+		{
+			field[len] = '.';
+			field[len + 1] = 0;
+			return true;
+		}
+		soundSetMelody(MELODY_NACK_BEEP);
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
+	{
+		if (field[0] == '-')
+		{
+			memmove(field, (field + 1), len); // includes the terminator
+		}
+		else if (len < WAYPOINT_EDIT_FIELD_LEN)
+		{
+			memmove((field + 1), field, (len + 1));
+			field[0] = '-';
+		}
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_UP) || KEYCHECK_SHORTUP(ev->keys, KEY_DOWN))
+	{
+		waypointEditFieldIndex ^= 1;
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
+	{
+		if (len > 0)
+		{
+			field[len - 1] = 0;
+		}
+		else
+		{
+			waypointEditActive = false; // RED on an empty field leaves the editor
+		}
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
+	{
+		double lat, lon;
+
+		if (waypointEditParse(waypointEditFields[0], 90.0, &lat) == false)
+		{
+			waypointEditFieldIndex = 0;
+			soundSetMelody(MELODY_NACK_BEEP);
+			return true;
+		}
+
+		if (waypointEditParse(waypointEditFields[1], 180.0, &lon) == false)
+		{
+			waypointEditFieldIndex = 1; // jump to the longitude field (also the normal flow after typing lat)
+			soundSetMelody(((waypointEditFields[1][0] == 0) ? MELODY_ACK_BEEP : MELODY_NACK_BEEP));
+			return true;
+		}
+
+		waypointLat = lat;
+		waypointLon = lon;
+		waypointIsSet = true;
+		waypointEditActive = false;
+		soundSetMelody(MELODY_ACK_BEEP);
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, "Waypoint set", false);
+		return true;
+	}
+
+	return false;
 }
 #endif
 

@@ -70,6 +70,7 @@ Slot z akcją nie zostanie przypadkiem nadpisany gestem „SK2 + cyfra w menu”
 7. **SK1 + 3**: skok do następnego presetu pasma. Presety to:
    * 144.800 APRS;
    * 145.500 2 m;
+   * 401.000 / 403.000 / 405.000 sondy meteo. **SK2 + ▲** poszerza zakres do 2 MHz;
    * 433.925 LPD;
    * 438.800 przemienniki 70 cm;
    * 446.100 PMR446.
@@ -107,7 +108,54 @@ Podczas nadawania i gdy odtwarzany jest komunikat głosowy, pisk jest wstrzymany
      * w miejscu, z napisem **North=up**: „do góry” oznacza północ;
      * w promieniu 5 m od punktu strzałka zmienia się w kropkę.
 
+### Wpisanie współrzędnych z klawiatury
+
+Przydaje się np. do wpisania przewidywanego miejsca lądowania sondy z SondeHub.
+
+1. Na stronie waypointu naciśnij **`#`**.
+2. Wpisz współrzędne w stopniach dziesiętnych, np. `52.23456` i `21.01234`:
+   * **`#`** wstawia kropkę;
+   * **`*`** przełącza minus (S / W);
+   * **▲/▼** przełącza między polem Lat i Lon;
+   * **RED** kasuje ostatni znak, a na pustym polu wychodzi z edycji.
+3. **GREEN** zapisuje waypoint. Jeśli pole Lon jest jeszcze puste, GREEN najpierw przechodzi do niego.
+
 Waypoint jest trzymany tylko w RAM, więc znika po wyłączeniu radia.
+
+---
+
+## Polowanie na sondy meteo
+
+Radio nie dekoduje telemetrii RS41 ani M20. Sondę da się jednak znaleźć:
+
+1. **Znajdź nośnik.** W VFO włącz waterfall (długie `#`) i naciśnij **SK1 + 3**, aż dojdziesz do presetu 401, 403 albo 405 MHz. **SK2 + ▲** poszerza zakres do 2 MHz. RS41 nadaje ciągle, więc na waterfallu widać ją jako stałą kreskę.
+2. **Dostrój się.** **SK1 + 0** ustawia VFO na najsilniejszy sygnał.
+3. **Wpisz miejsce lądowania.** Przewidywane miejsce lądowania (SondeHub, radiosondy.info) wpisz jako waypoint: GPS → strona waypointu → `#`. Strzałka zaprowadzi Cię w ten rejon.
+4. **Namierz sondę.** Na miejscu włącz tryb lisa na ekranie RSSI (`#`): im wyższy ton, tym bliżej.
+
+---
+
+## Test odbioru APRS (sonda dźwięku): ekran RSSI, klawisz `9`
+
+To test diagnostyczny. Sprawdza, czy dźwięk odebrany w FM dociera do procesora, bo bez tego nie da się zrobić odbioru APRS.
+
+1. Ustaw kanał lub VFO w **FM** na częstotliwość, na której coś słychać, np. **144.800** (APRS) albo przemiennik FM.
+2. Wejdź w **Menu → Sygnał (RSSI)** i naciśnij **`9`**.
+3. Co sekundę na ekranie odświeża się:
+   * `Aud pk:` czyli szczytowy poziom dźwięku odebranego przez I2S;
+   * `f~…Hz` czyli przybliżona dominująca częstotliwość;
+   * `n:` czyli licznik pomiarów.
+4. Daj mi znać, co widzisz w tych trzech sytuacjach:
+   * **cisza** (squelch zamknięty);
+   * **szum** (otwarty squelch, Monitor przez długie SK2);
+   * **sygnał**, najlepiej pakiet APRS albo ktoś mówiący.
+
+Jak czytać wynik:
+* `Aud pk` wyraźnie rośnie przy sygnale, a przy APRS `f~` pokazuje ok. 1200–2200 Hz: dźwięk dociera, odbiór APRS jest możliwy.
+* `Aud pk` stoi w miejscu, np. ciągle 0 albo stała wartość: ta droga nie przenosi dźwięku z odbiornika.
+* `I2S: no clock`: HR-C6000 w trybie FM nie taktuje I2S.
+
+Ponowne `9` wyłącza test. Test działa tylko w FM i nie przeszkadza w słuchaniu. Pisk klawiszy może się na chwilę nałożyć na pomiar.
 
 ---
 

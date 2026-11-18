@@ -39,7 +39,8 @@ Status legend: **done**, **in progress**, *idea*.
 | 8 | GPS navigation: waypoint page (GREEN marks, arrow/distance/bearing back) | **done** | `menuGPS.c`; speed/course/alt already on the Direction page; waypoint is RAM-only; untested on hardware |
 | 8b | Waypoint: persist in settings, pick a contact/channel location as target | *idea* | |
 | 9 | Satellite: automatic Doppler retune during a pass, cross-band hints | *idea* | `menuSatelliteScreen.c` |
-| 10 | APRS RX decode (AFSK 1200): station list with distance/bearing, radar view | *idea* | CPU budget with the codec running is the main risk |
+| 10 | APRS RX decode (AFSK 1200): station list with distance/bearing, radar view | **in progress** | step 1: RX audio probe (RSSI screen, `9`) to check whether FM RX audio reaches the MCU over I2S |
+| 16 | Radiosonde hunting: 401/403/405 MHz scope presets + keypad waypoint entry + fox-hunt | **done** | no RS41/M20 decode: only 8 kHz voice-band audio reaches the MCU, the sondes send 4800/9600 bd GFSK |
 | 11 | DMR SMS send/receive | *idea* | needs data-burst handling in `HR-C6000.c` |
 | 12 | DMR GPS position (LRRP / Brandmeister) | *idea* | |
 | 13 | Unify MD2017 / MD9600 trees | *idea* | `unify_sourcecodes.md` |
