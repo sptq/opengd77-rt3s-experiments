@@ -27,13 +27,15 @@ Status legend: **done**, **in progress**, *idea*.
 | # | Idea | Status | Notes |
 |---|---|---|---|
 | 1 | Waterfall: peak hold, strongest-signal marker, tune to peak | **done** | see `rt3s_quickkeys_and_waterfall.md` |
-| 1b | Waterfall: free cursor on the knob, band presets (2 m / 70 cm / PMR446) | *idea* | knob is already used for retune in sweep |
+| 1b | Waterfall: band presets (`SK1+3`) | **done** | free cursor still an idea; knob is used for retune |
+| 1c | Fix: `SK1+0` in sweep was swallowed by the "any key stops the scan" check | **done** | handled before that check now |
+| 8c | GPS trip computer page (distance, moving time, avg/max speed, altitude gain/loss) | **done** | `functions/gpsTrip.c`, RAM only, long GREEN resets |
 | 3 | Quickkeys menu + quickkey actions | **done** | see `rt3s_quickkeys_and_waterfall.md` |
 | 2 | Fox-hunt mode on the RSSI screen (pitch ∝ RSSI, max-hold with GPS position and bearing) | **done** | `menuRSSIScreen.c`, `#` toggles; untested on hardware |
 | 4 | GPS track log to SPI flash (16 MB), GPX export over USB/CPS, "back to start" screen | *idea* | needs a free flash region and a CPS-side command |
 | 5 | Replay the last DMR transmission locally (store AMBE frames in flash) | *idea* | ~27 B / 60 ms, so minutes fit easily |
 | 6 | FM DTMF **decoding** (show received digits, simple selective call) | *idea* | only DTMF TX exists today |
-| 7 | Roaming++: auto-switch to the nearest repeater on low RSSI, bearing to the current repeater | *idea* | `SK1`-free; uses existing distance sort |
+| 7 | Roaming++: auto-switch to the nearest repeater on low RSSI | *idea* | upstream already has auto re-sort on distance and a bearing notification, so little is left |
 | 8 | GPS navigation: waypoint page (GREEN marks, arrow/distance/bearing back) | **done** | `menuGPS.c`; speed/course/alt already on the Direction page; waypoint is RAM-only; untested on hardware |
 | 8b | Waypoint: persist in settings, pick a contact/channel location as target | *idea* | |
 | 9 | Satellite: automatic Doppler retune during a pass, cross-band hints | *idea* | `menuSatelliteScreen.c` |

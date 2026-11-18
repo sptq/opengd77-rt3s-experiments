@@ -67,7 +67,15 @@ Slot z akcją nie zostanie przypadkiem nadpisany gestem „SK2 + cyfra w menu”
    * **kropki nad słupkami**, czyli peak-hold. Pokazują ostatnie maksimum i powoli opadają z każdym przebiegiem;
    * **trójkąt u góry**, który wskazuje najsilniejszy sygnał z ostatniego przebiegu.
 6. **SK1 + 0**: ustawia VFO na częstotliwość pod trójkątem, zaokrągloną do kroku VFO. Historia waterfalla przesuwa się razem z nią, nie jest kasowana.
-7. **RED**: wyjście z analizatora.
+7. **SK1 + 3**: skok do następnego presetu pasma. Presety to:
+   * 144.800 APRS;
+   * 145.500 2 m;
+   * 433.925 LPD;
+   * 438.800 przemienniki 70 cm;
+   * 446.100 PMR446.
+
+   Każde naciśnięcie przechodzi do następnego presetu powyżej bieżącej częstotliwości. Po ostatnim wraca na początek listy.
+8. **RED**: wyjście z analizatora.
 
 ---
 
@@ -86,10 +94,10 @@ Podczas nadawania i gdy odtwarzany jest komunikat głosowy, pisk jest wstrzymany
 
 ---
 
-## 4. Waypoint (menu GPS)
+## 4. Waypoint (menu GPS, przedostatnia strona)
 
 1. Wejdź w **Menu → GPS**.
-2. Strzałkami **▲/▼** przejdź na **ostatnią stronę**, czyli stronę waypointu.
+2. Strzałkami **▲/▼** przejdź na **przedostatnią stronę**, czyli stronę waypointu.
 3. Przy fixie GPS naciśnij **GREEN**. Pojawi się komunikat „Waypoint set”, a radio zapamięta bieżącą pozycję.
 4. Strona pokazuje:
    * odległość do punktu (m lub km);
@@ -100,6 +108,22 @@ Podczas nadawania i gdy odtwarzany jest komunikat głosowy, pisk jest wstrzymany
      * w promieniu 5 m od punktu strzałka zmienia się w kropkę.
 
 Waypoint jest trzymany tylko w RAM, więc znika po wyłączeniu radia.
+
+---
+
+## 5. Licznik trasy (menu GPS, ostatnia strona)
+
+Radio zbiera te dane w tle, niezależnie od tego, jaki ekran jest otwarty:
+
+* `Dist`: przebyty dystans;
+* `Move`: czas w ruchu;
+* `Avg`: średnia prędkość w ruchu;
+* `Max`: prędkość maksymalna;
+* `Alt`: suma podejść i zejść.
+
+Radio liczy tylko ruch szybszy niż ok. 2 km/h, więc drganie pozycji GPS na postoju nie dodaje dystansu. Zmiany wysokości mniejsze niż 5 m są pomijane jako szum.
+
+**Długie GREEN** na tej stronie zeruje licznik. Dane są tylko w RAM i znikają po wyłączeniu radia.
 
 ---
 

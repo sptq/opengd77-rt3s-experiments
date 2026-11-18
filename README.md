@@ -172,6 +172,10 @@ Start it with long `#` in VFO mode. `*` toggles between waterfall and bars.
   the strongest carrier of the last sweep.
 * **`SK1 + 0`**: re-centre the VFO on that carrier, rounded to the VFO step.
   The waterfall history slides along instead of being cleared.
+* **`SK1 + 3`**: jump to the next band preset. The presets are 144.800 APRS,
+  145.500 2 m, 433.925 LPD, 438.800 70 cm repeaters and 446.100 PMR446. Each
+  press goes to the next preset above the current frequency and wraps around
+  after the last one.
 
 ### Fox-hunt mode — *RSSI screen*
 
@@ -185,7 +189,7 @@ Press `#` on the RSSI screen to toggle it.
   the distance and bearing from where you are now (`Max @ 120m 045 deg`).
 * `0` resets the max-hold.
 
-### Waypoint page — *GPS menu, last page*
+### Waypoint page — *GPS menu, second-to-last page*
 
 * Press **GREEN** to mark the current position (needs a GPS fix). The waypoint
   is kept in RAM until power-off.
@@ -193,6 +197,20 @@ Press `#` on the RSSI screen to toggle it.
   * when moving, the arrow is relative to your direction of travel (ahead = up);
   * when standing still, it is north-up.
 * Within 5 m of the waypoint the arrow turns into a dot.
+
+### Trip computer — *GPS menu, last page*
+
+The radio collects these in the background, whatever screen is shown. They
+are kept in RAM only:
+
+* distance travelled;
+* moving time;
+* average and maximum speed;
+* altitude gain and loss.
+
+Only movement above about 2 km/h is counted, so GPS jitter while you stand
+still is ignored. Altitude changes under 5 m are ignored as noise. A
+**long GREEN** press resets the trip.
 
 Plans and the on-radio test checklist are in [`PLANS/`](PLANS/). A Polish how-to is in [`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md).
 
