@@ -1227,6 +1227,24 @@ void applicationMainTask(void)
 							menuFunction = 0;
 						}
 					}
+					else if (QUICKKEY_IS_ACTION(keyFunction) && ((currentMenu == UI_CHANNEL_MODE) || (currentMenu == UI_VFO_MODE)))
+					{
+						// Fork extension: quickkey actions (see menuQuickkeys.c)
+						if (quickkeyActionExecute((quickkeyAction_t)QUICKKEY_ACTIONID(keyFunction), (currentMenu == UI_CHANNEL_MODE)) == false)
+						{
+							soundSetMelody(MELODY_NACK_BEEP);
+						}
+
+						// The SK2 + digit press has been consumed by the action.
+						buttons = BUTTON_NONE;
+						rotary = 0;
+						key_event = EVENT_KEY_NONE;
+						button_event = EVENT_BUTTON_NONE;
+						rotary_event = EVENT_ROTARY_NONE;
+						keys.key = 0;
+						keys.event = 0;
+						keyFunction = NO_EVENT;
+					}
 					else if ((QUICKKEY_TYPE(keyFunction) == QUICKKEY_CONTACT) && (currentMenu != menuFunction))
 					{
 						int contactIndex = QUICKKEY_CONTACTVALUE(keyFunction);

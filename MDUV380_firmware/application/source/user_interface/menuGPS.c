@@ -37,6 +37,19 @@
 static void updateScreen(bool isFirstRun, bool forceRedraw);
 static void handleEvent(uiEvent_t *ev);
 
+// Fork: "Waypoint" page. GREEN marks the current position (kept in RAM until
+// power off); the page then shows distance and bearing back to it, with an
+// arrow that is relative to the direction of travel when moving (ahead = up)
+// and north-up when standing still.
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+#define GPS_WAYPOINT_PAGE
+static bool waypointIsSet = false;
+static double waypointLat = 0.0;
+static double waypointLon = 0.0;
+static bool displayWaypoint(bool isFirstRun, bool forceRedraw);
+static bool waypointMarkHere(void);
+#endif
+
 #if defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
 #define CURRENT_PAGE_ON_MONOCHOME(p)  if (menuDataGlobal.currentItemIndex == (p))
 #else
@@ -220,6 +233,9 @@ typedef enum
 	PAGE_DIRECTION, // MD9600: Sat/HDOP/Alt, MD-UV380 everything in that page
 #if defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
 	PAGE_DIRECTION_2, // Heading/Course
+#endif
+#if defined(GPS_WAYPOINT_PAGE)
+	PAGE_WAYPOINT, // Fork: navigate back to a marked position
 #endif
 	PAGES_MAX
 } Pages_t;
@@ -1022,6 +1038,12 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 				res = displayDirectionInfo(isFirstRun, forceRedraw);
 				break;
 
+#if defined(GPS_WAYPOINT_PAGE)
+			case PAGE_WAYPOINT:
+				res = displayWaypoint(isFirstRun, forceRedraw);
+				break;
+#endif
+
 			case PAGES_MAX:
 				break;
 		}
@@ -1280,6 +1302,21 @@ static void handleEvent(uiEvent_t *ev)
 	{
 		gpsOnUsingQuickKey(false);
 	}
+#if defined(GPS_WAYPOINT_PAGE)
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN) && (menuDataGlobal.currentItemIndex == PAGE_WAYPOINT))
+	{
+		if (waypointMarkHere())
+		{
+			soundSetMelody(MELODY_ACK_BEEP);
+			uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, "Waypoint set", false);
+			isDirty = true;
+		}
+		else
+		{
+			soundSetMelody(MELODY_NACK_BEEP);
+		}
+	}
+#endif
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
@@ -1296,4 +1333,132 @@ static void handleEvent(uiEvent_t *ev)
 		updateScreen(false, true);
 	}
 }
+
+#if defined(GPS_WAYPOINT_PAGE)
+#define WAYPOINT_ARROW_CX      40
+#define WAYPOINT_ARROW_CY      (MENU_HEADER_HEIGHT + ((DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT) / 2))
+#define WAYPOINT_ARROW_R       30
+#define WAYPOINT_TEXT_X        80
+
+static bool waypointPositionIsValid(void)
+{
+	return ((gpsData.Status & (GPS_STATUS_HAS_FIX | GPS_STATUS_HAS_POSITION)) == (GPS_STATUS_HAS_FIX | GPS_STATUS_HAS_POSITION));
+}
+
+static bool waypointMarkHere(void)
+{
+	if (waypointPositionIsValid() == false)
+	{
+		return false;
+	}
+
+	waypointLat = gpsData.LatitudeHiRes;
+	waypointLon = gpsData.LongitudeHiRes;
+	waypointIsSet = true;
+
+	return true;
+}
+
+// Arrow pointing at angleDeg (0 = up, clockwise).
+static void waypointDrawArrow(double angleDeg)
+{
+	double a = angleDeg * DEG_TO_RAD;
+	double aL = (angleDeg + 150.0) * DEG_TO_RAD;
+	double aR = (angleDeg - 150.0) * DEG_TO_RAD;
+	int16_t tipX = WAYPOINT_ARROW_CX + (int16_t)(sin(a) * (WAYPOINT_ARROW_R - 3));
+	int16_t tipY = WAYPOINT_ARROW_CY - (int16_t)(cos(a) * (WAYPOINT_ARROW_R - 3));
+	int16_t lX = WAYPOINT_ARROW_CX + (int16_t)(sin(aL) * (WAYPOINT_ARROW_R - 8));
+	int16_t lY = WAYPOINT_ARROW_CY - (int16_t)(cos(aL) * (WAYPOINT_ARROW_R - 8));
+	int16_t rX = WAYPOINT_ARROW_CX + (int16_t)(sin(aR) * (WAYPOINT_ARROW_R - 8));
+	int16_t rY = WAYPOINT_ARROW_CY - (int16_t)(cos(aR) * (WAYPOINT_ARROW_R - 8));
+
+	displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+	displayFillTriangle(tipX, tipY, lX, lY, WAYPOINT_ARROW_CX, WAYPOINT_ARROW_CY, true);
+	displayFillTriangle(tipX, tipY, rX, rY, WAYPOINT_ARROW_CX, WAYPOINT_ARROW_CY, true);
+	displayThemeResetToDefault();
+}
+
+static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
+{
+	char buffer[SCREEN_LINE_BUFFER_SIZE];
+
+	if (((isFirstRun || forceRedraw) == false) &&
+			((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_POSITION_UPDATED | GPS_STATUS_COURSE_UPDATED | GPS_STATUS_SPEED_UPDATED)) == 0))
+	{
+		return false;
+	}
+
+	// Clear everything below the title
+	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT), true);
+
+	if (waypointIsSet == false)
+	{
+		displayPrintCentered((WAYPOINT_ARROW_CY - FONT_SIZE_3_HEIGHT), "No waypoint", FONT_SIZE_3);
+		displayPrintCentered((WAYPOINT_ARROW_CY + 4), "GREEN: mark here", FONT_SIZE_1);
+		return true;
+	}
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayDrawCircle(WAYPOINT_ARROW_CX, WAYPOINT_ARROW_CY, WAYPOINT_ARROW_R, true);
+	displayThemeResetToDefault();
+
+	if (waypointPositionIsValid() == false)
+	{
+		displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY - 4), "No fix", FONT_SIZE_3);
+		return true;
+	}
+
+	double lat = gpsData.LatitudeHiRes;
+	double lon = gpsData.LongitudeHiRes;
+	int meters = (int)distanceBetweenTwoCoords(lat, lon, waypointLat, waypointLon, false);
+	double bearing = courseTo(lat, lon, waypointLat, waypointLon);
+	bool moving = (((gpsData.Status & (GPS_STATUS_HAS_COURSE | GPS_STATUS_HAS_SPEED)) == (GPS_STATUS_HAS_COURSE | GPS_STATUS_HAS_SPEED)) &&
+			(gpsData.SpeedInHundredthKn >= GPS_SPEED_THRESHOLD_MIN));
+	double arrow = bearing;
+
+	if (moving)
+	{
+		arrow = bearing - (gpsData.CourseInHundredthDeg / 100.0);
+	}
+
+	if (meters >= 5)
+	{
+		waypointDrawArrow(arrow);
+	}
+	else
+	{
+		// Arrived: fill the centre instead of an arrow
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+		displayFillCircle(WAYPOINT_ARROW_CX, WAYPOINT_ARROW_CY, 8, true);
+		displayThemeResetToDefault();
+	}
+
+	// Distance
+	if (meters < 1000)
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%dm", meters);
+	}
+	else if (meters < 100000)
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%d.%01dkm", (meters / 1000), ((meters % 1000) / 100));
+	}
+	else
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%dkm", (meters / 1000));
+	}
+	displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY - 26), buffer, FONT_SIZE_3);
+
+	// Bearing + cardinal
+	int b = (((int)(bearing + 0.5)) % 360);
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%03d %s", b, directions[((b * 10 + 112) / 225) % 16]);
+	displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY - 6), buffer, FONT_SIZE_3);
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY + 16), (moving ? "Ahead=up" : "North=up"), FONT_SIZE_1);
+	displayThemeResetToDefault();
+
+	return true;
+}
+#endif
+
 #endif

@@ -130,6 +130,72 @@ To remove a bad release: delete the tag both locally and on the
 remote (`git tag -d <tag>; git push origin :refs/tags/<tag>`) and
 delete the corresponding Release in the GitHub UI.
 
+## Fork features (RT3S / MDUV380)
+
+The RT3S has PTT, SK1, SK2, the channel knob and the keypad. There is no
+top/orange button. Firmware "ORANGE" events are emulated with **SK1 + GREEN**.
+
+### Quickkeys menu — *Options → Quickkeys*
+
+Upstream already supports ten **SK2 + digit** quickkeys, but there is no screen
+that shows what each slot does. This menu lists slots `0`–`9` with their
+current assignment and lets you change them:
+
+| Key | Action |
+|---|---|
+| ▲ / ▼ or a digit | select slot |
+| channel knob | cycle the assignment |
+| GREEN | save changed slots (marked `*`) and exit |
+| RED | discard changes and exit |
+
+On top of the menu shortcuts (RSSI, Last heard, Zones, Contacts, Radio info,
+Satellite, GPS, APRS), a slot can run a fork **action**:
+
+| Action | Equivalent built-in combo |
+|---|---|
+| APRS beacon | `SK1 + 2` |
+| APRS on/off | `SK1 + 1` |
+| Day/Night | `SK1 + RED` |
+| Band scope | long `#` in VFO (also works from the Channel screen) |
+| Scope: to peak | `SK1 + 0` while sweeping |
+
+Actions are stored as out-of-range contact indices. Upstream firmware ignores
+these, so going back to upstream with the same codeplug is harmless.
+
+### VFO band scope / waterfall
+
+Start it with long `#` in VFO mode. `*` toggles between waterfall and bars.
+
+* **Peak hold**: a dot above each bar marks the recent maximum. It decays a
+  little every sweep.
+* **Strongest-signal marker**: a small triangle at the top of the scope marks
+  the strongest carrier of the last sweep.
+* **`SK1 + 0`**: re-centre the VFO on that carrier, rounded to the VFO step.
+  The waterfall history slides along instead of being cleared.
+
+### Fox-hunt mode — *RSSI screen*
+
+Press `#` on the RSSI screen to toggle it.
+
+* A short beep every 0.6 s. Its pitch rises with the signal: 300 Hz at
+  −130 dBm, 2.4 kHz at −40 dBm.
+* **Max-hold**: the strongest reading so far is shown as `Max: … dBm` and as a
+  marker on the S-meter.
+* With a GPS fix, the position of that maximum is stored. The screen then shows
+  the distance and bearing from where you are now (`Max @ 120m 045 deg`).
+* `0` resets the max-hold.
+
+### Waypoint page — *GPS menu, last page*
+
+* Press **GREEN** to mark the current position (needs a GPS fix). The waypoint
+  is kept in RAM until power-off.
+* The page shows the distance and bearing back to the waypoint, plus an arrow:
+  * when moving, the arrow is relative to your direction of travel (ahead = up);
+  * when standing still, it is north-up.
+* Within 5 m of the waypoint the arrow turns into a dot.
+
+Plans and the on-radio test checklist are in [`PLANS/`](PLANS/). A Polish how-to is in [`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md).
+
 ## Local experiments
 
 Branches under `feature/*` may contain in-progress experiments (for

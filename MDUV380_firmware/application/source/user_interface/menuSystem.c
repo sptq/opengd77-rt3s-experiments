@@ -149,6 +149,7 @@ static menuFunctionData_t menuFunctions[] =
 		{ menuAPRSOptions,          NULL, NULL, 0 },
 #endif
 		{ menuResetCustomData,      NULL, NULL, 0 },
+		{ menuQuickkeys,            NULL, NULL, 0 },
 		// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 		{ uiMessageBox,             NULL, NULL, 0 },
 		{ menuHotspotMode,          NULL, NULL, 0 },
@@ -696,6 +697,7 @@ static const menuItemNewData_t optionsMenuItems[] =
 	{ 257, MENU_APRS            },
 #endif
 	{ 280, MENU_RESET_CUSTOM_DATA },// stringOffset 280 = .reset_configuration field (added at end of stringsTable_t)
+	{ 281, MENU_QUICKKEYS         },// stringOffset 281 = .quickkeys field
 };
 
 const menuItemsList_t menuDataOptions =
