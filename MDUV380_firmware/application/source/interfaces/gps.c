@@ -29,6 +29,7 @@
 #include "user_interface/uiGlobals.h"
 #include "user_interface/uiUtilities.h"
 #include "interfaces/gps.h"
+#include "functions/gpsTrip.h"
 #include "user_interface/uiLocalisation.h"
 #include "usb/usb_com.h"
 #if defined(PLATFORM_MD9600)
@@ -1031,6 +1032,10 @@ void gpsTick(void)
 					gpsData.Status &= ~GPS_STATUS_HAS_COURSE;
 					gpsData.Status |= GPS_STATUS_COURSE_UPDATED;
 				}
+
+#if defined(GPS_TRIP_COMPUTER)
+				gpsTripUpdate(); // Fork: trip computer (RAM only)
+#endif
 			}
 			else if (memcmp(&gpsLine[3], "GSA", 3) == 0) // DOP and active satellites
 			{

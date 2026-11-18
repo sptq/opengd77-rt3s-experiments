@@ -50,6 +50,13 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw);
 static bool waypointMarkHere(void);
 #endif
 
+// Fork: trip computer page (distance, moving time, avg/max speed, altitude
+// gain/loss), accumulated in the background by functions/gpsTrip.c.
+#include "functions/gpsTrip.h"
+#if defined(GPS_TRIP_COMPUTER)
+static bool displayTrip(bool isFirstRun, bool forceRedraw);
+#endif
+
 #if defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
 #define CURRENT_PAGE_ON_MONOCHOME(p)  if (menuDataGlobal.currentItemIndex == (p))
 #else
@@ -236,6 +243,9 @@ typedef enum
 #endif
 #if defined(GPS_WAYPOINT_PAGE)
 	PAGE_WAYPOINT, // Fork: navigate back to a marked position
+#endif
+#if defined(GPS_TRIP_COMPUTER)
+	PAGE_TRIP, // Fork: trip computer
 #endif
 	PAGES_MAX
 } Pages_t;
@@ -1044,6 +1054,12 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 				break;
 #endif
 
+#if defined(GPS_TRIP_COMPUTER)
+			case PAGE_TRIP:
+				res = displayTrip(isFirstRun, forceRedraw);
+				break;
+#endif
+
 			case PAGES_MAX:
 				break;
 		}
@@ -1317,6 +1333,16 @@ static void handleEvent(uiEvent_t *ev)
 		}
 	}
 #endif
+#if defined(GPS_TRIP_COMPUTER)
+	else if (KEYCHECK_LONGDOWN(ev->keys, KEY_GREEN) && (menuDataGlobal.currentItemIndex == PAGE_TRIP))
+	{
+		// Long press so a stray GREEN does not wipe a day of hiking
+		gpsTripReset();
+		soundSetMelody(MELODY_ACK_BEEP);
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, "Trip reset", false);
+		isDirty = true;
+	}
+#endif
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
@@ -1456,6 +1482,64 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY + 16), (moving ? "Ahead=up" : "North=up"), FONT_SIZE_1);
 	displayThemeResetToDefault();
+
+	return true;
+}
+#endif
+
+#if defined(GPS_TRIP_COMPUTER)
+#define TRIP_LINE_Y(n)   (MENU_HEADER_HEIGHT + 4 + ((n) * 20))
+
+static bool displayTrip(bool isFirstRun, bool forceRedraw)
+{
+	char buffer[SCREEN_LINE_BUFFER_SIZE];
+
+	if (((isFirstRun || forceRedraw) == false) &&
+			((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_POSITION_UPDATED | GPS_STATUS_TIME_UPDATED | GPS_STATUS_SPEED_UPDATED | GPS_STATUS_HEIGHT_UPDATED)) == 0))
+	{
+		return false;
+	}
+
+	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT), true);
+
+	if (gpsTrip.started == false)
+	{
+		displayPrintCentered((TRIP_LINE_Y(1) + 4), "Trip: no fix yet", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCentered((TRIP_LINE_Y(3) + 4), "Long GREEN: reset", FONT_SIZE_1);
+		displayThemeResetToDefault();
+		return true;
+	}
+
+	// Distance
+	if (gpsTrip.distanceM < 1000U)
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Dist %um", (unsigned)gpsTrip.distanceM);
+	}
+	else
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Dist %u.%02ukm", (unsigned)(gpsTrip.distanceM / 1000U), (unsigned)((gpsTrip.distanceM % 1000U) / 10U));
+	}
+	displayPrintAt(2, TRIP_LINE_Y(0), buffer, FONT_SIZE_3);
+
+	// Moving time
+	uint32_t s = (gpsTrip.movingTimeMs / 1000U);
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Move %u:%02u:%02u", (unsigned)(s / 3600U), (unsigned)((s / 60U) % 60U), (unsigned)(s % 60U));
+	displayPrintAt(2, TRIP_LINE_Y(1), buffer, FONT_SIZE_3);
+
+	// Average moving speed
+	uint32_t avg = gpsTripAvgSpeedHundredthKmh();
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Avg  %u.%01ukm/h", (unsigned)(avg / 100U), (unsigned)((avg % 100U) / 10U));
+	displayPrintAt(2, TRIP_LINE_Y(2), buffer, FONT_SIZE_3);
+
+	// Max speed (hundredth kn -> tenth km/h)
+	uint32_t maxTenthKmh = (((uint32_t)gpsTrip.maxSpeedHundredthKn * 1852U) / 10000U);
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Max  %u.%01ukm/h", (unsigned)(maxTenthKmh / 10U), (unsigned)(maxTenthKmh % 10U));
+	displayPrintAt(2, TRIP_LINE_Y(3), buffer, FONT_SIZE_3);
+
+	// Altitude gain / loss
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Alt  +%u -%um", (unsigned)gpsTrip.altGainM, (unsigned)gpsTrip.altLossM);
+	displayPrintAt(2, TRIP_LINE_Y(4), buffer, FONT_SIZE_3);
 
 	return true;
 }
