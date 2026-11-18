@@ -194,7 +194,7 @@ Press `#` on the RSSI screen to toggle it.
   * when standing still, it is north-up.
 * Within 5 m of the waypoint the arrow turns into a dot.
 
-Plans and the on-radio test checklist are in [`PLANS/`](PLANS/).
+Plans and the on-radio test checklist are in [`PLANS/`](PLANS/). A Polish how-to is in [`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md).
 
 ## Local experiments
 
