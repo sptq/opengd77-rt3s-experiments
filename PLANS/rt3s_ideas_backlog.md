@@ -34,7 +34,8 @@ Status legend: **done**, **in progress**, *idea*.
 | 5 | Replay the last DMR transmission locally (store AMBE frames in flash) | *idea* | ~27 B / 60 ms, so minutes fit easily |
 | 6 | FM DTMF **decoding** (show received digits, simple selective call) | *idea* | only DTMF TX exists today |
 | 7 | Roaming++: auto-switch to the nearest repeater on low RSSI, bearing to the current repeater | *idea* | `SK1`-free; uses existing distance sort |
-| 8 | GPS navigation screen (speed, course, altitude, bearing to a waypoint/contact) | *idea* | `menuGPS.c` |
+| 8 | GPS navigation: waypoint page (GREEN marks, arrow/distance/bearing back) | **done** | `menuGPS.c`; speed/course/alt already on the Direction page; waypoint is RAM-only; untested on hardware |
+| 8b | Waypoint: persist in settings, pick a contact/channel location as target | *idea* | |
 | 9 | Satellite: automatic Doppler retune during a pass, cross-band hints | *idea* | `menuSatelliteScreen.c` |
 | 10 | APRS RX decode (AFSK 1200): station list with distance/bearing, radar view | *idea* | CPU budget with the codec running is the main risk |
 | 11 | DMR SMS send/receive | *idea* | needs data-burst handling in `HR-C6000.c` |

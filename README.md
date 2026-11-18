@@ -185,6 +185,15 @@ Press `#` on the RSSI screen to toggle it.
   the distance and bearing from where you are now (`Max @ 120m 045 deg`).
 * `0` resets the max-hold.
 
+### Waypoint page — *GPS menu, last page*
+
+* Press **GREEN** to mark the current position (needs a GPS fix). The waypoint
+  is kept in RAM until power-off.
+* The page shows the distance and bearing back to the waypoint, plus an arrow:
+  * when moving, the arrow is relative to your direction of travel (ahead = up);
+  * when standing still, it is north-up.
+* Within 5 m of the waypoint the arrow turns into a dot.
+
 Plans and the on-radio test checklist are in [`PLANS/`](PLANS/).
 
 ## Local experiments
