@@ -1751,6 +1751,16 @@ int16_t codeplugGetLastUsedChannelNumberInCurrentZone(void)
 {
 	int16_t index = codeplugGetLastUsedChannelInZone(currentZone.NOT_IN_CODEPLUGDATA_indexNumber);
 
+	// Fork: the stored position can be stale (the zone was shortened in the CPS), and an empty
+	// slot (channel 0) loads garbage and hangs the radio: fall back to the first channel.
+	if ((currentZone.NOT_IN_CODEPLUGDATA_indexNumber >= 0) &&
+			((index < 0) || (index >= currentZone.NOT_IN_CODEPLUGDATA_numChannelsInZone) || (index >= codeplugChannelsPerZone) ||
+					(currentZone.channels[index] == 0)))
+	{
+		index = 0;
+		codeplugSetLastUsedChannelInZone(currentZone.NOT_IN_CODEPLUGDATA_indexNumber, 0);
+	}
+
 	return ((currentZone.NOT_IN_CODEPLUGDATA_indexNumber >= 0) ? currentZone.channels[index] : index);
 }
 
