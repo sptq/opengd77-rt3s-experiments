@@ -54,6 +54,7 @@
 #include "functions/rxPowerSaving.h"
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
+#include "user_interface/uiEmcom.h"
 
 #if defined(USING_EXTERNAL_DEBUGGER)
 #include "SeggerRTT/RTT/SEGGER_RTT.h"
@@ -1409,6 +1410,9 @@ void applicationMainTask(void)
 		aprsBeaconingTick(&ev);
 #if defined(I2S_APRS_RX)
 		aprsRxTick(); // Fork: APRS receive (background / monitor)
+#endif
+#if defined(HAS_EMCOM_UI)
+		emcomSosTick(); // Fork: EMCOM SOS beacons
 #endif
 		settingsSaveIfNeeded(false);
 

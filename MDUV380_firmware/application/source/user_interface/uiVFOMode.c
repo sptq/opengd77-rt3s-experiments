@@ -34,6 +34,7 @@
 #include "functions/rxPowerSaving.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "utils.h"
 #include "interfaces/i2s.h"
@@ -98,6 +99,10 @@ static CodeplugCSSTypes_t toneScanCSS = CSS_TYPE_NONE; // Here, CSS_NONE means *
 static uint16_t prevCSSTone = (CODEPLUG_CSS_TONE_NONE - 1);
 
 static vfoScreenOperationMode_t screenOperationMode[2] = { VFO_SCREEN_OPERATION_NORMAL, VFO_SCREEN_OPERATION_NORMAL };// For VFO A and B
+#if defined(HAS_EMCOM_UI)
+static bool emcomVfoUpdateAllowed(void);
+static void emcomRenderVfo(int txTimeSecs, bool isTransmitting);
+#endif
 
 static menuStatus_t menuVFOExitStatus = MENU_STATUS_SUCCESS;
 static menuStatus_t menuQuickVFOExitStatus = MENU_STATUS_SUCCESS;
@@ -358,6 +363,22 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 				{
 					if (rxPowerSavingIsRxOn())
 					{
+#if defined(HAS_EMCOM_UI)
+						if (emcomVfoUpdateAllowed())
+						{
+							if (emcomNeedsFullRedraw(ev->time))
+							{
+								emcomRenderVfo(0, false);
+							}
+							else
+							{
+								uiUtilityDrawRSSIBarGraph();
+								displayRenderRows(1, 2);
+							}
+						}
+						else
+#endif
+						{
 #if defined(HAS_SOFT_VOLUME)
 						if (uiUtilityVolumeIndicatorChanged() && (uiDataGlobal.Scan.active == false) && (uiVFOModeSweepScanning(true) == false))
 						{
@@ -401,6 +422,7 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 							{
 								displayRenderRows(((uiDataGlobal.Scan.active && (uiDataGlobal.Scan.state == SCAN_STATE_PAUSED)) ? 0 : 1), 2);
 							}
+						}
 						}
 					}
 
@@ -487,6 +509,32 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 	return menuVFOExitStatus;
 }
 
+#if defined(HAS_EMCOM_UI)
+// Fork: EMCOM main screen (uiEmcom.c) for the plain VFO; the special modes keep the classic screen.
+static bool emcomVfoUpdateAllowed(void)
+{
+	bool allowed = ((screenOperationMode[nonVolatileSettings.currentVFONumber] == VFO_SCREEN_OPERATION_NORMAL) &&
+			(uiDataGlobal.FreqEnter.index == 0) && (selectedFreq == VFO_SELECTED_FREQUENCY_INPUT_RX) &&
+			(uiDataGlobal.displayChannelSettings == false) &&
+			(uiVFOModeDualWatchIsScanning() == false) && (uiVFOModeSweepScanning(true) == false));
+
+	emcomSetVfoAllowed(allowed);
+	return (allowed && emcomScreenActive());
+}
+
+static void emcomRenderVfo(int txTimeSecs, bool isTransmitting)
+{
+	emcomMainInfo_t info;
+
+	memset(&info, 0, sizeof(info));
+	info.isVFO = true;
+	info.vfoLetter = (char)('A' + nonVolatileSettings.currentVFONumber);
+	info.isTransmitting = isTransmitting;
+	info.txTimeSecs = txTimeSecs;
+	emcomRenderMain(&info);
+}
+#endif
+
 void uiVFOModeUpdateScreen(int txTimeSecs)
 {
 	static bool blink = false;
@@ -520,6 +568,33 @@ void uiVFOModeUpdateScreen(int txTimeSecs)
 		uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_DEFAULT_SCREEN;
 		uiDataGlobal.displayQSOState = QSO_DISPLAY_DEFAULT_SCREEN;
 	}
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomVfoUpdateAllowed())
+	{
+		switch(uiDataGlobal.displayQSOState)
+		{
+			case QSO_DISPLAY_DEFAULT_SCREEN:
+				lastHeardClearLastID();
+				uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_DEFAULT_SCREEN;
+				uiDataGlobal.isDisplayingQSOData = false;
+				uiDataGlobal.receivedPcId = 0x00;
+				break;
+			case QSO_DISPLAY_CALLER_DATA:
+			case QSO_DISPLAY_CALLER_DATA_UPDATE:
+				uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_CALLER_DATA;
+				uiDataGlobal.isDisplayingQSOData = true;
+				uiDataGlobal.receivedPcId = 0x00;
+				break;
+			case QSO_DISPLAY_IDLE:
+				return;
+		}
+
+		emcomRenderVfo(txTimeSecs, isTransmitting);
+		uiDataGlobal.displayQSOState = QSO_DISPLAY_IDLE;
+		return;
+	}
+#endif
 
 #if defined(VFO_SWEEP_WATERFALL)
 	if (screenOperationMode[nonVolatileSettings.currentVFONumber] == VFO_SCREEN_OPERATION_SWEEP)
@@ -2142,6 +2217,12 @@ static void handleEvent(uiEvent_t *ev)
 					else if (keyval == 4)
 					{
 						aprsRxToggleBackground(); // Fork: APRS receive in background
+					}
+#endif
+#if defined(HAS_EMCOM_UI)
+					else if (keyval == 9)
+					{
+						emcomSosRequest(); // Fork: EMCOM SOS (press twice)
 					}
 #endif
 					else if (keyval == 2)

@@ -29,6 +29,7 @@
 #include "functions/trx.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "functions/voicePrompts.h"
 #include "functions/rxPowerSaving.h"
@@ -93,6 +94,9 @@ static uint16_t getCurrentChannelInCurrentZoneForGD77S(void);
 #else // ! PLATFORM_GD77S
 
 static void selectPrevNextZone(bool nextZone);
+#if defined(HAS_EMCOM_UI)
+static void emcomRenderChannel(int txTimeSecs, bool isTransmitting);
+#endif
 static void handleUpKey(uiEvent_t *ev);
 static void handleDownKey(uiEvent_t *ev);
 
@@ -322,6 +326,22 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 				{
 					if (rxPowerSavingIsRxOn())
 					{
+#if defined(HAS_EMCOM_UI)
+						if (emcomScreenActive() && (uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0))
+						{
+							if (emcomNeedsFullRedraw(ev->time))
+							{
+								emcomRenderChannel(0, false);
+							}
+							else
+							{
+								uiUtilityDrawRSSIBarGraph();
+								displayRenderRows(1, 2);
+							}
+						}
+						else
+#endif
+						{
 #if defined(HAS_SOFT_VOLUME)
 						if (uiUtilityVolumeIndicatorChanged() && (uiDataGlobal.Scan.active == false))
 						{
@@ -351,6 +371,7 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 							// Only render the second row which contains the bar graph, if we're not scanning,
 							// as there is no need to redraw the rest of the screen
 							displayRenderRows(((uiDataGlobal.Scan.active && (uiDataGlobal.Scan.state == SCAN_STATE_PAUSED)) ? 0 : 1), 2);
+						}
 						}
 					}
 					m = ev->time;
@@ -803,6 +824,23 @@ void uiChannelModeLoadChannelData(bool useChannelDataInMemory, bool loadVoicePro
 	}
 }
 
+#if defined(HAS_EMCOM_UI)
+// Fork: EMCOM main screen (uiEmcom.c)
+static void emcomRenderChannel(int txTimeSecs, bool isTransmitting)
+{
+	emcomMainInfo_t info;
+
+	memset(&info, 0, sizeof(info));
+	info.isVFO = false;
+	info.zoneName = (CODEPLUG_ZONE_IS_ALLCHANNELS(currentZone) ? currentLanguage->all_channels : currentZoneName);
+	info.channelNumber = (codeplugGetLastUsedChannelInCurrentZone() + (CODEPLUG_ZONE_IS_ALLCHANNELS(currentZone) ? 0 : 1));
+	info.channelCount = currentZone.NOT_IN_CODEPLUGDATA_numChannelsInZone;
+	info.isTransmitting = isTransmitting;
+	info.txTimeSecs = txTimeSecs;
+	emcomRenderMain(&info);
+}
+#endif
+
 void uiChannelModeUpdateScreen(int txTimeSecs)
 {
 	char nameBuf[NAME_BUFFER_LEN];
@@ -830,6 +868,33 @@ void uiChannelModeUpdateScreen(int txTimeSecs)
 		uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_DEFAULT_SCREEN;
 		uiDataGlobal.displayQSOState = QSO_DISPLAY_DEFAULT_SCREEN;
 	}
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive() && (uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0))
+	{
+		switch(uiDataGlobal.displayQSOState)
+		{
+			case QSO_DISPLAY_DEFAULT_SCREEN:
+				lastHeardClearLastID();
+				uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_DEFAULT_SCREEN;
+				uiDataGlobal.isDisplayingQSOData = false;
+				uiDataGlobal.receivedPcId = 0x00;
+				break;
+			case QSO_DISPLAY_CALLER_DATA:
+			case QSO_DISPLAY_CALLER_DATA_UPDATE:
+				uiDataGlobal.displayQSOStatePrev = QSO_DISPLAY_CALLER_DATA;
+				uiDataGlobal.isDisplayingQSOData = true;
+				uiDataGlobal.receivedPcId = 0x00;
+				break;
+			case QSO_DISPLAY_IDLE:
+				return;
+		}
+
+		emcomRenderChannel(txTimeSecs, isTransmitting);
+		uiDataGlobal.displayQSOState = QSO_DISPLAY_IDLE;
+		return;
+	}
+#endif
 
 	displayClearBuf();
 	uiUtilityRenderHeader(false, false,
@@ -1813,6 +1878,12 @@ static void handleEvent(uiEvent_t *ev)
 				else if (keyval == 4)
 				{
 					aprsRxToggleBackground(); // Fork: APRS receive in background
+				}
+#endif
+#if defined(HAS_EMCOM_UI)
+				else if (keyval == 9)
+				{
+					emcomSosRequest(); // Fork: EMCOM SOS (press twice)
 				}
 #endif
 				else if (keyval == 2)

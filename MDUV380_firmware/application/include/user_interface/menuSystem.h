@@ -418,6 +418,7 @@ typedef enum
 	QUICKKEY_ACTION_BAND_SCOPE,
 	QUICKKEY_ACTION_SWEEP_TUNE_PEAK,
 	QUICKKEY_ACTION_APRS_RX_TOGGLE, // Fork: APRS receive in background
+	QUICKKEY_ACTION_SOS,            // Fork: EMCOM SOS (press twice)
 	QUICKKEY_ACTION_MAX
 } quickkeyAction_t;
 

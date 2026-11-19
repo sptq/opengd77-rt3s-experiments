@@ -34,6 +34,7 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
+#include "user_interface/uiEmcom.h"
 #include "hardware/SPI_Flash.h"
 #include "functions/trx.h"
 #include "functions/rxPowerSaving.h"
@@ -1892,6 +1893,18 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 	UNUSED_PARAMETER(forceBatteryDisplay);
 #endif
 
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive() && (isVFODualWatchScanning == false) && (isVFOSweepScanning == false))
+	{
+		emcomRenderStatusBar();
+		if (isTransmittingIgnoringAPRSBeaconing() == false)
+		{
+			emcomDrawRssi(trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));
+		}
+		return;
+	}
+#endif
+
 	if (settingsIsOptionBitSet(BIT_BATTERY_VOLTAGE_IN_HEADER))
 	{
 		getBatteryVoltage(&volts, &mvolts);
@@ -2300,6 +2313,14 @@ static void drawHeaderBar(int *barWidth, int16_t barHeight)
 {
 	*barWidth = CLAMP(*barWidth, 0, DISPLAY_SIZE_X);
 
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive())
+	{
+		emcomDrawBar(*barWidth, isTransmittingIgnoringAPRSBeaconing()); // Fork: segmented bar under the status bar
+		return;
+	}
+#endif
+
 	displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_HEADER_TEXT);
 	if (*barWidth)
 	{
@@ -2318,6 +2339,14 @@ static void drawHeaderBar(int *barWidth, int16_t barHeight)
 void uiUtilityDrawRSSIBarGraph(void)
 {
 	int rssi = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive())
+	{
+		emcomDrawRssi(rssi);
+		return;
+	}
+#endif
 
 	if ((rssi > SMETER_S9) && (trxGetMode() == RADIO_MODE_ANALOG))
 	{

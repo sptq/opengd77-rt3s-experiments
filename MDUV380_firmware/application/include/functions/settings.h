@@ -153,7 +153,7 @@ typedef enum
 	BIT_VISUAL_VOLUME               = (SETTINGS_BITS_BANK_0 | (1 << 18)),
 #endif
 	BIT_SECONDARY_LANGUAGE          = (SETTINGS_BITS_BANK_0 | (1 << 19)),
-	BIT_UNUSED_3                    = (SETTINGS_BITS_BANK_0 | (1 << 20)),
+	BIT_UI_CLASSIC_STYLE            = (SETTINGS_BITS_BANK_0 | (1 << 20)), // Fork: classic main screen instead of the EMCOM one (was unused)
 	BIT_DISPLAY_CHANNEL_DISTANCE    = (SETTINGS_BITS_BANK_0 | (1 << 21)),
 #if defined(PLATFORM_MD2017)
 	BIT_TRACKBALL_ENABLED           = (SETTINGS_BITS_BANK_0 | (1 << 22)),
