@@ -329,6 +329,8 @@ const stringsTable_t turkishLanguage =
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Ayarlari sifirla", // MaxLen: 16
 .quickkeys				= "Hizli tuslar", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
+.aprs_rx				= "APRS RX", // MaxLen: 16 - Main menu entry: APRS receive (frames, stations, radar, messages)
 };
 /********************************************************************
  *

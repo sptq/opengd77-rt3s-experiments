@@ -105,6 +105,29 @@ int main(void)
 		check(name, dst, info, (int)strlen(info + 9) + 9, 1, m[i].lat, m[i].lon, m[i].crs % 360, (int)lround(m[i].sp * 1.852), NULL);
 	}
 
+	// Messages
+	struct { const char *info; int ok; const char *to, *text, *id; int ack, rej; } mt[] = {
+		{ ":SP7TQ-9  :Hello there{12", 1, "SP7TQ-9", "Hello there", "12", 0, 0 },
+		{ ":SP7TQ    :no number", 1, "SP7TQ", "no number", "", 0, 0 },
+		{ ":SP7TQ-9  :ack12", 1, "SP7TQ-9", "", "12", 1, 0 },
+		{ ":SP7TQ-9  :rejAB", 1, "SP7TQ-9", "", "AB", 0, 1 },
+		{ ":SP7TQ-9  :reply ack{MM}AA", 1, "SP7TQ-9", "reply ack", "MM", 0, 0 },
+		{ ":SP7TQ-9  :ackMM}AA", 1, "SP7TQ-9", "", "MM", 1, 0 },
+		{ ":BLN1     :Net 20:00 on SR7L\r", 1, "BLN1", "Net 20:00 on SR7L", "", 0, 0 },
+		{ ":SHORT:x", 0, "", "", "", 0, 0 },
+		{ "!5146.00N/01928.00E>", 0, "", "", "", 0, 0 },
+	};
+	for (unsigned i = 0; i < sizeof(mt) / sizeof(mt[0]); i++)
+	{
+		aprsRxParsed_t p; aprsRxMessage_t msg;
+		mkFrame(&f, "SP5ABC", 0, "APRS", mt[i].info, (int)strlen(mt[i].info));
+		int ok = aprsRxParse(&f, &p) && aprsRxParseMessage(&p, &msg);
+		int good = (ok == mt[i].ok) && (!ok || (strcmp(msg.addressee, mt[i].to) == 0 && strcmp(msg.text, mt[i].text) == 0 &&
+				strcmp(msg.msgId, mt[i].id) == 0 && msg.isAck == mt[i].ack && msg.isRej == mt[i].rej));
+		printf("%-4s msg %-30s to=%s text='%s' id=%s ack=%d rej=%d\n", good ? "OK" : "FAIL", mt[i].info, ok ? msg.addressee : "-", ok ? msg.text : "", ok ? msg.msgId : "", ok ? msg.isAck : 0, ok ? msg.isRej : 0);
+		if (!good) fails++;
+	}
+
 	// Geo
 	double d = aprsRxDistanceKm(51.7592, 19.4560, 52.2297, 21.0122); // Lodz -> Warsaw ~ 119 km
 	double b = aprsRxBearingDeg(51.7592, 19.4560, 52.2297, 21.0122);  // ~ 63 deg

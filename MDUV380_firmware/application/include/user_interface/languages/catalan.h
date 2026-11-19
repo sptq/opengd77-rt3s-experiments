@@ -329,6 +329,8 @@ const stringsTable_t catalanLanguage=
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reinicia config.", // MaxLen: 16
 .quickkeys				= "Tecles rapides", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
+.aprs_rx				= "APRS RX", // MaxLen: 16 - Main menu entry: APRS receive (frames, stations, radar, messages)
 };
 /********************************************************************
  *

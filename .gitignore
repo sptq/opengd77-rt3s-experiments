@@ -28,3 +28,5 @@ __pycache__/
 # Official donor firmware (AMBE codec source for the loader) - never commit
 MD9600-CSV*.bin
 *.sgl
+MDUV380_firmware/tests/aprs_rx/test_tones
+MDUV380_firmware/tests/aprs_rx/test_sstv

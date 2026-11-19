@@ -556,6 +556,9 @@ void applicationMainTask(void)
 
 	aprsBeaconingInit();
 	aprsBeaconingStart();
+#if defined(I2S_APRS_RX)
+	aprsRxSetBackground(settingsIsOptionBitSet(BIT_APRS_RX_BACKGROUND)); // Fork: restore APRS RX background mode
+#endif
 
 	/* Infinite loop */
 	for(;;)

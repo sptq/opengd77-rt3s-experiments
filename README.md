@@ -1,14 +1,37 @@
-# opengd77-rt3s-experiments
+# opengd77-rt3s-experiments — SP7TQ fork
 
-**Unofficial source mirror and experimental fork** of the
-[OpenGD77](https://www.opengd77.com/) firmware for the **MDUV380 / DM1701**
-radio family (Retevis RT3S with GPS, TYT MD-UV380, Baofeng DM-1701,
-Retevis RT-84, MD-380UV).
+**Independent fork** of the [OpenGD77](https://www.opengd77.com/) firmware
+for the **Retevis RT3S** (GPS) and the rest of the MDUV380 / DM1701 family
+(TYT MD-UV380, Baofeng DM-1701, Retevis RT-84, MD-380UV).
 
-This repository is **not affiliated with the OpenGD77 project**. It is a
-personal working copy maintained by [EA4IPW](https://www.qrz.com/db/EA4IPW)
-for tracking local modifications and experiments (waterfall band-scope
-display, build-environment tooling, etc.).
+Maintainer: **Marcin SP7TQ** — <https://github.com/sptq/opengd77-rt3s-experiments>
+
+This repository started as a fork of
+[mangelajo/opengd77-rt3s-experiments](https://github.com/mangelajo/opengd77-rt3s-experiments)
+by EA4IPW (OpenGD77 R20260131 source mirror, command-line build, VFO band
+scope / waterfall, release tooling). From R20260131-EA4IPW.3 on it is
+**developed independently**: new features are added here first, and they are
+not guaranteed to be merged back into that repository or into upstream
+OpenGD77. It is **not affiliated with the OpenGD77 project**.
+
+What this fork adds on the radio (details in
+[Fork features](#fork-features-rt3s--mduv380), history in
+[`CHANGELOG.md`](CHANGELOG.md)):
+
+* **APRS receive** — on-radio AFSK 1200 decoder: frame list, raw TNC2/hex
+  view, station list with distance and bearing, radar, background RX with
+  notifications.
+* **Band scope / waterfall** in VFO mode, peak hold, tune to peak, band presets.
+* **Fox hunting** on the RSSI screen (pitch beep, max-hold with GPS position).
+* **Radiosonde hunting** helpers (401–405 MHz presets, keypad waypoint).
+* **GPS** waypoint navigation page and trip computer.
+* **Quickkeys** menu and new quickkey actions.
+* Polish translation and a Polish how-to
+  ([`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md)).
+
+Testers are welcome: download a release, try it and open an issue.
+**Experimental firmware — flash at your own risk** and back up your codeplug
+first.
 
 ## What's here
 
@@ -55,8 +78,10 @@ See the `LICENSE`/`LICENSE.txt` files inside each subdirectory.
   the upstream README ([`UPSTREAM_README.md`](UPSTREAM_README.md))
   (Kai DG4KLU, Roger VK3KYY, Daniel F1RMB, Alex DL4LEX, Colin G4EML and
   many others).
-- Fork contributors: EA4IPW (maintainer), Marcin SP7TQ (RT3S features:
-  GPS pages, VFO sweep, radiosonde helpers, APRS RX).
+- Fork maintainer: **Marcin SP7TQ** (RT3S features: APRS RX, GPS pages,
+  VFO sweep improvements, fox and radiosonde hunting, quickkeys, Polish docs).
+- Original fork and build tooling: EA4IPW, on which this
+  repository is based.
 
 If you are looking for the canonical firmware: **use
 [opengd77.com](https://www.opengd77.com/)**, not this repo.
@@ -91,33 +116,33 @@ container is needed for this step.
 
 ## Cutting a release
 
-CI is wired to publish a GitHub Release whenever a tag matching
-`R<upstream-date>-EA4IPW.<n>` is pushed. The tag scheme anchors each
-release to the upstream source snapshot it was built from, so it's
-always obvious which upstream `R<date>` a binary descends from.
+Releases are tagged `R<upstream-date>-SP7TQ.<n>`, which anchors each binary
+to the upstream OpenGD77 snapshot it was built from.
 
-**Tag format:** `R<YYYYMMDD>-EA4IPW.<N>`
-- `<YYYYMMDD>` — the date of the upstream OpenGD77 release this fork
-  tracks (matches the upstream `R<date>` directories on opengd77.eu).
+**Tag format:** `R<YYYYMMDD>-SP7TQ.<N>`
+- `<YYYYMMDD>` — the date of the upstream OpenGD77 release the fork is based
+  on (matches the upstream `R<date>` directories on opengd77.eu).
 - `<N>` — incrementing build number against that upstream base, starting
-  at `1`. Bump when you cut a new release off the same upstream snapshot.
+  at `1`.
 
-Examples:
-- `R20260131-EA4IPW.1` — first release built from upstream R20260131.
-- `R20260131-EA4IPW.2` — second release, still on R20260131.
-- `R20260504-EA4IPW.1` — first release after rebasing on upstream R20260504.
+Older tags from before the fork went independent keep their
+`R20260131-EA4IPW.<N>` names (the last one is `R20260131-EA4IPW.3`).
+
+GitHub Actions do not run on this fork yet, so releases are built locally
+with `make build-all CONTAINER_ENGINE=docker` (bins and `SHA256SUMS` in
+`MDUV380_firmware/dist/`) and uploaded with `gh release create`. The CI
+workflow accepts both tag schemes if Actions get enabled.
 
 **How to cut a release:**
 
 ```sh
-# make sure main is green and you're on the commit you want to ship
-git fetch origin
+# on the commit you want to ship
 git switch main
-git pull
+git pull sptq main
 
 # tag, annotated, with a short note
-git tag -a R20260131-EA4IPW.1 -m "Custom-data healing + waterfall VFO tint"
-git push origin R20260131-EA4IPW.1
+git tag -a R20260131-SP7TQ.1 -m "Short release note"
+git push sptq R20260131-SP7TQ.1
 ```
 
 CI then:
@@ -219,7 +244,7 @@ the MCU runs at 8 kHz through a voice-band filter, while the sondes send
 3. Enter the landing prediction as a waypoint: GPS → waypoint page → `#`.
 4. Close in with fox-hunt mode on the RSSI screen.
 
-### APRS receive — *RSSI screen, key `9`; background: `SK1+4`*
+### APRS receive — *main menu → APRS RX (or `9` on the RSSI screen); background: `SK1+4`*
 
 A software AFSK 1200 demodulator runs on the FM RX audio the HR-C6000
 sends over I2S (8 kHz): mark/space correlators, four slicers covering
@@ -227,20 +252,50 @@ de-/pre-emphasis tone twist, DPLL bit clock, NRZI, HDLC, AX.25 FCS check.
 It only owns the I2S while nothing else needs it (beeps, voice prompts,
 DMR audio and TX take over and the capture restarts by itself).
 
-The monitor (`9` on the RSSI screen) has three views, cycled with `#`:
+The APRS RX screen (main menu, quickkey, or `9` on the RSSI screen) has six
+views, cycled with `#`:
 
 * **frames** — last 8 frames; `*` shows the selected one raw (full TNC2
   line + hex dump),
 * **stations** — last heard stations / objects with distance, bearing, age,
   speed and course,
-* **radar** — north-up plot around your position, auto range.
+* **radar** — north-up plot around your position, auto range; the GPS
+  waypoint is drawn as a square, `*` makes the selected station the waypoint,
+* **messages** — APRS messages to you (acknowledged automatically, about 2 s
+  later), bulletins and your own messages with their state (`...` waiting,
+  `ACK`, `REJ`, `FAIL`, `noTX`). `GREEN` replies to the selected message, or
+  starts a message to the station selected in the stations / radar view,
+  with a canned text (`QSL`, `73`, `Roger`...). Sent messages are retried
+  every 30 s, 3 times at most. Your call is the radio name + the SSID of the
+  channel APRS configuration, TX goes to its QSY frequency when set,
+* **DTMF** — decoded DTMF digits (Goertzel, twist / energy checks),
+* **CW** — Morse decoder for FM (repeater IDs), with WPM and tone.
 
 Positions are decoded from uncompressed, compressed and Mic-E reports,
 objects and items. Own position: GPS fix, else the location from the
 settings. `SK1+4` on the VFO / channel screen (or the *APRS RX on/off*
 quickkey action) keeps decoding in the background and pops a short
-notification (`SP7ABC-9 12.3km`) per frame. The decoder and the parser are
-hardware independent and have host tests.
+notification (`SP7ABC-9 12.3km`) per frame, DTMF sequences and APRS
+messages; the setting survives a power cycle. The decoders and the parser
+are hardware independent and have host tests
+(`make -C MDUV380_firmware/tests/aprs_rx`).
+
+### SSTV receive — *main menu → SSTV*
+
+Picture receive on FM: Robot 36/72, Martin M1/M2, Scottie S1/S2,
+PD 90/120/180 (the ISS uses PD 120 on 145.800). The mode comes from the VIS
+header, every line is re-timed on its sync pulse, the picture is scaled to
+160x120 and drawn as it arrives under a status line (mode, line, audio
+frequency). `0` clears and waits for the next picture, `GREEN` / `RED`
+leave; also available as a quickkey. While the screen is open APRS / DTMF /
+CW decoding is paused (the SSTV decoder borrows their memory).
+
+### GPS log to GPX
+
+With the GPS mode set to *On+Log* the firmware records NMEA into the last
+2 MB of the SPI flash. `MDUV380_firmware/tools/opengd77_gps_log_to_gpx.py
+-o track.gpx` downloads it over USB (pyserial) and writes one GPX track
+segment per logging session.
 
 ### Trip computer — *GPS menu, last page*
 
@@ -266,4 +321,4 @@ example, converting the existing VFO sweep mode in
 proper scrolling waterfall display). These are not endorsed by upstream
 and may be broken at any commit.
 
-— 73, EA4IPW
+— 73, Marcin SP7TQ

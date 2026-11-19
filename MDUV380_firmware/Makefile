@@ -132,6 +132,10 @@ $(BUILD_DIR)/%.o: %.S
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
+# Like clean, but keeps dist/ (used between build-all iterations).
+clean-build:
+	rm -rf $(BUILD_DIR)
+
 # --- containerised build (run from the HOST) --------------------------------
 # The build needs a Linux ARM toolchain, so "make build" drives a podman
 # container defined by Containerfile in this directory. Override the engine
@@ -180,7 +184,7 @@ build-all: image
 	@set -e; for v in $(ALL_VARIANTS); do \
 	    p=$${v%%:*}; r=$${v#*:}; \
 	    echo "=== building PLATFORM=$$p VARIANT=$$r ==="; \
-	    $(CONTAINER_RUN) sh -c "make clean && make -j$(JOBS) all PLATFORM=$$p VARIANT=$$r && cp build/OpenGD77_*.bin $(DIST_DIR)/"; \
+	    $(CONTAINER_RUN) sh -c "make clean-build && make -j$(JOBS) all PLATFORM=$$p VARIANT=$$r && cp build/OpenGD77_*.bin $(DIST_DIR)/"; \
 	done
 	@echo '=== build-all complete ==='
 	@ls -la $(DIST_DIR)/OpenGD77_*.bin

@@ -161,6 +161,14 @@ static void hdlcBit(slicer_t *s, uint32_t slicerIdx, bool bit)
 	}
 }
 
+// Fork: the slicer buffers are lent to the SSTV decoder while APRS decoding is off.
+// aprsRxDecoderInit() must be called before decoding APRS again.
+uint8_t *aprsRxDecoderScratch(uint32_t *size)
+{
+	*size = sizeof(slicers);
+	return (uint8_t *)slicers;
+}
+
 void aprsRxDecoderInit(aprsRxFrameCallback_t callback)
 {
 	frameCallback = callback;

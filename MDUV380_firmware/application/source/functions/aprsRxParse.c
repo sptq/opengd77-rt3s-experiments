@@ -473,6 +473,77 @@ bool aprsRxParsePosition(const aprsRxParsed_t *p, aprsRxPosition_t *pos)
 	return false;
 }
 
+// --- Messages -------------------------------------------------------------------
+// ":ADDRESSEE:text{ID" / ":ADDRESSEE:ackID" / ":ADDRESSEE:rejID" (reply-acks "{MM}AA" too)
+bool aprsRxParseMessage(const aprsRxParsed_t *p, aprsRxMessage_t *msg)
+{
+	const char *info = (const char *)p->info;
+	uint32_t len = p->infoLen;
+
+	memset(msg, 0, sizeof(aprsRxMessage_t));
+
+	if ((len < 11U) || (info[0] != ':') || (info[10] != ':'))
+	{
+		return false;
+	}
+
+	copyTrimmed(msg->addressee, &info[1], 9U);
+	if (msg->addressee[0] == 0)
+	{
+		return false;
+	}
+
+	const char *t = &info[11];
+	uint32_t tLen = (len - 11U);
+
+	// strip CR / LF / spaces at the end
+	while ((tLen > 0U) && ((t[tLen - 1U] == '\r') || (t[tLen - 1U] == '\n') || (t[tLen - 1U] == ' ')))
+	{
+		tLen--;
+	}
+
+	if ((tLen >= 4U) && (tLen <= 3U + 5U + 4U) && ((strncmp(t, "ack", 3) == 0) || (strncmp(t, "rej", 3) == 0)))
+	{
+		uint32_t n = 0U;
+
+		msg->isAck = (t[0] == 'a');
+		msg->isRej = (t[0] == 'r');
+		for (uint32_t i = 3U; (i < tLen) && (t[i] != '}') && (n < (APRS_RX_MSG_ID_LEN - 1U)); i++)
+		{
+			msg->msgId[n++] = t[i];
+		}
+		msg->msgId[n] = 0;
+		return (n > 0U);
+	}
+
+	// message number after the last '{'
+	for (int32_t i = (int32_t)tLen - 1; (i >= 0) && (i >= ((int32_t)tLen - 1 - 8)); i--)
+	{
+		if (t[i] == '{')
+		{
+			uint32_t n = 0U;
+
+			for (uint32_t j = (uint32_t)i + 1U; (j < tLen) && (t[j] != '}') && (n < (APRS_RX_MSG_ID_LEN - 1U)); j++)
+			{
+				msg->msgId[n++] = t[j];
+			}
+			msg->msgId[n] = 0;
+			tLen = (uint32_t)i;
+			break;
+		}
+	}
+
+	uint32_t n = 0U;
+	for (uint32_t i = 0U; (i < tLen) && (n < (APRS_RX_MSG_TEXT_LEN - 1U)); i++)
+	{
+		char c = t[i];
+		msg->text[n++] = (((c >= 0x20) && (c <= 0x7E)) ? c : '.');
+	}
+	msg->text[n] = 0;
+
+	return true;
+}
+
 // --- Geo ----------------------------------------------------------------------
 
 double aprsRxDistanceKm(double lat1, double lon1, double lat2, double lon2)

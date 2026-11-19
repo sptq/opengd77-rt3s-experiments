@@ -49,6 +49,21 @@ static double waypointLon = 0.0;
 static bool displayWaypoint(bool isFirstRun, bool forceRedraw);
 static bool waypointMarkHere(void);
 
+// Fork: shared with the APRS RX monitor (radar marker, "station -> waypoint")
+bool gpsWaypointGet(double *lat, double *lon)
+{
+	*lat = waypointLat;
+	*lon = waypointLon;
+	return waypointIsSet;
+}
+
+void gpsWaypointSet(double lat, double lon)
+{
+	waypointLat = lat;
+	waypointLon = lon;
+	waypointIsSet = true;
+}
+
 // Keypad entry of the waypoint (e.g. a radiosonde landing prediction).
 // '#' on the waypoint page starts it; decimal degrees, '-' for S / W.
 #define WAYPOINT_EDIT_FIELD_LEN 11

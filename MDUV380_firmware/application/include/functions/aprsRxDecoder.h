@@ -38,5 +38,6 @@ typedef struct
 void aprsRxDecoderInit(aprsRxFrameCallback_t callback);
 void aprsRxDecoderProcess(const int16_t *samples, uint32_t count, uint32_t stride);
 void aprsRxDecoderGetStats(aprsRxDecoderStats_t *stats);
+uint8_t *aprsRxDecoderScratch(uint32_t *size); // memory lent to other decoders while APRS is off
 
 #endif

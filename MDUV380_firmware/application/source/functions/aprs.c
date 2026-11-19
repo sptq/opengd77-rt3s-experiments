@@ -278,6 +278,7 @@ static AX25Encoder_t encoderData;
 static CodeplugAPRSConfig_t *aprsConfig;
 
 volatile aprsSendProgress_t aprsTxProgress = APRS_TX_IDLE; // used in the ISR
+static const char *customInfoField = NULL; // Fork: APRS messaging, sent instead of the position payload
 
 
 static bool aprsBeaconingStateEnabled(aprsBeaconingStates_t s);
@@ -754,7 +755,14 @@ static bool aprsSendPacket(CodeplugAPRSConfig_t *config, aprsBeaconingLocation_t
 
 	encoderData.crc = 0xFFFF; // Initialise CRC now, after data has been sent as CRC does is only for data bytes
 	enqueueHeader(&encoderData);
-	enqueuePayload(&encoderData, latStr, lonStr, (courseAndSpeed ? courseSpeedStr : NULL), channelSettings, fromSatScreen);
+	if (customInfoField != NULL)
+	{
+		enqueueString(&encoderData, customInfoField);
+	}
+	else
+	{
+		enqueuePayload(&encoderData, latStr, lonStr, (courseAndSpeed ? courseSpeedStr : NULL), channelSettings, fromSatScreen);
+	}
 	enqueueCRC(&encoderData);
 	enqueueFlagOfLength(&encoderData, 3U);
 
@@ -1695,6 +1703,171 @@ bool aprsBeaconingSendBeacon(bool fromSatScreen, bool forcedManualBeaconing)
 	}
 
 	return true;
+}
+
+// Fork: APRS messaging. Own callsign as sent in the AX.25 source field ("SP7TQ-9").
+// Uses the APRS configuration of the current channel / VFO (loaded if needed).
+static bool aprsLoadChannelConfig(void)
+{
+	if (aprsBeaconingStateEnabled(APRS_BEACONING_STATE_HAS_APRS_CONFIG))
+	{
+		return true;
+	}
+
+	static int16_t loadedIndex = -1; // cache: the codeplug is in the SPI flash
+	static bool loadedOk = false;
+
+	if (loadedIndex != (int16_t)currentChannelData->aprsConfigIndex)
+	{
+		loadedIndex = (int16_t)currentChannelData->aprsConfigIndex;
+		loadedOk = ((loadedIndex != 0) &&
+				codeplugAPRSGetDataForIndex(currentChannelData->aprsConfigIndex, &aprsBcnData.aprsConfig[APRS_CONFIG_CHANNEL]));
+	}
+
+	return loadedOk;
+}
+
+bool aprsGetOwnCallsign(char *buf, size_t size)
+{
+	char call[16];
+	bool hasConfig = aprsLoadChannelConfig();
+
+	codeplugGetRadioName(call);
+	call[6] = 0;
+
+	for (char *c = call; *c; c++)
+	{
+		if ((*c >= 'a') && (*c <= 'z'))
+		{
+			*c -= ('a' - 'A');
+		}
+		if (*c == ' ')
+		{
+			*c = 0;
+			break;
+		}
+	}
+
+	if (hasConfig && (aprsBcnData.aprsConfig[APRS_CONFIG_CHANNEL].senderSSID != 0))
+	{
+		snprintf(buf, size, "%s-%u", call, (unsigned)aprsBcnData.aprsConfig[APRS_CONFIG_CHANNEL].senderSSID);
+	}
+	else
+	{
+		snprintf(buf, size, "%s", call);
+	}
+
+	return ((call[0] != 0) && hasConfig);
+}
+
+// Sends one UI frame with the given information field (e.g. ":SP5ABC   :hello{1"),
+// with the source, SSID and path of the channel APRS configuration, on the APRS
+// QSY frequency when one is configured. Blocks for the channel-busy wait, like
+// the beacons. The end of the transmission is handled by aprsBeaconingTick().
+aprsInfoTxResult_t aprsSendInfoFrame(const char *info)
+{
+	aprsChannelSettingsInUse_t channelSettings;
+	CodeplugAPRSConfig_t *cfg = &aprsBcnData.aprsConfig[APRS_CONFIG_CHANNEL];
+
+	if ((aprsTxProgress != APRS_TX_IDLE) || aprsBcnData.hasDoneQSY || uiDataGlobal.Scan.active || trxTransmissionEnabled ||
+			(trxGetMode() == RADIO_MODE_NONE))
+	{
+		return APRS_INFO_TX_BUSY;
+	}
+
+	if (settingsIsOptionBitSet(BIT_TX_INHIBIT))
+	{
+		return APRS_INFO_TX_NOT_ALLOWED;
+	}
+
+	if (aprsLoadChannelConfig() == false)
+	{
+		return APRS_INFO_TX_NO_CONFIG;
+	}
+
+	bool qsy = (cfg->txFrequency != 0U);
+	uint32_t txFrequency = (qsy ? cfg->txFrequency : currentChannelData->txFreq);
+
+	if ((txFrequency == 0U) ||
+			((qsy == false) && ((trxGetMode() != RADIO_MODE_ANALOG) || codeplugChannelGetFlag(currentChannelData, CHANNEL_FLAG_RX_ONLY))) ||
+			((nonVolatileSettings.txFreqLimited != BAND_LIMITS_NONE) && (trxCheckFrequencyInAmateurBand(txFrequency) == false)))
+	{
+		return APRS_INFO_TX_NOT_ALLOWED;
+	}
+
+	channelSettings.chMode = currentChannelData->chMode;
+	channelSettings.rxFreq = currentChannelData->rxFreq;
+	channelSettings.txFreq = currentChannelData->txFreq;
+	channelSettings.rxTone = currentChannelData->rxTone;
+	channelSettings.wideBW = trxGetBandwidthIs25kHz();
+
+	rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE);
+#if defined(HAS_GPS)
+	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
+	{
+		gpsDataInputStartStop(false);
+	}
+#endif
+
+	watchdogRun(false);
+
+	if (qsy)
+	{
+		radioSetTRxDevice(RADIO_DEVICE_PRIMARY);
+		trxSetFrequency(txFrequency, txFrequency, DMR_MODE_AUTO);
+		trxSetModeAndBandwidth(RADIO_MODE_ANALOG, false);
+		trxSetRxCSS(RADIO_DEVICE_PRIMARY, CODEPLUG_CSS_TONE_NONE);
+		trxSetTxCSS(CODEPLUG_CSS_TONE_NONE);
+		aprsBcnData.hasDoneQSY = true;
+		vTaskDelay((40U / portTICK_PERIOD_MS));
+	}
+
+	// Avoid collision.
+	uint32_t waitingForXmit = (APRS_ANTI_COLLISION_MS_MAX / RSSI_NOISE_SAMPLE_PERIOD_PIT);
+	while ((waitingForXmit > 0) && (LedRead(LED_GREEN) || ((audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF) != 0)))
+	{
+		vTaskDelay((RSSI_NOISE_SAMPLE_PERIOD_PIT / portTICK_PERIOD_MS));
+		waitingForXmit--;
+		trxCheckAnalogSquelch();
+	}
+
+	watchdogRun(true);
+
+	if (waitingForXmit == 0U)
+	{
+#if defined(HAS_GPS)
+		if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
+		{
+			gpsDataInputStartStop(true);
+		}
+#endif
+		// restores the frequency (QSY) through the normal end-of-TX states
+		aprsTxProgress = (aprsBcnData.hasDoneQSY ? APRS_TX_FAILED_WAITING_TO_BEACON : APRS_TX_IDLE);
+		return APRS_INFO_TX_CHANNEL_BUSY;
+	}
+
+	if (aprsBcnData.hasDoneQSY && (aprsBcnData.settings.power != 0U))
+	{
+		trxSetPowerFromLevel((aprsBcnData.settings.power - 1U));
+	}
+
+	LedWrite(LED_GREEN, 0);
+	LedWrite(LED_RED, 1);
+
+	HRC6000ClearIsWakingState();
+	trxSetTX();
+
+	uint32_t m = ticksGetMillis();
+	while ((ticksGetMillis() - m) < APRS_XMIT_TX_DELAY)
+	{
+		vTaskDelay((1U / portTICK_PERIOD_MS));
+	}
+
+	customInfoField = info;
+	aprsSendPacket(cfg, &aprsBcnData.previousLocation, &aprsBcnData.currentLocation, &channelSettings, false);
+	customInfoField = NULL;
+
+	return APRS_INFO_TX_SENT;
 }
 
 bool aprsBeaconingIsTransmitting(void)
