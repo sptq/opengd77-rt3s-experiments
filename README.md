@@ -55,6 +55,8 @@ See the `LICENSE`/`LICENSE.txt` files inside each subdirectory.
   the upstream README ([`UPSTREAM_README.md`](UPSTREAM_README.md))
   (Kai DG4KLU, Roger VK3KYY, Daniel F1RMB, Alex DL4LEX, Colin G4EML and
   many others).
+- Fork contributors: EA4IPW (maintainer), Marcin SP7TQ (RT3S features:
+  GPS pages, VFO sweep, radiosonde helpers, APRS RX).
 
 If you are looking for the canonical firmware: **use
 [opengd77.com](https://www.opengd77.com/)**, not this repo.
@@ -172,6 +174,11 @@ Start it with long `#` in VFO mode. `*` toggles between waterfall and bars.
   the strongest carrier of the last sweep.
 * **`SK1 + 0`**: re-centre the VFO on that carrier, rounded to the VFO step.
   The waterfall history slides along instead of being cleared.
+* **`SK1 + 3`**: jump to the next band preset. The presets are 144.800 APRS,
+  145.500 2 m, 401/403/405 MHz radiosondes, 433.925 LPD, 438.800 70 cm
+  repeaters and 446.100 PMR446. Each
+  press goes to the next preset above the current frequency and wraps around
+  after the last one.
 
 ### Fox-hunt mode — *RSSI screen*
 
@@ -185,7 +192,7 @@ Press `#` on the RSSI screen to toggle it.
   the distance and bearing from where you are now (`Max @ 120m 045 deg`).
 * `0` resets the max-hold.
 
-### Waypoint page — *GPS menu, last page*
+### Waypoint page — *GPS menu, second-to-last page*
 
 * Press **GREEN** to mark the current position (needs a GPS fix). The waypoint
   is kept in RAM until power-off.
@@ -193,6 +200,61 @@ Press `#` on the RSSI screen to toggle it.
   * when moving, the arrow is relative to your direction of travel (ahead = up);
   * when standing still, it is north-up.
 * Within 5 m of the waypoint the arrow turns into a dot.
+* **`#`** opens a keypad editor for the waypoint, for example to enter a
+  radiosonde landing prediction from SondeHub:
+  * coordinates are in decimal degrees;
+  * `#` types the decimal point and `*` toggles the minus sign (S / W);
+  * ▲ / ▼ switch between the lat and lon fields, RED deletes a character;
+  * GREEN sets the waypoint.
+
+### Radiosonde hunting
+
+The radio cannot decode RS41 / M20 telemetry. Its only digital audio path to
+the MCU runs at 8 kHz through a voice-band filter, while the sondes send
+4800 / 9600 bd GFSK. You can still find a sonde:
+
+1. Find the carrier: VFO → long `#` → `SK1 + 3` to the 401/403/405 MHz presets.
+   Use `SK2 + ▲` to widen the span to 2 MHz.
+2. Tune to it with `SK1 + 0`.
+3. Enter the landing prediction as a waypoint: GPS → waypoint page → `#`.
+4. Close in with fox-hunt mode on the RSSI screen.
+
+### APRS receive — *RSSI screen, key `9`; background: `SK1+4`*
+
+A software AFSK 1200 demodulator runs on the FM RX audio the HR-C6000
+sends over I2S (8 kHz): mark/space correlators, four slicers covering
+de-/pre-emphasis tone twist, DPLL bit clock, NRZI, HDLC, AX.25 FCS check.
+It only owns the I2S while nothing else needs it (beeps, voice prompts,
+DMR audio and TX take over and the capture restarts by itself).
+
+The monitor (`9` on the RSSI screen) has three views, cycled with `#`:
+
+* **frames** — last 8 frames; `*` shows the selected one raw (full TNC2
+  line + hex dump),
+* **stations** — last heard stations / objects with distance, bearing, age,
+  speed and course,
+* **radar** — north-up plot around your position, auto range.
+
+Positions are decoded from uncompressed, compressed and Mic-E reports,
+objects and items. Own position: GPS fix, else the location from the
+settings. `SK1+4` on the VFO / channel screen (or the *APRS RX on/off*
+quickkey action) keeps decoding in the background and pops a short
+notification (`SP7ABC-9 12.3km`) per frame. The decoder and the parser are
+hardware independent and have host tests.
+
+### Trip computer — *GPS menu, last page*
+
+The radio collects these in the background, whatever screen is shown. They
+are kept in RAM only:
+
+* distance travelled;
+* moving time;
+* average and maximum speed;
+* altitude gain and loss.
+
+Only movement above about 2 km/h is counted, so GPS jitter while you stand
+still is ignored. Altitude changes under 5 m are ignored as noise. A
+**long GREEN** press resets the trip.
 
 Plans and the on-radio test checklist are in [`PLANS/`](PLANS/). A Polish how-to is in [`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md).
 

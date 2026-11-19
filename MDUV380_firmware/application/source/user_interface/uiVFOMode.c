@@ -36,6 +36,8 @@
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
 #include "utils.h"
+#include "interfaces/i2s.h"
+#include "functions/aprsRx.h"
 
 // Colour-display platforms render the sweep as a band-scope + scrolling waterfall.
 #if defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
@@ -141,6 +143,9 @@ static void vfoSweepPeaksSweepCompleted(void);
 #endif
 static bool vfoSweepRequested = false;	// Set by uiVFOModeRequestSweep() (quickkey action), consumed on the next VFO tick
 static void vfoSweepUpdateSamplesPixels(int pixelOffset, bool forceRedraw, int bandwidthRescale);
+static bool vfoSweepRetuneTo(int targetFreq);
+static bool vfoSweepNextPreset(void);
+static bool vfoSweepHandleSK1Keys(uiEvent_t *ev);
 const int VFO_SWEEP_SCAN_FREQ_STEP_TABLE[7] 		= {125,250,500,1000,2500,5000,10000};
 static uint8_t previousVFONumber = 0xFF; // Keep track of the currently loaded channel data
 
@@ -1087,6 +1092,13 @@ static void toggleAnalogBandwidth(void)
 
 static void handleEvent(uiEvent_t *ev)
 {
+	// Fork: SK1 + 0 / SK1 + 3 while sweeping. Must run before the block below,
+	// which stops the scan on any other key.
+	if (vfoSweepHandleSK1Keys(ev))
+	{
+		return;
+	}
+
 	if (uiDataGlobal.Scan.active && (ev->events & KEY_EVENT))
 	{
 		if (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == 0)
@@ -2116,18 +2128,16 @@ static void handleEvent(uiEvent_t *ev)
 #if !defined(PLATFORM_GD77S)
 				if ((keyval < 10) && BUTTONCHECK_DOWN(ev, BUTTON_SK1) && (BUTTONCHECK_DOWN(ev, BUTTON_SK2) == false))
 				{
-					if ((keyval == 0) && uiVFOModeSweepScanning(true))
-					{
-						// SK1 + 0 while sweeping: tune to the strongest signal.
-						if (uiVFOModeSweepTuneToPeak() == false)
-						{
-							soundSetMelody(MELODY_NACK_BEEP);
-						}
-					}
-					else if (keyval == 1)
+					if (keyval == 1)
 					{
 						aprsBeaconingToggles();
 					}
+#if defined(I2S_APRS_RX)
+					else if (keyval == 4)
+					{
+						aprsRxToggleBackground(); // Fork: APRS receive in background
+					}
+#endif
 					else if (keyval == 2)
 					{
 						switch (aprsBeaconingGetMode())
@@ -2857,6 +2867,21 @@ bool uiVFOModeSweepTuneToPeak(void)
 
 	targetFreq = ((targetFreq + (vfoStep / 2)) / vfoStep) * vfoStep;
 
+	return vfoSweepRetuneTo(targetFreq);
+#else
+	return false;
+#endif
+}
+
+#if defined(VFO_SWEEP_WATERFALL)
+// Move the sweep centre (VFO RX frequency) to targetFreq, sliding the waterfall
+// history by the matching number of pixels (it is cleared when the move is
+// wider than the screen).
+static bool vfoSweepRetuneTo(int targetFreq)
+{
+	int sweepRange = VFO_SWEEP_SCAN_RANGE_SAMPLE_STEP_TABLE[uiDataGlobal.Scan.sweepStepSizeIndex];
+	int oldFreq = (int)currentChannelData->rxFreq;
+
 	if (trxGetBandFromFrequency(targetFreq) == FREQUENCY_OUT_OF_BAND)
 	{
 		return false;
@@ -2874,6 +2899,95 @@ bool uiVFOModeSweepTuneToPeak(void)
 	uiVFOModeUpdateScreen(0);
 	vfoSweepUpdateSamplesPixels(pixels, true, 0);
 	settingsSetVFODirty();
+
+	return true;
+}
+
+// Band presets for the scope, cycled with SK1 + 3 while sweeping.
+// Frequencies in 10 Hz units. Presets outside the radio's bands are skipped.
+static const uint32_t VFO_SWEEP_PRESETS[] =
+{
+	14480000U, // 144.800 APRS (EU)
+	14550000U, // 145.500 2 m FM simplex / repeaters
+	40100000U, // 401.000 radiosondes (400-406 MHz, use SK2 + UP for the 2 MHz span)
+	40300000U, // 403.000 radiosondes
+	40500000U, // 405.000 radiosondes
+	43392500U, // 433.925 LPD433
+	43880000U, // 438.800 70 cm repeaters
+	44610000U, // 446.100 PMR446
+};
+#define VFO_SWEEP_PRESETS_NUM (sizeof(VFO_SWEEP_PRESETS) / sizeof(VFO_SWEEP_PRESETS[0]))
+
+// Jump to the first preset above the current centre frequency (wrapping), so
+// repeated presses walk through the list from wherever you are.
+static bool vfoSweepNextPreset(void)
+{
+	uint32_t cur = currentChannelData->rxFreq;
+
+	for (uint32_t attempt = 0; attempt < VFO_SWEEP_PRESETS_NUM; attempt++)
+	{
+		uint32_t best = 0U;
+
+		// Smallest preset strictly above cur, else wrap to the smallest one.
+		for (uint32_t i = 0; i < VFO_SWEEP_PRESETS_NUM; i++)
+		{
+			if ((VFO_SWEEP_PRESETS[i] > cur) && ((best == 0U) || (VFO_SWEEP_PRESETS[i] < best)))
+			{
+				best = VFO_SWEEP_PRESETS[i];
+			}
+		}
+
+		if (best == 0U)
+		{
+			best = VFO_SWEEP_PRESETS[0];
+			for (uint32_t i = 1; i < VFO_SWEEP_PRESETS_NUM; i++)
+			{
+				if (VFO_SWEEP_PRESETS[i] < best)
+				{
+					best = VFO_SWEEP_PRESETS[i];
+				}
+			}
+		}
+
+		if (vfoSweepRetuneTo((int)best))
+		{
+			return true;
+		}
+
+		cur = best; // out of band on this radio: try the next one
+	}
+
+	return false;
+}
+#endif
+
+// Returns true when the event was consumed.
+static bool vfoSweepHandleSK1Keys(uiEvent_t *ev)
+{
+#if defined(VFO_SWEEP_WATERFALL)
+	if (((ev->events & KEY_EVENT) == 0) ||
+			(BUTTONCHECK_DOWN(ev, BUTTON_SK1) == 0) || BUTTONCHECK_DOWN(ev, BUTTON_SK2) ||
+			((ev->keys.key != KEY_0) && (ev->keys.key != KEY_3)) ||
+			(uiVFOModeSweepScanning(true) == false))
+	{
+		return false;
+	}
+
+	// Swallow the key down/repeat events too, otherwise the scan would be stopped.
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_0))
+	{
+		if (uiVFOModeSweepTuneToPeak() == false)
+		{
+			soundSetMelody(MELODY_NACK_BEEP);
+		}
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_3))
+	{
+		if (vfoSweepNextPreset() == false)
+		{
+			soundSetMelody(MELODY_NACK_BEEP);
+		}
+	}
 
 	return true;
 #else

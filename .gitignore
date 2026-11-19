@@ -24,3 +24,7 @@ Release/
 # Python
 __pycache__/
 *.pyc
+
+# Official donor firmware (AMBE codec source for the loader) - never commit
+MD9600-CSV*.bin
+*.sgl

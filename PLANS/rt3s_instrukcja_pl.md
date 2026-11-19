@@ -67,7 +67,16 @@ Slot z akcją nie zostanie przypadkiem nadpisany gestem „SK2 + cyfra w menu”
    * **kropki nad słupkami**, czyli peak-hold. Pokazują ostatnie maksimum i powoli opadają z każdym przebiegiem;
    * **trójkąt u góry**, który wskazuje najsilniejszy sygnał z ostatniego przebiegu.
 6. **SK1 + 0**: ustawia VFO na częstotliwość pod trójkątem, zaokrągloną do kroku VFO. Historia waterfalla przesuwa się razem z nią, nie jest kasowana.
-7. **RED**: wyjście z analizatora.
+7. **SK1 + 3**: skok do następnego presetu pasma. Presety to:
+   * 144.800 APRS;
+   * 145.500 2 m;
+   * 401.000 / 403.000 / 405.000 sondy meteo. **SK2 + ▲** poszerza zakres do 2 MHz;
+   * 433.925 LPD;
+   * 438.800 przemienniki 70 cm;
+   * 446.100 PMR446.
+
+   Każde naciśnięcie przechodzi do następnego presetu powyżej bieżącej częstotliwości. Po ostatnim wraca na początek listy.
+8. **RED**: wyjście z analizatora.
 
 ---
 
@@ -86,10 +95,10 @@ Podczas nadawania i gdy odtwarzany jest komunikat głosowy, pisk jest wstrzymany
 
 ---
 
-## 4. Waypoint (menu GPS)
+## 4. Waypoint (menu GPS, przedostatnia strona)
 
 1. Wejdź w **Menu → GPS**.
-2. Strzałkami **▲/▼** przejdź na **ostatnią stronę**, czyli stronę waypointu.
+2. Strzałkami **▲/▼** przejdź na **przedostatnią stronę**, czyli stronę waypointu.
 3. Przy fixie GPS naciśnij **GREEN**. Pojawi się komunikat „Waypoint set”, a radio zapamięta bieżącą pozycję.
 4. Strona pokazuje:
    * odległość do punktu (m lub km);
@@ -99,7 +108,93 @@ Podczas nadawania i gdy odtwarzany jest komunikat głosowy, pisk jest wstrzymany
      * w miejscu, z napisem **North=up**: „do góry” oznacza północ;
      * w promieniu 5 m od punktu strzałka zmienia się w kropkę.
 
+### Wpisanie współrzędnych z klawiatury
+
+Przydaje się np. do wpisania przewidywanego miejsca lądowania sondy z SondeHub.
+
+1. Na stronie waypointu naciśnij **`#`**.
+2. Wpisz współrzędne w stopniach dziesiętnych, np. `52.23456` i `21.01234`:
+   * **`#`** wstawia kropkę;
+   * **`*`** przełącza minus (S / W);
+   * **▲/▼** przełącza między polem Lat i Lon;
+   * **RED** kasuje ostatni znak, a na pustym polu wychodzi z edycji.
+3. **GREEN** zapisuje waypoint. Jeśli pole Lon jest jeszcze puste, GREEN najpierw przechodzi do niego.
+
 Waypoint jest trzymany tylko w RAM, więc znika po wyłączeniu radia.
+
+---
+
+## Polowanie na sondy meteo
+
+Radio nie dekoduje telemetrii RS41 ani M20. Sondę da się jednak znaleźć:
+
+1. **Znajdź nośnik.** W VFO włącz waterfall (długie `#`) i naciśnij **SK1 + 3**, aż dojdziesz do presetu 401, 403 albo 405 MHz. **SK2 + ▲** poszerza zakres do 2 MHz. RS41 nadaje ciągle, więc na waterfallu widać ją jako stałą kreskę.
+2. **Dostrój się.** **SK1 + 0** ustawia VFO na najsilniejszy sygnał.
+3. **Wpisz miejsce lądowania.** Przewidywane miejsce lądowania (SondeHub, radiosondy.info) wpisz jako waypoint: GPS → strona waypointu → `#`. Strzałka zaprowadzi Cię w ten rejon.
+4. **Namierz sondę.** Na miejscu włącz tryb lisa na ekranie RSSI (`#`): im wyższy ton, tym bliżej.
+
+---
+
+## Odbiór APRS (monitor ramek): ekran RSSI, klawisz `9`
+
+Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
+
+1. Ustaw kanał lub VFO w **FM** na **144.800** (APRS w Europie).
+2. Wejdź w **Menu → Sygnał (RSSI)** i naciśnij **`9`**. Monitor zajmuje cały ekran.
+3. Górna linia statusu: `-87dBm L45 OK3 E7`
+   * `dBm` to siła sygnału;
+   * `L` to poziom dźwięku w % (szczyt z ostatniej sekundy);
+   * `OK` to liczba poprawnie odebranych ramek;
+   * `E` to ramki z błędną sumą kontrolną (zakłócone albo za słabe).
+4. Poniżej widać ostatnie ramki, najnowsza na górze: `NADAWCA>CEL` i wiek ramki, a pod spodem 2 linie treści.
+
+Klawisz `#` przełącza widoki: **ramki → stacje → radar**.
+
+* **Ramki** (`APRS frames`): ostatnie ramki, `*` otwiera widok surowy wybranej ramki: pełna linia TNC2 (`NADAWCA>CEL,ŚCIEŻKA*:treść`) i zrzut hex bajtów.
+* **Stacje** (`APRS stations`): ostatnio słyszane stacje i obiekty, najnowsza na górze: znak, odległość, azymut, wiek. W dolnej linii prędkość, kurs i liczba odebranych ramek wybranej stacji.
+* **Radar** (`APRS radar`): północ u góry, Ty w środku, stacje jako kropki, wybrana w kółku. Po prawej znak, odległość, azymut, wiek i prędkość, na dole zasięg radaru (`R 10km`), dobierany sam do najdalszej stacji.
+
+Pozycje są odczytywane z ramek zwykłych, skompresowanych, Mic-E (popularne w radiach mobilnych), obiektów i itemów. Twoja pozycja to fix GPS, a bez fixa lokalizacja z ustawień radia.
+
+Klawisze w monitorze:
+
+| Klawisz | Działanie |
+|---|---|
+| `#` | następny widok: ramki, stacje, radar |
+| `▲` / `▼` | wybór ramki lub stacji (w widoku surowym: przewijanie) |
+| `*` | widok surowy wybranej ramki (w widoku ramek) |
+| `0` | wyczyszczenie listy ramek i stacji |
+| `9` | wyłączenie monitora |
+| `RED` | wyjście z widoku surowego, potem z ekranu RSSI |
+
+### Odbiór APRS w tle: `SK1 + 4`
+
+Na ekranie VFO lub kanału `SK1 + 4` włącza i wyłącza odbiór APRS w tle (komunikat `APRS RX: on/off`). Można też przypisać to do quickkeya (akcja `APRS RX on/off`).
+
+Przy każdej odebranej ramce pojawia się na chwilę powiadomienie, np. `SP7ABC-9 12.3km` (albo `APRS SP7ABC`, gdy ramka nie ma pozycji). Ramki i stacje odebrane w tle widać potem w monitorze (RSSI, `9`).
+
+Ustawienie nie jest zapamiętywane po wyłączeniu radia.
+
+Uwagi:
+* Działa tylko w FM. Status `APRS RX: paused` oznacza nadawanie albo odtwarzany dźwięk (pisk klawisza, komunikat głosowy); odbiór wraca sam po chwili.
+* Zapamiętywanych jest 8 ostatnich ramek, do 200 bajtów każda (dłuższe są ucięte, w widoku hex widać wtedy `+`).
+* Gdy `E` rośnie, a `OK` nie: sygnał jest, ale za słaby lub zniekształcony; spróbuj lepszej anteny albo innego poziomu głośności nadawcy.
+
+---
+
+## 5. Licznik trasy (menu GPS, ostatnia strona)
+
+Radio zbiera te dane w tle, niezależnie od tego, jaki ekran jest otwarty:
+
+* `Dist`: przebyty dystans;
+* `Move`: czas w ruchu;
+* `Avg`: średnia prędkość w ruchu;
+* `Max`: prędkość maksymalna;
+* `Alt`: suma podejść i zejść.
+
+Radio liczy tylko ruch szybszy niż ok. 2 km/h, więc drganie pozycji GPS na postoju nie dodaje dystansu. Zmiany wysokości mniejsze niż 5 m są pomijane jako szum.
+
+**Długie GREEN** na tej stronie zeruje licznik. Dane są tylko w RAM i znikają po wyłączeniu radia.
 
 ---
 

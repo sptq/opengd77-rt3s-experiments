@@ -37,6 +37,14 @@ volatile bool stopOnNextI2SDMAInterrupt = false;
 uint16_t i2s_Tx_Buffer[NUM_I2S_BUFFERS][2][WAV_BUFFER_SIZE];
 uint16_t i2s_Rx_Buffer[NUM_I2S_BUFFERS][2][WAV_BUFFER_SIZE];
 
+#if defined(I2S_APRS_RX)
+// Fork: continuous capture of the HR-C6000 FM RX audio for the APRS decoder.
+// It only owns the I2S while nothing else uses it (no TX, no beep / voice
+// prompt / DMR audio); anything that starts a sound transfer stops it first,
+// and aprsRxTick() restarts it later.
+static volatile bool i2sAprsRxActive = false;
+#endif
+
 static void clearI2SBuffersAndFlags(void)
 {
 	memset(i2s_Tx_Buffer, 0x00, (NUM_I2S_BUFFERS * 2 * (WAV_BUFFER_SIZE * sizeof(uint16_t))));
@@ -47,6 +55,9 @@ static void clearI2SBuffersAndFlags(void)
 	 HAL_I2S_DMAStop(&hi2s3);
 	 __HAL_I2SEXT_FLUSH_RX_DR(&hi2s3);
 	g_TX_SAI_in_use = false;
+#if defined(I2S_APRS_RX)
+	i2sAprsRxActive = false;
+#endif
 	soundInit();
 }
 
@@ -62,6 +73,12 @@ void HAL_I2SEx_TxRxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 		{
 			soundReceiveRefillData(0);
 		}
+#if defined(I2S_APRS_RX)
+		else if (i2sAprsRxActive)
+		{
+			aprsRxProcessI2SBuffer((const int16_t *)i2s_Rx_Buffer[0], (2 * WAV_BUFFER_SIZE) / 2);
+		}
+#endif
 	}
 	else
 	{
@@ -81,6 +98,12 @@ void HAL_I2SEx_TxRxCpltCallback(I2S_HandleTypeDef *hi2s)
 		{
 			soundReceiveRefillData(1);
 		}
+#if defined(I2S_APRS_RX)
+		else if (i2sAprsRxActive)
+		{
+			aprsRxProcessI2SBuffer((const int16_t *)i2s_Rx_Buffer[1], (2 * WAV_BUFFER_SIZE) / 2);
+		}
+#endif
 	}
 	else
 	{
@@ -90,6 +113,9 @@ void HAL_I2SEx_TxRxCpltCallback(I2S_HandleTypeDef *hi2s)
 
 void I2SStartDMA(uint16_t *txbuff, uint16_t *rxbuff, size_t bufferLen)
 {
+#if defined(I2S_APRS_RX)
+	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
+#endif
 	// Need to wait for WS line has just toggled from logic low to high
 	while(!HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15));
 	while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15));
@@ -112,3 +138,64 @@ void init_I2S(void)
 {
 
 }
+
+#if defined(I2S_APRS_RX)
+// Wait for a WS level, with a bounded number of polls (WS is driven by the
+// HR-C6000; when it does not clock I2S, I2SStartDMA() would hang).
+static bool i2sAprsRxWaitWS(GPIO_PinState level)
+{
+	for (uint32_t n = 0; n < 200000U; n++)
+	{
+		if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) == level)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+i2sAprsRxStatus_t i2sAprsRxStart(void)
+{
+	if (i2sAprsRxActive)
+	{
+		return I2S_APRS_RX_RUNNING;
+	}
+
+	if (g_TX_SAI_in_use || isSending || isReceiving || (HAL_I2S_GetState(&hi2s3) != HAL_I2S_STATE_READY))
+	{
+		return I2S_APRS_RX_BUSY;
+	}
+
+	if ((i2sAprsRxWaitWS(GPIO_PIN_SET) && i2sAprsRxWaitWS(GPIO_PIN_RESET) && i2sAprsRxWaitWS(GPIO_PIN_SET)) == false)
+	{
+		return I2S_APRS_RX_NO_CLOCK;
+	}
+
+	memset(i2s_Tx_Buffer, 0x00, sizeof(i2s_Tx_Buffer)); // send silence
+	stopOnNextI2SDMAInterrupt = false;
+	i2sAprsRxActive = true;
+
+	if (HAL_I2SEx_TransmitReceive_DMA(&hi2s3, (uint16_t *)i2s_Tx_Buffer, (uint16_t *)i2s_Rx_Buffer, (NUM_I2S_BUFFERS * 2 * WAV_BUFFER_SIZE)) != HAL_OK)
+	{
+		i2sAprsRxActive = false;
+		return I2S_APRS_RX_BUSY;
+	}
+
+	return I2S_APRS_RX_STARTED;
+}
+
+void i2sAprsRxStop(void)
+{
+	if (i2sAprsRxActive)
+	{
+		i2sAprsRxActive = false; // first, so a late DMA callback does nothing
+		HAL_I2S_DMAStop(&hi2s3);
+		__HAL_I2SEXT_FLUSH_RX_DR(&hi2s3);
+	}
+}
+
+bool i2sAprsRxIsActive(void)
+{
+	return i2sAprsRxActive;
+}
+#endif

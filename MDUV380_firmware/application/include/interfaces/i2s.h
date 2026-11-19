@@ -115,4 +115,21 @@ void I2SReset(void);
 void I2STerminateTransfers(void);
 void I2SStartDMA(uint16_t *txbuff, uint16_t *rxbuff, size_t bufferLen);
 
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+// Fork: FM RX audio capture for the APRS decoder (see i2s.c, functions/aprsRx.c)
+#define I2S_APRS_RX
+typedef enum
+{
+	I2S_APRS_RX_STARTED = 0,
+	I2S_APRS_RX_RUNNING,
+	I2S_APRS_RX_BUSY,
+	I2S_APRS_RX_NO_CLOCK
+} i2sAprsRxStatus_t;
+
+i2sAprsRxStatus_t i2sAprsRxStart(void);
+void i2sAprsRxStop(void);
+bool i2sAprsRxIsActive(void);
+void aprsRxProcessI2SBuffer(const int16_t *interleaved, uint32_t frames); // in functions/aprsRx.c, DMA IRQ context
+#endif
+
 #endif /* _OPENGD77_I2S_H_ */

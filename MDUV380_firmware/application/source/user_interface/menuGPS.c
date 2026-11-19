@@ -48,6 +48,22 @@ static double waypointLat = 0.0;
 static double waypointLon = 0.0;
 static bool displayWaypoint(bool isFirstRun, bool forceRedraw);
 static bool waypointMarkHere(void);
+
+// Keypad entry of the waypoint (e.g. a radiosonde landing prediction).
+// '#' on the waypoint page starts it; decimal degrees, '-' for S / W.
+#define WAYPOINT_EDIT_FIELD_LEN 11
+static bool waypointEditActive = false;
+static uint8_t waypointEditFieldIndex = 0; // 0: latitude, 1: longitude
+static char waypointEditFields[2][WAYPOINT_EDIT_FIELD_LEN + 1];
+static bool waypointEditHandleEvent(uiEvent_t *ev);
+static void waypointEditDraw(void);
+#endif
+
+// Fork: trip computer page (distance, moving time, avg/max speed, altitude
+// gain/loss), accumulated in the background by functions/gpsTrip.c.
+#include "functions/gpsTrip.h"
+#if defined(GPS_TRIP_COMPUTER)
+static bool displayTrip(bool isFirstRun, bool forceRedraw);
 #endif
 
 #if defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
@@ -237,6 +253,9 @@ typedef enum
 #if defined(GPS_WAYPOINT_PAGE)
 	PAGE_WAYPOINT, // Fork: navigate back to a marked position
 #endif
+#if defined(GPS_TRIP_COMPUTER)
+	PAGE_TRIP, // Fork: trip computer
+#endif
 	PAGES_MAX
 } Pages_t;
 
@@ -276,6 +295,9 @@ menuStatus_t menuGPS(uiEvent_t *ev, bool isFirstRun)
 	if (isFirstRun)
 	{
 		menuDataGlobal.numItems = PAGES_MAX;
+#if defined(GPS_WAYPOINT_PAGE)
+		waypointEditActive = false;
+#endif
 
 		// Prepare directions from cardinals
 		char N = currentLanguageGetSymbol(SYMBOLS_NORTH);
@@ -1044,6 +1066,12 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 				break;
 #endif
 
+#if defined(GPS_TRIP_COMPUTER)
+			case PAGE_TRIP:
+				res = displayTrip(isFirstRun, forceRedraw);
+				break;
+#endif
+
 			case PAGES_MAX:
 				break;
 		}
@@ -1267,11 +1295,44 @@ static void handleEvent(uiEvent_t *ev)
 		}
 		else if (QUICKKEY_TYPE(ev->function) == QUICKKEY_MENU)
 		{
+#if defined(GPS_WAYPOINT_PAGE)
+			waypointEditActive = false;
+#endif
 			menuDataGlobal.currentItemIndex = QUICKKEY_ENTRYID(ev->function);
 			isDirty = true;
 			goto eventHanderExit;
 		}
 	}
+
+#if defined(GPS_WAYPOINT_PAGE)
+	if (waypointEditActive)
+	{
+		if (waypointEditHandleEvent(ev))
+		{
+			updateScreen(false, true);
+		}
+		return;
+	}
+
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH) && (menuDataGlobal.currentItemIndex == PAGE_WAYPOINT))
+	{
+		// Pre-fill with the current waypoint so it can be tweaked, otherwise start empty.
+		if (waypointIsSet)
+		{
+			snprintf(waypointEditFields[0], sizeof(waypointEditFields[0]), "%.5f", waypointLat);
+			snprintf(waypointEditFields[1], sizeof(waypointEditFields[1]), "%.5f", waypointLon);
+		}
+		else
+		{
+			waypointEditFields[0][0] = 0;
+			waypointEditFields[1][0] = 0;
+		}
+		waypointEditFieldIndex = 0;
+		waypointEditActive = true;
+		isDirty = true;
+		goto eventHanderExit;
+	}
+#endif
 
 	if (KEYCHECK_SHORTUP(ev->keys, KEY_UP))
 	{
@@ -1315,6 +1376,16 @@ static void handleEvent(uiEvent_t *ev)
 		{
 			soundSetMelody(MELODY_NACK_BEEP);
 		}
+	}
+#endif
+#if defined(GPS_TRIP_COMPUTER)
+	else if (KEYCHECK_LONGDOWN(ev->keys, KEY_GREEN) && (menuDataGlobal.currentItemIndex == PAGE_TRIP))
+	{
+		// Long press so a stray GREEN does not wipe a day of hiking
+		gpsTripReset();
+		soundSetMelody(MELODY_ACK_BEEP);
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, "Trip reset", false);
+		isDirty = true;
 	}
 #endif
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
@@ -1382,6 +1453,11 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 {
 	char buffer[SCREEN_LINE_BUFFER_SIZE];
 
+	if (waypointEditActive && ((isFirstRun || forceRedraw) == false))
+	{
+		return false; // the editor only changes on key presses
+	}
+
 	if (((isFirstRun || forceRedraw) == false) &&
 			((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_POSITION_UPDATED | GPS_STATUS_COURSE_UPDATED | GPS_STATUS_SPEED_UPDATED)) == 0))
 	{
@@ -1391,10 +1467,17 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 	// Clear everything below the title
 	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT), true);
 
+	if (waypointEditActive)
+	{
+		waypointEditDraw();
+		return true;
+	}
+
 	if (waypointIsSet == false)
 	{
 		displayPrintCentered((WAYPOINT_ARROW_CY - FONT_SIZE_3_HEIGHT), "No waypoint", FONT_SIZE_3);
 		displayPrintCentered((WAYPOINT_ARROW_CY + 4), "GREEN: mark here", FONT_SIZE_1);
+		displayPrintCentered((WAYPOINT_ARROW_CY + 14), "#: enter lat/lon", FONT_SIZE_1);
 		return true;
 	}
 
@@ -1456,6 +1539,207 @@ static bool displayWaypoint(bool isFirstRun, bool forceRedraw)
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayPrintAt(WAYPOINT_TEXT_X, (WAYPOINT_ARROW_CY + 16), (moving ? "Ahead=up" : "North=up"), FONT_SIZE_1);
 	displayThemeResetToDefault();
+
+	return true;
+}
+#endif
+
+#if defined(GPS_WAYPOINT_PAGE)
+#define WAYPOINT_EDIT_Y(n)   (MENU_HEADER_HEIGHT + 6 + ((n) * 22))
+
+static void waypointEditDraw(void)
+{
+	char buffer[SCREEN_LINE_BUFFER_SIZE];
+
+	for (int i = 0; i < 2; i++)
+	{
+		bool active = (i == waypointEditFieldIndex);
+
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%s%s%s", ((i == 0) ? "Lat " : "Lon "), waypointEditFields[i], (active ? "_" : ""));
+
+		if (active)
+		{
+			displayFillRect(0, (WAYPOINT_EDIT_Y(i) - 2), DISPLAY_SIZE_X, (FONT_SIZE_3_HEIGHT + 4), false);
+			displayPrintCore(2, WAYPOINT_EDIT_Y(i), buffer, FONT_SIZE_3, TEXT_ALIGN_LEFT, true);
+		}
+		else
+		{
+			displayPrintAt(2, WAYPOINT_EDIT_Y(i), buffer, FONT_SIZE_3);
+		}
+	}
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintAt(2, WAYPOINT_EDIT_Y(2), "# .   * -(S/W)", FONT_SIZE_1);
+	displayPrintAt(2, (WAYPOINT_EDIT_Y(2) + 10), "UP/DN field RED del", FONT_SIZE_1);
+	displayPrintAt(2, (WAYPOINT_EDIT_Y(2) + 20), "GREEN set", FONT_SIZE_1);
+	displayThemeResetToDefault();
+}
+
+static bool waypointEditParse(const char *str, double limit, double *out)
+{
+	char *end = NULL;
+
+	if ((str[0] == 0) || ((str[0] == '-') && (str[1] == 0)))
+	{
+		return false;
+	}
+
+	double v = strtod(str, &end);
+
+	if ((end == str) || (*end != 0) || (v > limit) || (v < -limit))
+	{
+		return false;
+	}
+
+	*out = v;
+	return true;
+}
+
+// Returns true when the screen needs a redraw.
+static bool waypointEditHandleEvent(uiEvent_t *ev)
+{
+	if ((ev->events & KEY_EVENT) == 0)
+	{
+		return false;
+	}
+
+	char *field = waypointEditFields[waypointEditFieldIndex];
+	size_t len = strlen(field);
+
+	if (KEYCHECK_SHORTUP_NUMBER(ev->keys))
+	{
+		if (len < WAYPOINT_EDIT_FIELD_LEN)
+		{
+			field[len] = (char)ev->keys.key;
+			field[len + 1] = 0;
+			return true;
+		}
+		soundSetMelody(MELODY_NACK_BEEP);
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH))
+	{
+		if ((strchr(field, '.') == NULL) && (len < WAYPOINT_EDIT_FIELD_LEN))
+		{
+			field[len] = '.';
+			field[len + 1] = 0;
+			return true;
+		}
+		soundSetMelody(MELODY_NACK_BEEP);
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
+	{
+		if (field[0] == '-')
+		{
+			memmove(field, (field + 1), len); // includes the terminator
+		}
+		else if (len < WAYPOINT_EDIT_FIELD_LEN)
+		{
+			memmove((field + 1), field, (len + 1));
+			field[0] = '-';
+		}
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_UP) || KEYCHECK_SHORTUP(ev->keys, KEY_DOWN))
+	{
+		waypointEditFieldIndex ^= 1;
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
+	{
+		if (len > 0)
+		{
+			field[len - 1] = 0;
+		}
+		else
+		{
+			waypointEditActive = false; // RED on an empty field leaves the editor
+		}
+		return true;
+	}
+	else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
+	{
+		double lat, lon;
+
+		if (waypointEditParse(waypointEditFields[0], 90.0, &lat) == false)
+		{
+			waypointEditFieldIndex = 0;
+			soundSetMelody(MELODY_NACK_BEEP);
+			return true;
+		}
+
+		if (waypointEditParse(waypointEditFields[1], 180.0, &lon) == false)
+		{
+			waypointEditFieldIndex = 1; // jump to the longitude field (also the normal flow after typing lat)
+			soundSetMelody(((waypointEditFields[1][0] == 0) ? MELODY_ACK_BEEP : MELODY_NACK_BEEP));
+			return true;
+		}
+
+		waypointLat = lat;
+		waypointLon = lon;
+		waypointIsSet = true;
+		waypointEditActive = false;
+		soundSetMelody(MELODY_ACK_BEEP);
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1000U, "Waypoint set", false);
+		return true;
+	}
+
+	return false;
+}
+#endif
+
+#if defined(GPS_TRIP_COMPUTER)
+#define TRIP_LINE_Y(n)   (MENU_HEADER_HEIGHT + 4 + ((n) * 20))
+
+static bool displayTrip(bool isFirstRun, bool forceRedraw)
+{
+	char buffer[SCREEN_LINE_BUFFER_SIZE];
+
+	if (((isFirstRun || forceRedraw) == false) &&
+			((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_POSITION_UPDATED | GPS_STATUS_TIME_UPDATED | GPS_STATUS_SPEED_UPDATED | GPS_STATUS_HEIGHT_UPDATED)) == 0))
+	{
+		return false;
+	}
+
+	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - MENU_HEADER_HEIGHT), true);
+
+	if (gpsTrip.started == false)
+	{
+		displayPrintCentered((TRIP_LINE_Y(1) + 4), "Trip: no fix yet", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCentered((TRIP_LINE_Y(3) + 4), "Long GREEN: reset", FONT_SIZE_1);
+		displayThemeResetToDefault();
+		return true;
+	}
+
+	// Distance
+	if (gpsTrip.distanceM < 1000U)
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Dist %um", (unsigned)gpsTrip.distanceM);
+	}
+	else
+	{
+		snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Dist %u.%02ukm", (unsigned)(gpsTrip.distanceM / 1000U), (unsigned)((gpsTrip.distanceM % 1000U) / 10U));
+	}
+	displayPrintAt(2, TRIP_LINE_Y(0), buffer, FONT_SIZE_3);
+
+	// Moving time
+	uint32_t s = (gpsTrip.movingTimeMs / 1000U);
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Move %u:%02u:%02u", (unsigned)(s / 3600U), (unsigned)((s / 60U) % 60U), (unsigned)(s % 60U));
+	displayPrintAt(2, TRIP_LINE_Y(1), buffer, FONT_SIZE_3);
+
+	// Average moving speed
+	uint32_t avg = gpsTripAvgSpeedHundredthKmh();
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Avg  %u.%01ukm/h", (unsigned)(avg / 100U), (unsigned)((avg % 100U) / 10U));
+	displayPrintAt(2, TRIP_LINE_Y(2), buffer, FONT_SIZE_3);
+
+	// Max speed (hundredth kn -> tenth km/h)
+	uint32_t maxTenthKmh = (((uint32_t)gpsTrip.maxSpeedHundredthKn * 1852U) / 10000U);
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Max  %u.%01ukm/h", (unsigned)(maxTenthKmh / 10U), (unsigned)(maxTenthKmh % 10U));
+	displayPrintAt(2, TRIP_LINE_Y(3), buffer, FONT_SIZE_3);
+
+	// Altitude gain / loss
+	snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "Alt  +%u -%um", (unsigned)gpsTrip.altGainM, (unsigned)gpsTrip.altLossM);
+	displayPrintAt(2, TRIP_LINE_Y(4), buffer, FONT_SIZE_3);
 
 	return true;
 }

@@ -52,6 +52,8 @@
 #include "interfaces/settingsStorage.h"
 #include "interfaces/adc.h"
 #include "functions/rxPowerSaving.h"
+#include "interfaces/i2s.h"
+#include "functions/aprsRx.h"
 
 #if defined(USING_EXTERNAL_DEBUGGER)
 #include "SeggerRTT/RTT/SEGGER_RTT.h"
@@ -1402,6 +1404,9 @@ void applicationMainTask(void)
 		voxTick();
 		gpsTick();
 		aprsBeaconingTick(&ev);
+#if defined(I2S_APRS_RX)
+		aprsRxTick(); // Fork: APRS receive (background / monitor)
+#endif
 		settingsSaveIfNeeded(false);
 
 		if (settingsIsOptionBitSet(BIT_DISPLAY_TIME_IN_HEADER))

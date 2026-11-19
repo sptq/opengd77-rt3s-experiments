@@ -36,6 +36,8 @@
 #include "hardware/radioHardwareInterface.h"
 #endif
 #include "interfaces/gps.h"
+#include "interfaces/i2s.h"
+#include "functions/aprsRx.h"
 
 #if defined(HAS_COLOURS)
 #define NAME_BUFFER_LEN   25
@@ -1801,6 +1803,12 @@ static void handleEvent(uiEvent_t *ev)
 				{
 					aprsBeaconingToggles();
 				}
+#if defined(I2S_APRS_RX)
+				else if (keyval == 4)
+				{
+					aprsRxToggleBackground(); // Fork: APRS receive in background
+				}
+#endif
 				else if (keyval == 2)
 				{
 					switch (aprsBeaconingGetMode())
