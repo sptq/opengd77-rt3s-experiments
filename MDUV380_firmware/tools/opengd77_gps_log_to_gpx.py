@@ -25,7 +25,7 @@ from xml.sax.saxutils import escape
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 LOG_ADDR = 14 * 1024 * 1024 + 64 * 1024   # LOG_FLASH_16MB_START_ADDRESS (after the 64 KB event log)
-LOG_SIZE = 2 * 1024 * 1024 - 64 * 1024   # LOG_FLASH_16MB_MEM_SIZE
+LOG_SIZE = 2 * 1024 * 1024 - 128 * 1024  # LOG_FLASH_16MB_MEM_SIZE (the last 64 KB hold the field tools data)
 BLOCK = 64 * 1024
 NMEA_RE = re.compile(rb'\$(G[PNLAB][A-Z]{3}),([^*$\r\n]*)\*([0-9A-Fa-f]{2})')
 

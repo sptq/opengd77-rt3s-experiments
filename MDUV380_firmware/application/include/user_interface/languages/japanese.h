@@ -332,6 +332,10 @@ const stringsTable_t japaneseLanguage =
 .sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
 .aprs_rx				= "APRS RX", // MaxLen: 16 - Main menu entry: APRS receive (frames, stations, radar, messages)
 .event_log				= "Event log", // MaxLen: 16 - Main menu entry: EMCOM event log
+.pace					= "Plan PACE", // MaxLen: 16 - Main menu entry: PACE communication plan
+.position				= "Position", // MaxLen: 16 - Main menu entry: MGRS / UTM position
+.coverage				= "Coverage", // MaxLen: 16 - Main menu entry: coverage survey
+.radio_check			= "Radio check", // MaxLen: 16 - Main menu entry: signal report
 };
 /********************************************************************
  *

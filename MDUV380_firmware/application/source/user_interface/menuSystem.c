@@ -162,6 +162,10 @@ static menuFunctionData_t menuFunctions[] =
 		{ menuSSTV,                 NULL, NULL, 0 },
 		{ menuAPRSRx,               NULL, NULL, 0 },
 		{ menuEventLog,             NULL, NULL, 0 },
+		{ menuPACE,                 NULL, NULL, 0 },
+		{ menuPosition,             NULL, NULL, 0 },
+		{ menuCoverage,             NULL, NULL, 0 },
+		{ menuRadioCheck,           NULL, NULL, 0 },
 #endif
 		// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 		{ uiMessageBox,             NULL, NULL, 0 },
@@ -666,19 +670,25 @@ const menuItemNewData_t mainMenuItems[] =
 	{   6, MENU_CONTACTS_MENU   },
 	{  12, MENU_CHANNEL_DETAILS },
 	{   4, MENU_RSSI_SCREEN     },
-	{   8, MENU_FIRMWARE_INFO   },
 	{   9, MENU_OPTIONS         },
 	{   7, MENU_LAST_HEARD      },
-	{ 150, MENU_RADIO_INFOS     },
-	{ 173, MENU_SATELLITE       },
+#if defined(HAS_SSTV_MENU)
+	{ 285, MENU_PACE            },// stringOffset 285 = .pace field (fork)
+	{ 286, MENU_POSITION        },// stringOffset 286 = .position field (fork)
+	{ 287, MENU_COVERAGE        },// stringOffset 287 = .coverage field (fork)
+	{ 288, MENU_RADIO_CHECK     },// stringOffset 288 = .radio_check field (fork)
+	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
+#endif
 #if defined(HAS_GPS)
 	{ 195, MENU_GPS		        },
 #endif
 #if defined(HAS_SSTV_MENU)
-	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
-	{ 284, MENU_EVENT_LOG       },// stringOffset 284 = .event_log field (fork)
 	{ 282, MENU_SSTV            },// stringOffset 282 = .sstv field (fork, end of stringsTable_t)
+	{ 284, MENU_EVENT_LOG       },// stringOffset 284 = .event_log field (fork)
 #endif
+	{ 150, MENU_RADIO_INFOS     },
+	{ 173, MENU_SATELLITE       },
+	{   8, MENU_FIRMWARE_INFO   },
 };
 
 const menuItemsList_t menuDataMainMenu =

@@ -340,6 +340,10 @@ typedef struct
    const char sstv[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the SSTV receive screen
    const char aprs_rx[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the APRS receive screen
    const char event_log[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the EMCOM event log
+   const char pace[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the PACE communication plan
+   const char position[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the MGRS / UTM position screen
+   const char coverage[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the coverage survey
+   const char radio_check[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the radio check (signal report)
 } stringsTable_t;
 
 #endif // _OPENGD77_UILANGUAGE_H_

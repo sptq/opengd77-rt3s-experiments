@@ -274,6 +274,31 @@ Radio liczy tylko ruch szybszy niż ok. 2 km/h, więc drganie pozycji GPS na pos
 
 ---
 
+## Narzędzia terenowe (kafelki w menu głównym)
+
+Wszystkie można też przypisać do szybkiego klawisza (`SK2` + cyfra na danym ekranie).
+
+### Plan PACE
+Cztery kanały planu łączności: **P** podstawowy, **A** alternatywny, **C** awaryjny, **E** ostateczny.
+- Ustawienie: przejdź na kanał, wejdź w Plan PACE, wybierz pozycję ▲▼ i naciśnij `*`.
+- Przełączenie: `1`–`4` albo `GREEN` na zaznaczonej pozycji (radio przechodzi na ten kanał).
+- `0` czyści pozycję. Napis **ON** pokazuje, na którym kanale planu jesteś.
+
+### Pozycja
+MGRS (dużymi cyframi, do podawania przez radio), UTM, stopnie dziesiętne, lokator, wysokość, jakość GPS, wschód i zachód słońca (czas lokalny, gdy ustawiona strefa czasowa) oraz odległość i azymut do punktu docelowego. `*` zapisuje bieżącą pozycję jako punkt docelowy, żeby do niej wrócić. Bez GPS pokazuje lokalizację z ustawień (MANUAL).
+
+### Zasięg (pomiar pokrycia)
+Ustaw kanał przemiennika lub sieci, wejdź w Zasięg i naciśnij `GREEN`: co kilka sekund zapisuje się poziom sygnału z pozycją GPS (tylko z fixem). `#` zmienia odstęp (1, 2, 5, 10, 30 s), `0` potem `GREEN` czyści pamięć (3840 punktów). Mapa na komputerze:
+
+```
+python3 MDUV380_firmware/tools/opengd77_coverage.py --kml zasieg.kml
+```
+
+Kolory: zielony ≥ −100 dBm, żółty do −110, pomarańczowy do −118, czerwony poniżej.
+
+### Radio check
+Każda odebrana relacja jest mierzona (czas, średni i szczytowy poziom) i oceniana w skali czytelność / siła, np. „5 BY 9” — gotowe do odczytania korespondentowi. Pod spodem poprzednie raporty, `0` czyści.
+
 ## Wgrywanie
 
 1. Zrób kopię codeplugu i kalibracji.
