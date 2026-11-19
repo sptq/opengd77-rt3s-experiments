@@ -37,6 +37,7 @@
 #include "functions/aprsRx.h"
 #include "functions/toneRxDecoders.h"
 #include "functions/ticks.h"
+#include "user_interface/uiEmcom.h"
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
 #endif
@@ -225,6 +226,163 @@ static void drawMeterGraticule(int16_t vOffset)
 	}
 }
 
+#if defined(HAS_EMCOM_UI)
+#if defined(FOX_HUNT_SUPPORTED)
+static bool foxHuntGetPosition(double *lat, double *lon);
+#endif
+
+// Fork: EMCOM style RSSI screen: big readout, 32-segment meter with an S scale, fox-hunt panel, key bar
+#define EM_METER_Y   58
+#define EM_METER_H   12
+
+static int emcomSegments(int dbm)
+{
+	if (dbm <= SMETER_S0)
+	{
+		return 0;
+	}
+	if (dbm <= SMETER_S9)
+	{
+		return (((dbm - SMETER_S0) * 20) / (SMETER_S9 - SMETER_S0));
+	}
+	return CLAMP((20 + ((dbm - SMETER_S9) / 5)), 0, 32);
+}
+
+static void emcomRssiScreen(void)
+{
+	char buf[32];
+	int dbm = dBm[RADIO_DEVICE_PRIMARY];
+	int lit = emcomSegments(dbm);
+	uint32_t f = currentChannelData->rxFreq;
+
+	displayClearBuf();
+	menuDisplayTitle(currentLanguage->rssi);
+
+	// frequency / mode strip
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, 11, false);
+	snprintf(buf, sizeof(buf), "%u.%04u MHz %s", (unsigned)(f / 100000U), (unsigned)((f % 100000U) / 10U),
+			((trxGetMode() == RADIO_MODE_DIGITAL) ? "DMR" : (trxGetBandwidthIs25kHz() ? "FM" : "FMN")));
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(3, (MENU_HEADER_HEIGHT + 2), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+#if defined(FOX_HUNT_SUPPORTED)
+	if (foxHuntEnabled)
+	{
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR_S9P, THEME_ITEM_BG);
+		displayFillRect((DISPLAY_SIZE_X - 24), (MENU_HEADER_HEIGHT + 1), 22, 9, false);
+		displayPrintCore((DISPLAY_SIZE_X - 22), (MENU_HEADER_HEIGHT + 2), "FOX", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+	}
+#endif
+
+	// readout: dBm (16x32) and S units (8x16)
+	snprintf(buf, sizeof(buf), "%d", dbm);
+	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+	displayPrintCore(2, 24, buf, FONT_SIZE_4, TEXT_ALIGN_LEFT, false);
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintCore((int16_t)(4 + (strlen(buf) * 16)), 42, "dBm", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	if (dbm >= SMETER_S9)
+	{
+		int over = (((dbm - SMETER_S9) / 10) * 10);
+		snprintf(buf, sizeof(buf), ((over > 0) ? "S9+%d" : "S9"), over);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "S%d", CLAMP(((dbm - SMETER_S0) / 4), 0, 9));
+	}
+	displayThemeApply(((dbm > SMETER_S9) ? THEME_ITEM_FG_RSSI_BAR_S9P : THEME_ITEM_FG_RSSI_BAR), THEME_ITEM_BG);
+	displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(buf) * 8)), 32, buf, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
+
+	// meter
+	for (int i = 0; i < 32; i++)
+	{
+		displayThemeApply(((i < lit) ? ((i < 20) ? THEME_ITEM_FG_RSSI_BAR : THEME_ITEM_FG_RSSI_BAR_S9P) : THEME_ITEM_BG_HEADER_TEXT), THEME_ITEM_BG);
+		displayFillRect((int16_t)(i * 5), EM_METER_Y, 4, EM_METER_H, false);
+	}
+#if defined(FOX_HUNT_SUPPORTED)
+	if (foxHuntEnabled && (foxMaxDbm != INT16_MIN))
+	{
+		int16_t mx = (int16_t)((emcomSegments(foxMaxDbm) * 5) - 1);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayFillRect(((mx < 0) ? 0 : mx), (EM_METER_Y - 3), 2, (EM_METER_H + 6), false);
+	}
+#endif
+
+	// scale
+	{
+		static const struct { int seg; const char *label; } marks[] =
+		{
+			{ 2, "1" }, { 7, "3" }, { 11, "5" }, { 16, "7" }, { 20, "9" }, { 24, "+20" }, { 28, "+40" }
+		};
+
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		for (size_t i = 0; i < (sizeof(marks) / sizeof(marks[0])); i++)
+		{
+			int16_t x = (int16_t)(marks[i].seg * 5);
+			displayDrawFastVLine(x, (EM_METER_Y + EM_METER_H + 1), 2, true);
+			displayPrintCore((int16_t)(x - ((strlen(marks[i].label) * 6) / 2) + 1), (EM_METER_Y + EM_METER_H + 4), marks[i].label, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+		}
+	}
+
+	int16_t y = 90;
+	if (displayRawValues)
+	{
+		snprintf(buf, sizeof(buf), "RAW SIG %u  NOISE %u", rawSignal[RADIO_DEVICE_PRIMARY], rawNoise[RADIO_DEVICE_PRIMARY]);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCore(3, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+		y += 10;
+	}
+
+#if defined(FOX_HUNT_SUPPORTED)
+	if (foxHuntEnabled)
+	{
+		double lat, lon;
+
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCore(3, y, "MAX", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+		snprintf(buf, sizeof(buf), ((foxMaxDbm == INT16_MIN) ? "--" : "%ddBm"), foxMaxDbm);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(24, y, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+
+		if (foxMaxHasPosition && foxHuntGetPosition(&lat, &lon))
+		{
+			int meters = (int)distanceBetweenTwoCoords(lat, lon, foxMaxLat, foxMaxLon, false);
+			int bearing = (int)courseTo(lat, lon, foxMaxLat, foxMaxLon);
+
+			if (meters < 10000)
+			{
+				snprintf(buf, sizeof(buf), "%dm %03d", meters, bearing);
+			}
+			else
+			{
+				snprintf(buf, sizeof(buf), "%dkm %03d", (meters / 1000), bearing);
+			}
+			displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
+		}
+		else
+		{
+			snprintf(buf, sizeof(buf), (foxMaxHasPosition ? "no GPS fix" : "no position"));
+			displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		}
+		displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(buf) * 6)), y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	}
+#endif
+
+	// keys
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+#if defined(FOX_HUNT_SUPPORTED)
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), (foxHuntEnabled ? "* RAW  # FOX  0 RST  9 APRS" : "* RAW  # FOX  9 APRS"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+#else
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "* RAW", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+#endif
+
+	displayThemeResetToDefault();
+	displayRender();
+}
+#endif
+
 static void updateScreen(bool forceRedraw, bool isFirstRun)
 {
 	char buffer[LOCATION_TEXT_BUFFER_SIZE];
@@ -248,6 +406,14 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 		voicePromptsAppendPrompt(PROMPT_SILENCE);
 		updateVoicePrompts(false, true);
 	}
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomStyleEnabled())
+	{
+		emcomRssiScreen();
+		return;
+	}
+#endif
 
 	if (forceRedraw)
 	{

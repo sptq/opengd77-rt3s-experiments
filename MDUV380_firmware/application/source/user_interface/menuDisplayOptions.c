@@ -34,6 +34,7 @@
 #endif
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 
@@ -103,6 +104,9 @@ enum
 	DISPLAY_TIME_UTC_OR_LOCAL,
 	DISPLAY_SHOW_DISTANCE,
 	DISPLAY_DMR_LAST_TALKER_ON_SCREEN,
+#if defined(HAS_EMCOM_UI)
+	DISPLAY_EMCOM_STYLE, // Fork: main screen style
+#endif
 	NUM_DISPLAY_MENU_ITEMS
 };
 
@@ -295,6 +299,13 @@ static void updateScreen(bool isFirstRun)
 						rightSideConst = extendedInfos[nonVolatileSettings.extendedInfosOnScreen];
 					}
 					break;
+
+#if defined(HAS_EMCOM_UI)
+				case DISPLAY_EMCOM_STYLE:
+					leftSide = "Screen";
+					rightSideConst = (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE) ? "Classic" : "EMCOM");
+					break;
+#endif
 
 #if defined(HAS_SOFT_VOLUME)
 				case DISPLAY_VISUAL_VOLUME:
@@ -668,6 +679,15 @@ static void handleEvent(uiEvent_t *ev)
 					}
 					break;
 #endif
+#if defined(HAS_EMCOM_UI)
+				case DISPLAY_EMCOM_STYLE:
+					if (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE))
+					{
+						settingsSetOptionBit(BIT_UI_CLASSIC_STYLE, false);
+						emcomApplyStyle();
+					}
+					break;
+#endif
 
 #if ! defined(PLATFORM_MD9600)
 				case DISPLAY_ALL_LEDS_ENABLED:
@@ -868,6 +888,15 @@ static void handleEvent(uiEvent_t *ev)
 					if (settingsIsOptionBitSet(BIT_VISUAL_VOLUME))
 					{
 						settingsSetOptionBit(BIT_VISUAL_VOLUME, false);
+					}
+					break;
+#endif
+#if defined(HAS_EMCOM_UI)
+				case DISPLAY_EMCOM_STYLE:
+					if (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE) == false)
+					{
+						settingsSetOptionBit(BIT_UI_CLASSIC_STYLE, true);
+						emcomApplyStyle();
 					}
 					break;
 #endif
@@ -1107,6 +1136,9 @@ static void exitCallback(void *data)
 #endif
 #if defined(HAS_SOFT_VOLUME)
 				BIT_VISUAL_VOLUME,
+#endif
+#if defined(HAS_EMCOM_UI)
+				BIT_UI_CLASSIC_STYLE,
 #endif
 #if defined(HAS_COLOURS)
 				BIT_UI_USES_DOUBLE_HEIGHT,

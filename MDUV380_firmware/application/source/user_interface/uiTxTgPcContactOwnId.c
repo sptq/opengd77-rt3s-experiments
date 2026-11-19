@@ -29,6 +29,9 @@
 #include "hardware/HR-C6000.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
+#define EMCOM_FIELD_X   8   // Fork: EMCOM input field
+#define EMCOM_FIELD_Y   44
 #include "user_interface/uiLocalisation.h"
 #include "functions/voicePrompts.h"
 
@@ -127,6 +130,22 @@ static void updateCursor(void)
 
 		if ((m - lastBlink) > CURSOR_UPDATE_TIMEOUT)
 		{
+#if defined(HAS_EMCOM_UI)
+			if (emcomStyleEnabled())
+			{
+				// Fork: EMCOM input field, left aligned, big digits when they fit
+				bool big = ((inAnalog ? NUM_DTMF_DIGITS : NUM_PC_OR_TG_DIGITS) <= 8);
+				int16_t cw = (big ? 16 : 8);
+
+				displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_HEADER_TEXT); // erased with the field colour
+				displayFillRect((int16_t)(EMCOM_FIELD_X + (sLen * cw)), (EMCOM_FIELD_Y + (big ? 20 : 14)), (cw - 2), 2, (blink == false));
+				displayThemeResetToDefault();
+				blink = !blink;
+				lastBlink = m;
+				displayRender();
+				return;
+			}
+#endif
 			sLen *= 8;
 
 			displayThemeApply(THEME_ITEM_FG_TEXT_INPUT, THEME_ITEM_BG);
@@ -140,6 +159,68 @@ static void updateCursor(void)
 		}
 	}
 }
+
+#if defined(HAS_EMCOM_UI)
+
+// Fork: EMCOM style: title bar, mode tabs, input field, contact name, key bar
+static void emcomEntryScreen(void)
+{
+	static const char *tabs[NUM_ENTRY_ITEMS] = { "TG", "PC", "DTMF", "CON", "ID" };
+	char buf[33];
+	int16_t x = 2;
+	bool big = ((inAnalog ? NUM_DTMF_DIGITS : NUM_PC_OR_TG_DIGITS) <= 8);
+
+	displayClearBuf();
+	menuDisplayTitle(menuName[menuDataGlobal.currentItemIndex]);
+
+	// tabs (the ones that apply: DTMF in FM, TG / PC / ID in DMR, the contact list in both)
+	for (int i = 0; i < NUM_ENTRY_ITEMS; i++)
+	{
+		bool usable = (inAnalog ? ((i == ENTRY_DTMF) || (i == ENTRY_SELECT_CONTACT)) : (i != ENTRY_DTMF));
+		bool sel = (i == menuDataGlobal.currentItemIndex);
+		int16_t w = (int16_t)((strlen(tabs[i]) * 6) + 6);
+
+		if (usable == false)
+		{
+			continue;
+		}
+		displayThemeApply((sel ? THEME_ITEM_BG_MENU_ITEM_SELECTED : THEME_ITEM_BG_HEADER_TEXT), THEME_ITEM_BG);
+		displayFillRect(x, (MENU_HEADER_HEIGHT + 4), w, 12, false);
+		displayThemeApply((sel ? THEME_ITEM_FG_DEFAULT : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
+		displayPrintCore((x + 3), (MENU_HEADER_HEIGHT + 6), tabs[i], FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+		x += (w + 3);
+	}
+
+	// input field
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(2, (EMCOM_FIELD_Y - 6), (DISPLAY_SIZE_X - 4), (big ? 38 : 26), false);
+	displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+	displayFillRect(2, (EMCOM_FIELD_Y - 6), 3, (big ? 38 : 26), false);
+
+	if (pcIdx != 0)
+	{
+		codeplugUtilConvertBufToString((inAnalog ? dtmfContact.name : contact.name), buf, 16);
+		displayThemeApply(THEME_ITEM_FG_CHANNEL_CONTACT, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCore(EMCOM_FIELD_X, (EMCOM_FIELD_Y + (big ? 6 : 0)), buf, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCore(EMCOM_FIELD_X, (EMCOM_FIELD_Y + (big ? 40 : 28)), digits, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
+	}
+	else
+	{
+		displayThemeApply(THEME_ITEM_FG_TEXT_INPUT, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCore(EMCOM_FIELD_X, ((EMCOM_FIELD_Y + (big ? 0 : 0)) - (big ? 6 : 0)), digits, (big ? FONT_SIZE_4 : FONT_SIZE_3), TEXT_ALIGN_LEFT, false);
+	}
+
+	// keys
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "^v MODE  GRN OK  RED BACK", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	displayThemeResetToDefault();
+	displayRender();
+}
+#endif
 
 static void updateScreen(bool inputModeHasChanged)
 {
@@ -200,6 +281,14 @@ static void updateScreen(bool inputModeHasChanged)
 
 		promptsPlayNotAfterTx();
 	}
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomStyleEnabled())
+	{
+		emcomEntryScreen();
+		return;
+	}
+#endif
 
 	if (pcIdx == 0)
 	{

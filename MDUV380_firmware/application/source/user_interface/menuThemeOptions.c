@@ -28,6 +28,7 @@
 #include "functions/settings.h"
 #include "functions/codeplug.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 #include "interfaces/wdog.h"
@@ -478,6 +479,15 @@ static void handleBrowserEvent(uiEvent_t *ev)
 			menuSystemPopPreviousMenu();
 			return;
 		}
+#if defined(HAS_EMCOM_UI)
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
+		{
+			// Fork: EMCOM colours (dark by day, red at night); GREEN applies, SK2 + GREEN saves
+			emcomThemePreset((currentThemeDaytime == NIGHT), userThemeData);
+			isDirty = true;
+			uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 2500, "EMCOM colours", false);
+		}
+#endif
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH))
 		{
 			colourToEditRGB888 = PLATFORM_COLOUR_FORMAT_TO_RGB888(__builtin_bswap16(userThemeData[menuDataGlobal.currentItemIndex]));

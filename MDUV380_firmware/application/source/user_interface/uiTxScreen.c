@@ -381,6 +381,11 @@ bool menuTxScreenDisplaysLastHeard(void)
 	return isShowingLastHeard;
 }
 
+bool menuTxScreenIsSatellite(void)
+{
+	return isSatelliteScreen;
+}
+
 static void updateScreen(void)
 {
 #if !defined(PLATFORM_GD77S)

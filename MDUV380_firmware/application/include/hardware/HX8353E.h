@@ -265,6 +265,8 @@ void displayGetForegroundAndBackgroundColours(uint16_t *fgColour, uint16_t *bgCo
 
 #if defined(HAS_COLOURS)
 void themeInitToDefaultValues(DayTime_t daytime, bool invert);
+void displaySetFlatStyle(bool flat); // Fork: square boxes, no drop shadows (EMCOM style)
+bool displayGetFlatStyle(void);
 void themeInit(bool SPIFlashAvailable);
 void displayThemeApply(themeItem_t fgItem, themeItem_t bgItem);
 void displayThemeResetToDefault(void);

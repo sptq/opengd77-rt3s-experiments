@@ -15,6 +15,46 @@ RT3S nie ma pomarańczowego przycisku. Firmware zastępuje go kombinacją **SK1 
 
 ---
 
+## Ekran główny EMCOM (domyślny)
+
+Ekran kanału i VFO jest wzorowany na radiach profesjonalnych i wojskowych: wszystko ma stałe miejsce, numer kanału jest najważniejszy, stan radia widać kolorem **i** napisem. Powrót do starego wyglądu: *Opcje → Wyświetlacz → Screen: Classic*.
+
+![Ekran EMCOM](../docs/screens/emcom_standby.png)
+
+Od góry:
+* **Pasek stanu:** pole stanu (tryb FM/FMN/DMR w spoczynku, `RX` zielone, `TX` czerwone razem z całym paskiem, `SCAN` bursztynowe), moc, ton CTCSS/DCS albo szczelina TS, `a` (beacon APRS), `GPS` (zielony = fix), głośność (4 słupki, `x` = wyciszone), bateria.
+* **S-metr:** 32 segmenty, od S9 w górę bursztynowe; przy nadawaniu poziom mikrofonu na czerwono.
+* **Kanał:** strefa i `CH 3/16`, duży numer, nazwa, częstotliwość (`TX` przy nadawaniu, `REV` odwrócony przemiennik, `TA` talkaround). W VFO duża częstotliwość.
+* **Panel:** w FM offset, ton RX/TX, blokada szumów, szerokość kanału, TOT; w DMR TG, CC, TS i kontakt. Przy odbiorze FM poziom w dBm i S, przy rozmowie DMR znak, TG i reszta aliasu, przy nadawaniu duży licznik czasu.
+* **Wiersze EMCOM:** liczba stacji APRS, nieprzeczytane wiadomości (`MSG 1` na niebiesko), lokator, pozycja (GPS albo stała lokalizacja z ustawień), ostatnio słyszana stacja (DMR albo ostatnia stacja APRS z odległością).
+* **Stopka:** czas UTC i data, blokada klawiatury/PTT, skanowanie, SOS.
+
+W nocy (przełączanie dzień/noc albo auto-noc) ekran jest tylko czerwony, żeby nie psuć widzenia nocnego. W trybach specjalnych VFO (sweep, dual watch, wpisywanie częstotliwości) i w podglądzie szczegółów kanału zostaje stary ekran.
+
+Menu w tych samych kolorach: *Opcje → Motyw → Dzień* (potem *Noc*), `*` wczytuje kolory EMCOM (w dzień ciemne, w nocy czerwone), `GREEN` stosuje, `SK2 + GREEN` stosuje i zapisuje.
+
+Ten sam styl obejmuje całe radio: paski tytułu menu (akcent, wielkie litery, pozycja na liście), zaznaczenie przez całą szerokość, kanciaste okna bez cieni, dolny pasek z zielonym (klawisz GREEN) i czerwonym (RED) polem, ekrany APRS RX, SSTV, dziennika oraz ekran startowy SP7TEAM. Gdy włączona jest blokada nadawania (TX inhibit), w stopce świeci czerwone `TX OFF`.
+
+### Menu z kafelkami
+
+Menu główne, Opcje i Kontakty to kafelki z ikonami (4 w rzędzie). Numer w rogu kafelka to klawisz: `1`…`9`, `0` otwiera go od razu; ▲▼ przesuwa zaznaczenie, pełna nazwa jest w dolnym pasku. W listach ustawień nazwa opcji jest po lewej, a wartość wyrównana do prawej.
+
+### Dziennik: menu główne → Dziennik
+
+Radio samo prowadzi dziennik łączności z czasem UTC: własne nadawanie (częstotliwość, czas), odbiory FM od 2 s (częstotliwość, czas, szczyt dBm), rozmowy DMR (znak, TG), nowe stacje APRS (z odległością), wiadomości APRS (przychodzące, wysłane, ACK), sekwencje DTMF, SOS i jego beacony, obrazki SSTV, włączenie radia. 2048 wpisów w pamięci flash, przetrwa wyłączenie.
+
+Na radiu: najnowsze na górze, typ w kolorowym polu, wybrany wpis w całości z datą w stopce; `0` i potem `GREEN` czyści dziennik. Na komputerze: `python3 MDUV380_firmware/tools/opengd77_event_log.py --csv dziennik.csv`.
+
+### SOS: `SK1 + 9` dwa razy
+
+Dwa naciśnięcia `SK1 + 9` w ciągu 3 s (albo akcja quickkey *SOS*) włączają alarm: migający pasek `EMERGENCY SOS` i beacony APRS z pozycją, symbolem alarmu i tekstem `EMERGENCY SOS` (3 razy co minutę, potem co 2 minuty). Nadawanie idzie przez konfigurację APRS kanału (na jej częstotliwość QSY, jeśli jest ustawiona); bez niej radio pokaże `SOS: no APRS config`. Wyłączenie: znowu dwa razy `SK1 + 9`.
+
+### Zrzuty ekranu
+
+Z radiem włączonym i podłączonym przez USB: `python3 MDUV380_firmware/tools/opengd77_screenshot.py -o ekran.png` (wymaga `pip install pyserial`).
+
+---
+
 ## 1. Szybkie klawisze (Quickkeys)
 
 ### Przypisanie akcji do klawisza
@@ -200,6 +240,10 @@ Odbiór obrazków SSTV w FM: Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120
 3. Tryb rozpoznaje się sam z nagłówka VIS, obraz 160×120 rysuje się linia po linii. W górnej linii jest tryb, numer linii i częstotliwość audio (pomaga sprawdzić, czy sygnał w ogóle dochodzi).
 
 `0` czyści obraz i czeka na następny, `GREEN` / `RED` wychodzi. Ekran można przypisać do quickkeya (`SK2 + cyfra`). Gdy ekran SSTV jest otwarty, APRS, DTMF i CW są wstrzymane. Wyjście z ekranu (także nadawanie) kasuje obraz.
+
+### Wskaźnik głośności
+
+W nagłówku ekranu VFO i kanału, na lewo od napisu `GPS`, są 4 słupki pokazujące położenie gałki głośności; `x` oznacza wyciszenie. Duży pasek głośności podczas kręcenia gałką włącza się w *Opcje → Wyświetlacz → Visual volume* (opcja z oryginalnego OpenGD77).
 
 ### Ślad GPS do GPX
 

@@ -5,6 +5,18 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
+## Unreleased
+
+* **Launcher menus**: main menu, Options and Contacts as 4x3 icon tiles (26 icons, `docs/icons/`), key numbers open a tile directly, name bar; option lists with right-aligned values.
+* **SP7TEAM look for the whole UI**: EMCOM colours as the default theme, flat boxes without shadows, menu title bars and full-width selection, soft key bars (GREEN / RED fields), restyled APRS RX (status strip, chips, radar panel), SSTV and boot screen (SP7TEAM emblem).
+* **Event log** (main menu → Event log): TX, FM RX, DMR calls, APRS stations and messages, DTMF, SOS, SSTV, power-on with UTC time, 2048 entries in flash; `tools/opengd77_event_log.py` exports CSV. The GPS NMEA log starts 64 KB later.
+* **TX OFF** in the EMCOM footer when TX inhibit is on.
+* **EMCOM main screen** (default, Options → Display → Screen): status bar with state field, segmented S-meter, big channel number, parameter panel, live RX level, DMR caller, TX timer, APRS / messages / locator / position rows, UTC footer; red-only night palette.
+* **EMCOM colours for the menus**: `*` in the theme editor loads them (dark day / red night theme).
+* **SOS**: `SK1+9` twice or a quickkey: APRS emergency position beacons and a flashing banner.
+* **Screenshots** over USB (`tools/opengd77_screenshot.py`); README pictures rendered from the firmware layout (`docs/screens/`).
+* **Volume indicator in the header** (VFO / channel screens): 4 bars left of the GPS label following the volume knob, `x` when muted. The pop-up bar on knob turns is still *Options → Display → Visual volume*.
+
 ## R20260131-SP7TQ.1 — 2026-11-19
 
 First release under the SP7TQ tag. `.gla` language packs changed (new menu strings): flash the ones from this release.

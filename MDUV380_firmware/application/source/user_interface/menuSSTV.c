@@ -20,6 +20,7 @@
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
 #include "functions/sstvRx.h"
+#include "functions/eventLog.h"
 #include "functions/ticks.h"
 
 #if defined(HAS_SSTV_MENU) && defined(I2S_APRS_RX)
@@ -42,77 +43,168 @@ static void sstvPixel(uint16_t x, uint16_t row, uint8_t r, uint8_t g, uint8_t b)
 	fb[((SSTV_Y0 + row) * DISPLAY_SIZE_X) + x] = displayConvertRGB888ToNative(((uint32_t)r << 16) | ((uint32_t)g << 8) | b);
 }
 
-static void drawHint(void)
+// Coloured field with the text in the background colour; returns its width
+static int16_t chip(int16_t x, int16_t y, int16_t h, const char *text, themeItem_t colour, themeItem_t bg)
 {
-	displayFillRect(0, SSTV_Y0, DISPLAY_SIZE_X, SSTV_RX_ROWS, true);
-	displayPrintCentered((SSTV_Y0 + 24), "Waiting for", FONT_SIZE_3);
-	displayPrintCentered((SSTV_Y0 + 42), "SSTV picture", FONT_SIZE_3);
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintCentered((SSTV_Y0 + 70), "FM, e.g. ISS 145.800", FONT_SIZE_1);
-	displayPrintCentered((SSTV_Y0 + 82), "Robot Martin Scottie PD", FONT_SIZE_1);
-	displayPrintCentered((SSTV_Y0 + 100), "0:clear  RED:exit", FONT_SIZE_1);
+	int16_t w = (int16_t)((strlen(text) * 6) + 4);
+
+	displayThemeApply(colour, bg);
+	displayFillRect(x, y, w, h, false);
+	displayThemeApply(colour, THEME_ITEM_BG);
+	displayPrintCore((x + 2), (y + ((h - FONT_SIZE_1_HEIGHT) / 2)), text, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+	return w;
+}
+
+static const char *rxStateText(const aprsRxStatus_t *rx, themeItem_t *colour)
+{
+	if (rx->state == APRS_RX_STATE_LISTENING)
+	{
+		*colour = THEME_ITEM_FG_RSSI_BAR;
+		return "RX";
+	}
+	if (trxGetMode() != RADIO_MODE_ANALOG)
+	{
+		*colour = THEME_ITEM_FG_RSSI_BAR_S9P;
+		return "FM ONLY";
+	}
+	if (rx->state == APRS_RX_STATE_NO_CLOCK)
+	{
+		*colour = THEME_ITEM_FG_TX_COUNTER;
+		return "NO CLK";
+	}
+	*colour = THEME_ITEM_FG_RSSI_BAR_S9P;
+	return "PAUSE";
+}
+
+// No picture yet: the full layout of the other screens (title, status strip, hint, key bar)
+static void drawIdle(const sstvRxStatus_t *st, const aprsRxStatus_t *rx)
+{
+	char line[SSTV_CHARS + 1];
+	themeItem_t colour;
+	const char *state = rxStateText(rx, &colour);
+	int16_t sy = MENU_HEADER_HEIGHT;
+
+	displayClearBuf();
+	menuDisplayTitle("SSTV");
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, sy, DISPLAY_SIZE_X, 11, false);
+	int16_t x = (int16_t)(2 + chip(2, (sy + 1), 9, state, colour, THEME_ITEM_BG_HEADER_TEXT) + 4);
+
+	if (st->lastVis)
+	{
+		snprintf(line, sizeof(line), "VIS %u ?", (unsigned)st->lastVis); // not a known mode
+	}
+	else if (st->freqHz)
+	{
+		snprintf(line, sizeof(line), "%u Hz", (unsigned)st->freqHz);
+	}
+	else
+	{
+		line[0] = 0;
+	}
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(x, (sy + 2), line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	snprintf(line, sizeof(line), "%ddBm", trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(line) * 6)), (sy + 2), line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	if (trxGetMode() != RADIO_MODE_ANALOG)
+	{
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR_S9P, THEME_ITEM_BG);
+		displayPrintCentered(44, "FM only", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCentered(66, "Switch to an FM", FONT_SIZE_1);
+		displayPrintCentered(76, "channel or VFO", FONT_SIZE_1);
+	}
+	else
+	{
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCentered(36, "Waiting for", FONT_SIZE_3);
+		displayPrintCentered(54, "SSTV picture", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
+		displayPrintCentered(78, "e.g. ISS 145.800 FM", FONT_SIZE_1);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCentered(90, "ROBOT MARTIN SCOTTIE PD", FONT_SIZE_1);
+	}
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "0 CLEAR  RED EXIT", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayThemeResetToDefault();
+}
+
+// Picture shown: compact bar above it (state field, mode, line / done)
+static void drawPictureBar(const sstvRxStatus_t *st, const aprsRxStatus_t *rx)
+{
+	char line[SSTV_CHARS + 1];
+	themeItem_t colour;
+	const char *state = rxStateText(rx, &colour);
+
+	if ((st->state == SSTV_RX_DONE) && (rx->state == APRS_RX_STATE_LISTENING))
+	{
+		state = "DONE";
+		colour = THEME_ITEM_FG_RX_FREQ;
+	}
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_STATUS_H, false);
+	int16_t x = (int16_t)(chip(0, 0, SSTV_STATUS_H, state, colour, THEME_ITEM_BG_HEADER_TEXT) + 4);
+
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(x, ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), st->modeName, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	if (st->state == SSTV_RX_RECEIVING)
+	{
+		snprintf(line, sizeof(line), "%u/%u", (unsigned)(st->row + 1), (unsigned)SSTV_RX_ROWS);
+	}
+	else
+	{
+		snprintf(line, sizeof(line), "0 NEW");
+	}
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore((DISPLAY_SIZE_X - 2 - (int16_t)(strlen(line) * 6)), ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 	displayThemeResetToDefault();
 }
 
 static void updateScreen(void)
 {
-	char line[SSTV_CHARS + 1];
 	sstvRxStatus_t st;
 	aprsRxStatus_t rx;
 
 	sstvRxGetStatus(&st);
 	aprsRxGetStatus(&rx);
 
-	// a new picture starts: clear the hint / the previous picture
+	// a new picture starts: the whole screen goes to the picture
 	if ((st.state == SSTV_RX_RECEIVING) && (lastState != SSTV_RX_RECEIVING))
 	{
-		displayFillRect(0, SSTV_Y0, DISPLAY_SIZE_X, SSTV_RX_ROWS, true);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayFillRect(0, 0, DISPLAY_SIZE_X, DISPLAY_SIZE_Y, true);
+		displayThemeResetToDefault();
 		hasPicture = true;
 	}
+#if defined(HAS_EVENT_LOG)
+	if ((st.state == SSTV_RX_DONE) && (lastState == SSTV_RX_RECEIVING))
+	{
+		eventLogAdd(EVENT_LOG_SSTV, "%s %u lines", st.modeName, (unsigned)(st.row + 1));
+	}
+#endif
 	lastState = st.state;
 
-	if (rx.state != APRS_RX_STATE_LISTENING)
+	if (hasPicture)
 	{
-		snprintf(line, sizeof(line), "SSTV: %s", ((trxGetMode() != RADIO_MODE_ANALOG) ? "FM only" : ((rx.state == APRS_RX_STATE_NO_CLOCK) ? "no I2S clock" : "paused")));
+		drawPictureBar(&st, &rx);
 	}
 	else
 	{
-		switch (st.state)
-		{
-			case SSTV_RX_RECEIVING:
-				snprintf(line, sizeof(line), "%s %u/%u", st.modeName, (unsigned)(st.row + 1), (unsigned)SSTV_RX_ROWS);
-				break;
-			case SSTV_RX_DONE:
-				snprintf(line, sizeof(line), "%s done", st.modeName);
-				break;
-			default:
-				if (st.lastVis)
-				{
-					snprintf(line, sizeof(line), "SSTV (VIS %u?)", (unsigned)st.lastVis); // last VIS code was not a known mode
-				}
-				else
-				{
-					snprintf(line, sizeof(line), "SSTV %ddBm", trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));
-				}
-				break;
-		}
-
-		if (st.freqHz && (strlen(line) < (SSTV_CHARS - 7)))
-		{
-			size_t l = strlen(line);
-			snprintf(&line[l], (sizeof(line) - l), " %uHz", (unsigned)st.freqHz);
-		}
+		drawIdle(&st, &rx);
 	}
-
-	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_STATUS_H, true);
-	displayPrintAt(0, ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
 	displayRender();
 }
 
 static void sstvScreenStart(void)
 {
-	displayClearBuf();
-	drawHint();
 	hasPicture = false;
 	lastState = SSTV_RX_IDLE;
 	lastDraw = 0;
@@ -157,7 +249,6 @@ menuStatus_t menuSSTV(uiEvent_t *ev, bool isFirstRun)
 			else if (KEYCHECK_SHORTUP(ev->keys, KEY_0))
 			{
 				sstvRxRestart();
-				drawHint();
 				hasPicture = false;
 				lastState = SSTV_RX_IDLE;
 				soundSetMelody(MELODY_ACK_BEEP);

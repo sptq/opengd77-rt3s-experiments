@@ -204,6 +204,10 @@ bool contactIDLookup(uint32_t id, ContactCalltype_t calltype, char *buffer);
 void uiUtilityRenderQSOData(void);
 void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning, bool forceBatteryDisplay);
 void uiUtilityRedrawHeaderOnly(bool isVFODualWatchScanning, bool isVFOSweepScanning, bool forceBatteryDisplay);
+#if defined(HAS_SOFT_VOLUME)
+int uiUtilityVolumeLevel(void);              // Fork: -1 muted, 0..4
+bool uiUtilityVolumeIndicatorChanged(void);  // the header needs a redraw
+#endif
 LinkItem_t *lastHeardFindInList(uint32_t id);
 void lastHeardInitList(void);
 void lastHeardClearWorkingTAData(void);

@@ -243,6 +243,7 @@ void menuPrivateCallDismiss(void);
 void menuHotspotRestoreSettings(void);
 
 bool menuTxScreenDisplaysLastHeard(void);
+bool menuTxScreenIsSatellite(void); // Fork: TX started from the satellite screen
 void menuTxScreenHandleTxTermination(uiEvent_t *ev, txTerminationReason_t reason);
 
 void menuSatelliteScreenClearPredictions(bool reloadKeps);
@@ -265,6 +266,7 @@ void uiChannelModeHeartBeatActivityForGD77S(uiEvent_t *ev);
 void uiNotificationShow(uiNotificationType_t type, uiNotificationID_t id, uint32_t msTimeout, const char *message, bool immediateRender);
 void uiNotificationBearingShow(uiNotificationBearingInfo_t *bearing, uint32_t msTimeout, bool immediateRender);
 void uiNotificationRefresh(void);
+uint16_t *uiNotificationScratchBuffer(void); // Fork: off-screen drawing (EMCOM UI)
 bool uiNotificationHasTimedOut(void);
 bool uiNotificationIsVisible(void);
 void uiNotificationHide(bool immediateRender);
@@ -329,6 +331,7 @@ enum MENU_SCREENS
 #define HAS_APRS_RX_MENU
 	MENU_SSTV,// Fork: SSTV picture receive
 	MENU_APRS_RX,// Fork: APRS receive (frames, stations, radar, messages, DTMF, CW)
+	MENU_EVENT_LOG,// Fork: EMCOM event log
 #endif
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 	UI_MESSAGE_BOX,
@@ -418,6 +421,7 @@ typedef enum
 	QUICKKEY_ACTION_BAND_SCOPE,
 	QUICKKEY_ACTION_SWEEP_TUNE_PEAK,
 	QUICKKEY_ACTION_APRS_RX_TOGGLE, // Fork: APRS receive in background
+	QUICKKEY_ACTION_SOS,            // Fork: EMCOM SOS (press twice)
 	QUICKKEY_ACTION_MAX
 } quickkeyAction_t;
 
@@ -488,6 +492,7 @@ menuStatus_t menuRSSIScreen(uiEvent_t *event, bool isFirstRun);
 #if defined(HAS_SSTV_MENU)
 menuStatus_t menuSSTV(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuAPRSRx(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuEventLog(uiEvent_t *event, bool isFirstRun);
 #endif
 menuStatus_t menuLastHeard(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuGeneralOptions(uiEvent_t *event, bool isFirstRun);

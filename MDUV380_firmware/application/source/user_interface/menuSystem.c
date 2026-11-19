@@ -27,6 +27,7 @@
  */
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 
@@ -95,6 +96,7 @@ menuDataGlobal_t menuDataGlobal =
 #if defined(HAS_SSTV_MENU)
 				NULL,// SSTV
 				NULL,// APRS RX
+				NULL,// Event log
 #endif
 				// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 				NULL,// MessageBox
@@ -159,6 +161,7 @@ static menuFunctionData_t menuFunctions[] =
 #if defined(HAS_SSTV_MENU)
 		{ menuSSTV,                 NULL, NULL, 0 },
 		{ menuAPRSRx,               NULL, NULL, 0 },
+		{ menuEventLog,             NULL, NULL, 0 },
 #endif
 		// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 		{ uiMessageBox,             NULL, NULL, 0 },
@@ -673,6 +676,7 @@ const menuItemNewData_t mainMenuItems[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
+	{ 284, MENU_EVENT_LOG       },// stringOffset 284 = .event_log field (fork)
 	{ 282, MENU_SSTV            },// stringOffset 282 = .sstv field (fork, end of stringsTable_t)
 #endif
 };
@@ -726,6 +730,51 @@ void menuDisplayTitle(const char *title)
 
 	displayThemeGetForegroundAndBackgroundItems(&fgItem, &bgItem);
 
+#if defined(HAS_EMCOM_UI)
+	// Fork: EMCOM style title bar: left aligned capitals, list position on the right
+	if (emcomStyleEnabled())
+	{
+		char buf[SCREEN_LINE_BUFFER_SIZE + 1];
+		size_t n = 0;
+
+		displayThemeApply(THEME_ITEM_BG_MENU_NAME, THEME_ITEM_COLOUR_NONE);
+		displayFillRect(0, 0, DISPLAY_SIZE_X, MENU_HEADER_HEIGHT, false);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+		displayFillRect(0, 0, 3, (MENU_HEADER_HEIGHT - 1), false); // accent
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawFastHLine(0, (MENU_HEADER_HEIGHT - 1), DISPLAY_SIZE_X, true);
+
+		for (; title[n] && (n < SCREEN_LINE_BUFFER_SIZE); n++)
+		{
+			char c = title[n];
+			buf[n] = (((c >= 'a') && (c <= 'z')) ? (char)(c - ('a' - 'A')) : c);
+		}
+		buf[n] = 0;
+
+		int16_t posW = 0;
+		if (menuDataGlobal.numItems > 1)
+		{
+			char pos[12];
+
+			snprintf(pos, sizeof(pos), "%d/%d", (int)(menuDataGlobal.currentItemIndex + 1), (int)menuDataGlobal.numItems);
+			posW = (int16_t)(strlen(pos) * 6);
+			displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+			displayPrintCore((DISPLAY_SIZE_X - 3 - posW), 4, pos, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+		}
+
+		size_t maxChars = (size_t)((DISPLAY_SIZE_X - 8 - (posW ? (posW + 6) : 0)) / 8);
+		if (strlen(buf) > maxChars)
+		{
+			buf[maxChars] = 0;
+		}
+		displayThemeApply(THEME_ITEM_FG_MENU_NAME, THEME_ITEM_BG);
+		displayPrintCore(7, 3, buf, FONT_SIZE_2, TEXT_ALIGN_LEFT, false);
+
+		displayThemeApply(fgItem, bgItem);
+		return;
+	}
+#endif
+
 #if defined(HAS_COLOURS)
 	displayThemeApply(THEME_ITEM_BG_MENU_NAME, THEME_ITEM_COLOUR_NONE);
 	displayFillRect(0, 0, DISPLAY_SIZE_X, MENU_HEADER_HEIGHT, false);
@@ -747,7 +796,11 @@ void menuDisplayEntry(int loopOffset, int focusedItem, const char *entryText, in
 {
 	bool focused = (focusedItem == menuDataGlobal.currentItemIndex);
 
-	if (focused)
+	if (focused
+#if defined(HAS_EMCOM_UI)
+			&& (emcomStyleEnabled() == false)
+#endif
+	)
 	{
 		displayThemeApply(THEME_ITEM_BG_MENU_ITEM_SELECTED, bgItem);
 		displayFillRoundRect(DISPLAY_X_POS_MENU_OFFSET, DISPLAY_Y_POS_MENU_ENTRY_HIGHLIGHT
@@ -756,8 +809,49 @@ void menuDisplayEntry(int loopOffset, int focusedItem, const char *entryText, in
 #endif
 				+ (loopOffset * MENU_ENTRY_HEIGHT), DISPLAY_SIZE_X - (DISPLAY_X_POS_MENU_OFFSET * 2), MENU_ENTRY_HEIGHT, 2, true);
 	}
+#if defined(HAS_EMCOM_UI)
+	else if (focused)
+	{
+		// Fork: EMCOM style selection, full width with a marker on the left
+		int16_t y = (DISPLAY_Y_POS_MENU_ENTRY_HIGHLIGHT + (loopOffset * MENU_ENTRY_HEIGHT));
+
+		displayThemeApply(THEME_ITEM_BG_MENU_ITEM_SELECTED, bgItem);
+		displayFillRect(0, y, DISPLAY_SIZE_X, MENU_ENTRY_HEIGHT, false);
+		displayThemeApply(THEME_ITEM_BG, bgItem);
+		displayFillRect(0, (y + 3), 2, (MENU_ENTRY_HEIGHT - 6), false);
+	}
+#endif
 
 	displayThemeApply(fgItem, bgItem);
+
+#if defined(HAS_EMCOM_UI)
+	// Fork: EMCOM style option rows: label on the left (without the ':'), value right aligned
+	if (emcomStyleEnabled() && (optStart > 0) && ((size_t)optStart <= strlen(entryText)))
+	{
+		char label[SCREEN_LINE_BUFFER_SIZE];
+		const char *value = (entryText + optStart);
+		int16_t y = (DISPLAY_Y_POS_MENU_ENTRY_HIGHLIGHT + (loopOffset * MENU_ENTRY_HEIGHT));
+
+		snprintf(label, ((optStart < SCREEN_LINE_BUFFER_SIZE) ? optStart : SCREEN_LINE_BUFFER_SIZE), "%s", entryText); // drops the ':'
+		while (*value == ' ')
+		{
+			value++;
+		}
+
+		int16_t valueW = (int16_t)(strlen(value) * 8);
+		int16_t labelW = (int16_t)(strlen(label) * 8);
+
+		if ((DISPLAY_X_POS_MENU_TEXT_OFFSET + labelW + 8 + valueW) <= (DISPLAY_SIZE_X - 4))
+		{
+			displayThemeApply(fgItem, bgItem);
+			displayPrintCore(DISPLAY_X_POS_MENU_TEXT_OFFSET, y, label, FONT_SIZE_3, TEXT_ALIGN_LEFT, focused);
+			displayThemeApply((focused ? fgItem : fgOptItem), bgItem);
+			displayPrintCore((DISPLAY_SIZE_X - 4 - valueW), y, value, FONT_SIZE_3, TEXT_ALIGN_LEFT, focused);
+			displayThemeResetToDefault();
+			return;
+		}
+	}
+#endif
 
 	if ((focused == false) && ((optStart < 0) || (optStart > 0)))
 	{

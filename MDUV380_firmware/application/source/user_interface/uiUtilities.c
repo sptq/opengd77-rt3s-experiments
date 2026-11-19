@@ -34,6 +34,7 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
+#include "user_interface/uiEmcom.h"
 #include "hardware/SPI_Flash.h"
 #include "functions/trx.h"
 #include "functions/rxPowerSaving.h"
@@ -89,6 +90,9 @@ static struct tm timeAndDate;
 static ticksTimer_t batOrTimeTimer = { 0, 0 };
 static bool         displayTimeInHeader = false;
 #endif
+#endif
+#if defined(HAS_SOFT_VOLUME)
+static int          volumeIndicatorLevel = -2; // level drawn in the header (fork)
 #endif
 
 static void announceChannelNameOrVFOFrequency(bool voicePromptWasPlaying, bool announceVFOName);
@@ -1733,6 +1737,22 @@ void uiUtilityRenderQSODataAndUpdateScreen(void)
 {
 	if (isQSODataAvailableForCurrentTalker())
 	{
+#if defined(HAS_EMCOM_UI)
+		if (emcomScreenActive())
+		{
+			// The EMCOM screen has its own caller panel
+			uiDataGlobal.displayQSOState = QSO_DISPLAY_CALLER_DATA;
+			if (menuSystemGetRootMenuNumber() == UI_VFO_MODE)
+			{
+				uiVFOModeUpdateScreen(0);
+			}
+			else
+			{
+				uiChannelModeUpdateScreen(0);
+			}
+			return;
+		}
+#endif
 		displayClearBuf();
 		uiUtilityRenderHeader(false, false, false);
 		uiUtilityRenderQSOData();
@@ -1887,6 +1907,18 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 
 #if ! defined(HAS_COLOURS) || defined(PLATFORM_MD9600)
 	UNUSED_PARAMETER(forceBatteryDisplay);
+#endif
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive() && (isVFODualWatchScanning == false) && (isVFOSweepScanning == false))
+	{
+		emcomRenderStatusBar();
+		if (isTransmittingIgnoringAPRSBeaconing() == false)
+		{
+			emcomDrawRssi(trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));
+		}
+		return;
+	}
 #endif
 
 	if (settingsIsOptionBitSet(BIT_BATTERY_VOLTAGE_IN_HEADER))
@@ -2179,6 +2211,39 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 	// Display battery percentage/voltage
 	bool apoEnabled = (nonVolatileSettings.apo > 0);
 
+#if defined(HAS_SOFT_VOLUME) && (defined(HAS_COLOURS) || defined(PLATFORM_MD9600))
+	// Fork: volume knob position, 4 bars left of the GPS label ('x' when muted)
+	if (isVFOSweepScanning == false)
+	{
+		int16_t volX = (DISPLAY_SIZE_X - (50 + (displayTime ? 2 : 0))) - 9;
+		int level = uiUtilityVolumeLevel();
+
+		volumeIndicatorLevel = level;
+		if (level < 0)
+		{
+			displayDrawLine(volX, (DISPLAY_Y_POS_HEADER + 1), (volX + 5), (DISPLAY_Y_POS_HEADER + 6), true);
+			displayDrawLine(volX, (DISPLAY_Y_POS_HEADER + 6), (volX + 5), (DISPLAY_Y_POS_HEADER + 1), true);
+		}
+		else
+		{
+			for (int b = 0; b < 4; b++)
+			{
+				int16_t h = (2 * (b + 1));
+				int16_t x = (volX + (b * 2));
+
+				if (b < level)
+				{
+					displayDrawFastVLine(x, ((DISPLAY_Y_POS_HEADER + 8) - h), h, true);
+				}
+				else
+				{
+					displaySetPixel(x, (DISPLAY_Y_POS_HEADER + 7), true); // unlit bar: a dot
+				}
+			}
+		}
+	}
+#endif
+
 #if defined(HAS_GPS)
 #if defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) >= GPS_MODE_ON)
@@ -2224,6 +2289,23 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 	displayThemeResetToDefault();
 }
 
+#if defined(HAS_SOFT_VOLUME)
+// Fork: volume indicator in the header. -1 = muted, 0..4 bars.
+int uiUtilityVolumeLevel(void)
+{
+	if (lastVolume <= -99)
+	{
+		return -1;
+	}
+	return (((lastVolume + 31) * 4) + 31) / 62;
+}
+
+bool uiUtilityVolumeIndicatorChanged(void)
+{
+	return (uiUtilityVolumeLevel() != volumeIndicatorLevel);
+}
+#endif
+
 void uiUtilityRedrawHeaderOnly(bool isVFODualWatchScanning, bool isVFOSweepScanning, bool forceBatteryDisplay)
 {
 	if (isVFOSweepScanning)
@@ -2247,6 +2329,14 @@ static void drawHeaderBar(int *barWidth, int16_t barHeight)
 {
 	*barWidth = CLAMP(*barWidth, 0, DISPLAY_SIZE_X);
 
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive())
+	{
+		emcomDrawBar(*barWidth, isTransmittingIgnoringAPRSBeaconing()); // Fork: segmented bar under the status bar
+		return;
+	}
+#endif
+
 	displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_HEADER_TEXT);
 	if (*barWidth)
 	{
@@ -2265,6 +2355,14 @@ static void drawHeaderBar(int *barWidth, int16_t barHeight)
 void uiUtilityDrawRSSIBarGraph(void)
 {
 	int rssi = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomScreenActive())
+	{
+		emcomDrawRssi(rssi);
+		return;
+	}
+#endif
 
 	if ((rssi > SMETER_S9) && (trxGetMode() == RADIO_MODE_ANALOG))
 	{

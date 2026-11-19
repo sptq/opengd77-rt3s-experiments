@@ -12,6 +12,7 @@
 #endif
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 #include "interfaces/i2s.h"
@@ -57,6 +58,9 @@ static const uint16_t quickkeyChoices[] =
 #if defined(I2S_APRS_RX)
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_APRS_RX_TOGGLE),
 #endif
+#if defined(HAS_EMCOM_UI)
+	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_SOS),
+#endif
 	QUICKKEY_MENUVALUE(MENU_RSSI_SCREEN, 0, 0),
 	QUICKKEY_MENUVALUE(MENU_LAST_HEARD, 0, 0),
 	QUICKKEY_MENULONGVALUE(MENU_ZONE_LIST, 0),
@@ -71,6 +75,7 @@ static const uint16_t quickkeyChoices[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	QUICKKEY_MENUVALUE(MENU_APRS_RX, 0, 0),
+	QUICKKEY_MENUVALUE(MENU_EVENT_LOG, 0, 0),
 	QUICKKEY_MENUVALUE(MENU_SSTV, 0, 0),
 #endif
 };
@@ -99,6 +104,8 @@ const char *quickkeyActionGetName(quickkeyAction_t action)
 			return "Scope: to peak";
 		case QUICKKEY_ACTION_APRS_RX_TOGGLE:
 			return "APRS RX on/off";
+		case QUICKKEY_ACTION_SOS:
+			return "SOS (press x2)";
 		default:
 			break;
 	}
@@ -175,6 +182,11 @@ bool quickkeyActionExecute(quickkeyAction_t action, bool isChannelMode)
 		case QUICKKEY_ACTION_APRS_RX_TOGGLE:
 			// Same as SK1 + 4
 			aprsRxToggleBackground();
+			return true;
+#endif
+#if defined(HAS_EMCOM_UI)
+		case QUICKKEY_ACTION_SOS:
+			emcomSosRequest();
 			return true;
 #endif
 

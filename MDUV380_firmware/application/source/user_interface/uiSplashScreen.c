@@ -25,9 +25,11 @@
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#include <math.h>
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 
 static void updateScreen(bool isFirstRun);
@@ -151,6 +153,38 @@ static void updateScreen(bool isFirstRun)
 #endif
 	}
 
+#if defined(HAS_EMCOM_UI)
+	if ((customDataHasImage == false) && emcomStyleEnabled())
+	{
+		// Fork: SP7TEAM boot screen (emblem: antenna mast with radio waves)
+		const int16_t cx = (DISPLAY_SIZE_X / 2);
+		const int16_t ty = 13; // top of the mast
+
+		displayClearBuf();
+
+		emcomDrawEmblem(cx, ty, THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+
+		// name
+		displayPrintCentered(36, "SP7TEAM", FONT_SIZE_4);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintCentered(64, "EMCOM FIELD FIRMWARE", FONT_SIZE_1);
+		displayFillRect(30, 75, (DISPLAY_SIZE_X - 60), 1, false);
+
+		// what it does
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintCentered(82, "FM  DMR  APRS", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintCentered(101, "SSTV  DTMF  CW  GPS", FONT_SIZE_1);
+
+		// version bar
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG_SPLASHSCREEN);
+		displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCentered((DISPLAY_SIZE_Y - 9), "OpenGD77 " GITVERSION, FONT_SIZE_1);
+	}
+	else
+#endif
 	if (!customDataHasImage)
 	{
 		displayClearBuf();

@@ -38,6 +38,7 @@
 #include "functions/settings.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "utils.h"
 #include "stm32f4xx_hal.h"
 
@@ -999,8 +1000,27 @@ void displayFillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t
 /*
  * Draw a rounded rectangle
  */
+// Fork: EMCOM style draws square boxes without drop shadows
+static bool displayFlatStyle = false;
+
+void displaySetFlatStyle(bool flat)
+{
+	displayFlatStyle = flat;
+}
+
+bool displayGetFlatStyle(void)
+{
+	return displayFlatStyle;
+}
+
 void displayDrawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayDrawRect(x, y, w, h, isInverted);
+		return;
+	}
+
 	// smarter version
 	displayDrawFastHLine(x + r    , y        , w - 2 * r, isInverted); // Top
 	displayDrawFastHLine(x + r    , y + h - 1, w - 2 * r, isInverted); // Bottom
@@ -1018,6 +1038,12 @@ void displayDrawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r,
  */
 void displayFillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, y, w, h, !isInverted);
+		return;
+	}
+
 	displayFillRect(x + r, y, w - 2 * r, h, !isInverted);
 
 	// draw four corners
@@ -1030,6 +1056,14 @@ void displayFillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r,
  */
 void displayDrawRoundRectWithDropShadow(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, (y - 2), (w + 2), h, isInverted);     // box (also where the shadow would be)
+		displayDrawRect(x, (y - 2), w, h, isInverted);           // outline
+		displayFillRect(x, (y - 2), w, 2, !isInverted);          // thicker top edge
+		return;
+	}
+
 	displayFillRoundRect(x + 2, y, w, h, r, isInverted); // Shadow
 	displayFillRoundRect(x, y - 2, w, h, r, !isInverted); // Empty box
 	displayDrawRoundRect(x, y - 2, w, h, r, isInverted); // Outline
@@ -1068,6 +1102,13 @@ void displayFillRect(int16_t x, int16_t y, int16_t width, int16_t height, bool i
  */
 void displayDrawRectWithDropShadow(int16_t x, int16_t y, int16_t w, int16_t h, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, (y - 2), (w + 2), h, isInverted);
+		displayDrawRect(x, (y - 2), w, h, isInverted);
+		return;
+	}
+
 	displayFillRect(x + 2, y, w, h, !isInverted); // Shadow
 	displayFillRect(x, y - 2, w, h, isInverted); // Empty box
 	displayDrawRect(x, y - 2, w, h, isInverted); // Outline
@@ -1189,6 +1230,39 @@ void displayDrawChoice(ucChoice_t choice, bool clearRegion)
 
 	lText = choices[choice].lText;
 	rText = choices[choice].rText;
+
+	if (displayFlatStyle)
+	{
+		// Fork: EMCOM soft key bar: GREEN action on the left, RED action on the right
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+		displayFillRect(0, FILLRECT_Y, DISPLAY_SIZE_X, 16, false);
+
+		if (lText)
+		{
+			int16_t w = (int16_t)((strlen(lText) * 8) + 8);
+			displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+			displayFillRect(2, (FILLRECT_Y + 2), w, 12, false);
+			displayPrintCore(6, (FILLRECT_Y + 4), lText, FONT_SIZE_2, TEXT_ALIGN_LEFT, true);
+		}
+		if (rText)
+		{
+			int16_t w = (int16_t)((strlen(rText) * 8) + 8);
+			displayThemeApply(THEME_ITEM_FG_TX_COUNTER, THEME_ITEM_BG);
+			displayFillRect((DISPLAY_SIZE_X - 2 - w), (FILLRECT_Y + 2), w, 12, false);
+			displayPrintCore((DISPLAY_SIZE_X - 2 - w + 4), (FILLRECT_Y + 4), rText, FONT_SIZE_2, TEXT_ALIGN_LEFT, true);
+		}
+		if (choice == CHOICES_OKARROWS)
+		{
+			displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+			for (int a = 0; a < 2; a++)
+			{
+				displayFillTriangle(ucTriangleArrows[a][0], (ucTriangleArrows[a][1] - 1), ucTriangleArrows[a][2], (ucTriangleArrows[a][3] - 1),
+						ucTriangleArrows[a][4], (ucTriangleArrows[a][5] - 1), true);
+			}
+		}
+		displayThemeResetToDefault();
+		return;
+	}
 
 	displayThemeApply(THEME_ITEM_FG_NOTIFICATION, THEME_ITEM_BG);
 	if (lText)
@@ -1329,6 +1403,9 @@ void displayBegin(bool isInverted, bool SPIFlashAvailable)
 {
 	displaySetInvertedState(isInverted);
 	themeInit(SPIFlashAvailable);
+#if defined(HAS_EMCOM_UI)
+	displaySetFlatStyle(emcomStyleEnabled()); // Fork: EMCOM style for the whole UI
+#endif
 }
 
 void displaySetContrast(uint8_t contrast)
@@ -1439,7 +1516,34 @@ void themeInitToDefaultValues(DayTime_t daytime, bool invert)
 	themeItems[daytime][THEME_ITEM_FG_GPS_NUMBER] = foregroundColour;
 	themeItems[daytime][THEME_ITEM_FG_GPS_COLOUR] = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT(0x0000FFU));
 	themeItems[daytime][THEME_ITEM_FG_BD_COLOUR] = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT(0xFF0000U));
+
+#if defined(HAS_EMCOM_UI)
+	// Fork: EMCOM style default colours (dark by day, red at night)
+	if (emcomStyleEnabled())
+	{
+		emcomThemePreset((daytime == NIGHT), themeItems[daytime]);
+		if (daytime == DAY)
+		{
+			foregroundColour = themeItems[DAY][THEME_ITEM_FG_DEFAULT];
+			backgroundColour = themeItems[DAY][THEME_ITEM_BG];
+		}
+	}
+#endif
 }
+
+#if defined(HAS_EMCOM_UI)
+// Fork: a stored theme that is just the classic black / white default (e.g. written when the
+// custom data area was formatted) must not hide the EMCOM colours. A customised one still wins.
+static bool themeIsClassicDefault(const uint16_t *items, bool invert)
+{
+	uint16_t fg = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT((invert ? 0xFFFFFFU : 0x000000U)));
+	uint16_t bg = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT((invert ? 0x000000U : 0xFFFFFFU)));
+
+	return ((items[THEME_ITEM_FG_DEFAULT] == fg) && (items[THEME_ITEM_BG] == bg) &&
+			(items[THEME_ITEM_BG_MENU_ITEM_SELECTED] == fg) && (items[THEME_ITEM_BG_HEADER_TEXT] == bg) &&
+			(items[THEME_ITEM_FG_RSSI_BAR] == fg) && (items[THEME_ITEM_FG_MENU_NAME] == fg));
+}
+#endif
 
 void themeInit(bool SPIFlashAvailable)
 {
@@ -1451,7 +1555,11 @@ void themeInit(bool SPIFlashAvailable)
 	{
 		uint16_t themingTmp[THEME_ITEM_MAX];
 
-		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_DAY, (uint8_t *) &themingTmp))
+		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_DAY, (uint8_t *) &themingTmp)
+#if defined(HAS_EMCOM_UI)
+				&& ((emcomStyleEnabled() == false) || (themeIsClassicDefault(themingTmp, false) == false))
+#endif
+				)
 		{
 			memcpy(&themeItems[DAY], &themingTmp, sizeof(themingTmp));
 
@@ -1459,7 +1567,11 @@ void themeInit(bool SPIFlashAvailable)
 			backgroundColour = themeItems[DAY][THEME_ITEM_BG];
 		}
 
-		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_NIGHT, (uint8_t *) &themingTmp))
+		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_NIGHT, (uint8_t *) &themingTmp)
+#if defined(HAS_EMCOM_UI)
+				&& ((emcomStyleEnabled() == false) || (themeIsClassicDefault(themingTmp, true) == false))
+#endif
+				)
 		{
 			memcpy(&themeItems[NIGHT], &themingTmp, sizeof(themingTmp));
 		}

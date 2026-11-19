@@ -29,6 +29,7 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
+#include "user_interface/uiEmcom.h"
 
 
 #if defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MDUV380) || defined(PLATFORM_MD2017)
@@ -118,6 +119,86 @@ menuStatus_t menuLastHeard(uiEvent_t *ev, bool isFirstRun)
 	return menuLastHeardExitCode;
 }
 
+#if defined(HAS_EMCOM_UI)
+// Fork: EMCOM style row: callsign (8x16) on the left, TG / PC and age on the right, two small lines;
+// details: rest of the alias and the DMR ID. The classic row is drawn off-screen first for its voice prompts.
+static void emcomLastHeardRow(int16_t y, const char *text, LinkItem_t *item, uint32_t now, bool displayDetails, bool selected)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+	char call[SCREEN_LINE_BUFFER_SIZE];
+	uint32_t tg = (item->talkGroupOrPcId & 0xFFFFFF);
+	bool isPC = ((item->talkGroupOrPcId >> 24) == PC_CALL_FLAG);
+	uint32_t mins = (((now - item->time) / 1000U) / 60U);
+	const char *ts = ((item->dmrMode == DMR_MODE_RMO) ? ((item->receivedTS == 0) ? "TS1 " : "TS2 ") : "");
+
+	if (selected)
+	{
+		displayThemeApply(THEME_ITEM_BG_MENU_ITEM_SELECTED, THEME_ITEM_BG);
+		displayFillRect(0, y, DISPLAY_SIZE_X, MENU_ENTRY_HEIGHT, false);
+		displayThemeApply(THEME_ITEM_BG, THEME_ITEM_BG);
+		displayFillRect(0, (y + 3), 2, (MENU_ENTRY_HEIGHT - 6), false);
+	}
+	else
+	{
+		displayThemeApply(THEME_ITEM_BG, THEME_ITEM_BG);
+		displayFillRect(0, y, DISPLAY_SIZE_X, MENU_ENTRY_HEIGHT, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawFastHLine(0, (y + MENU_ENTRY_HEIGHT - 1), DISPLAY_SIZE_X, true);
+	}
+
+	getCallsignOnly(call, text);
+	call[10] = 0;
+
+	if (displayDetails)
+	{
+		const char *rest = text;
+		while (*rest && (*rest != ' '))
+		{
+			rest++;
+		}
+		while (*rest == ' ')
+		{
+			rest++;
+		}
+		snprintf(buf, 17, "%s", (*rest ? rest : call));
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(6, y, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, selected);
+		snprintf(buf, sizeof(buf), "ID %u", (unsigned)(item->id & 0xFFFFFF));
+		displayThemeApply((selected ? THEME_ITEM_FG_DEFAULT : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
+		displayPrintCore(6, (y + 8), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, selected);
+	}
+	else
+	{
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(6, y, call, FONT_SIZE_3, TEXT_ALIGN_LEFT, selected);
+	}
+
+	// right column: TG / PRIVATE, then TS and age
+	if (isPC)
+	{
+		snprintf(buf, sizeof(buf), "PRIVATE");
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "TG%u", (unsigned)tg);
+	}
+	displayThemeApply((selected ? THEME_ITEM_FG_DEFAULT : (isPC ? THEME_ITEM_FG_RSSI_BAR_S9P : THEME_ITEM_FG_RX_FREQ)), THEME_ITEM_BG);
+	displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(buf) * 6)), y, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, selected);
+
+	if (mins < 60U)
+	{
+		snprintf(buf, sizeof(buf), "%s%um", ts, (unsigned)mins);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "%s%uh", ts, (unsigned)(mins / 60U));
+	}
+	displayThemeApply((selected ? THEME_ITEM_FG_DEFAULT : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
+	displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(buf) * 6)), (y + 8), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, selected);
+	displayThemeResetToDefault();
+}
+#endif
+
 void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool isFirstRun)
 {
 	int numDisplayed = 0;
@@ -194,6 +275,13 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 					break;
 			}
 
+#if defined(HAS_EMCOM_UI)
+			bool emcomRow = (emcomStyleEnabled() && (uiNotificationScratchBuffer() != NULL));
+			if (emcomRow)
+			{
+				displayOverrideScreenBuffer(uiNotificationScratchBuffer()); // classic row: voice prompts only
+			}
+#endif
 			if (displayTA)
 			{
 				displayTalkerAlias(16 + (numDisplayed * MENU_ENTRY_HEIGHT) + LH_ENTRY_V_OFFSET, item->talkerAlias, item->time, now, item->talkGroupOrPcId, 32, displayDetails, invertColour, isFirstRun, item);
@@ -202,6 +290,14 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 			{
 				displayTalkerAlias(16 + (numDisplayed * MENU_ENTRY_HEIGHT) + LH_ENTRY_V_OFFSET, item->contact, item->time, now, item->talkGroupOrPcId, MAX_DMR_ID_CONTACT_TEXT_LENGTH, displayDetails, invertColour, isFirstRun, item);
 			}
+#if defined(HAS_EMCOM_UI)
+			if (emcomRow)
+			{
+				displayRestorePrimaryScreenBuffer();
+				emcomLastHeardRow((int16_t)(16 + (numDisplayed * MENU_ENTRY_HEIGHT)), (displayTA ? item->talkerAlias : item->contact), item, now, displayDetails, invertColour);
+				displayThemeApply(THEME_ITEM_FG_CHANNEL_CONTACT_INFO, THEME_ITEM_BG);
+			}
+#endif
 
 			numDisplayed++;
 
