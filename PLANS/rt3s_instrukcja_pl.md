@@ -148,11 +148,21 @@ Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
    * `E` to ramki z błędną sumą kontrolną (zakłócone albo za słabe).
 4. Poniżej widać ostatnie ramki, najnowsza na górze: `NADAWCA>CEL` i wiek ramki, a pod spodem 2 linie treści.
 
-Klawisz `#` przełącza widoki: **ramki → stacje → radar**.
+Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości → DTMF → CW**.
 
 * **Ramki** (`APRS frames`): ostatnie ramki, `*` otwiera widok surowy wybranej ramki: pełna linia TNC2 (`NADAWCA>CEL,ŚCIEŻKA*:treść`) i zrzut hex bajtów.
 * **Stacje** (`APRS stations`): ostatnio słyszane stacje i obiekty, najnowsza na górze: znak, odległość, azymut, wiek. W dolnej linii prędkość, kurs i liczba odebranych ramek wybranej stacji.
-* **Radar** (`APRS radar`): północ u góry, Ty w środku, stacje jako kropki, wybrana w kółku. Po prawej znak, odległość, azymut, wiek i prędkość, na dole zasięg radaru (`R 10km`), dobierany sam do najdalszej stacji.
+* **Radar** (`APRS radar`): północ u góry, Ty w środku, stacje jako kropki, wybrana w kółku. Po prawej znak, odległość, azymut, wiek i prędkość, na dole zasięg radaru (`R 10km`), dobierany sam do najdalszej stacji. Waypoint z menu GPS jest kwadracikiem.
+* **Wiadomości** (`APRS messages`): wiadomości APRS do Ciebie (`<`), biuletyny (`B`) i wysłane przez Ciebie (`>`), ze statusem `...` (czeka na ACK, z numerem próby), `ACK`, `REJ`, `FAIL` (brak ACK po 3 próbach) albo `noTX` (brak konfiguracji APRS na kanale). Liczba nieprzeczytanych to `M2` w linii statusu.
+* **DTMF** (`DTMF decoder`): odebrane cyfry DTMF dużą czcionką; przerwa ponad 1,5 s rozdziela sekwencje spacją.
+* **CW** (`CW decoder`): dekodowany Morse (np. znaki przemienników) z prędkością w WPM i częstotliwością tonu; `#` w dolnej linii, gdy ton jest kluczowany.
+
+#### Wiadomości APRS
+
+* Wiadomość do Ciebie: powiadomienie `NADAWCA:treść` z dźwiękiem, radio samo odsyła ACK (ok. 2 s po odebraniu, gdy kanał jest wolny).
+* Twój znak to nazwa radia (callsign z ustawień) i SSID z konfiguracji APRS kanału/VFO. Bez konfiguracji APRS na kanale radio tylko odbiera, bez ACK (podpowiedź widać w pustym widoku wiadomości).
+* **Odpowiedź:** w widoku wiadomości wybierz wiadomość i naciśnij `GREEN`. **Nowa wiadomość:** to samo w widoku stacji lub radaru na wybranej stacji. Wybierz gotowy tekst (`QSL`, `OK`, `73`, `Roger`, `Thanks!`, `Yes`, `No`, `Call me`, `QRV?`, `QRX 5 min`, `On my way`, `QRT`) i `GREEN` wysyła, `RED` anuluje.
+* Wysłana wiadomość jest powtarzana co 30 s, maksymalnie 3 razy, aż przyjdzie ACK. Nadawanie idzie na częstotliwość QSY z konfiguracji APRS, jeśli jest ustawiona, inaczej na bieżącym kanale (tylko FM).
 
 Pozycje są odczytywane z ramek zwykłych, skompresowanych, Mic-E (popularne w radiach mobilnych), obiektów i itemów. Twoja pozycja to fix GPS, a bez fixa lokalizacja z ustawień radia.
 
@@ -162,8 +172,9 @@ Klawisze w monitorze:
 |---|---|
 | `#` | następny widok: ramki, stacje, radar |
 | `▲` / `▼` | wybór ramki lub stacji (w widoku surowym: przewijanie) |
-| `*` | widok surowy wybranej ramki (w widoku ramek) |
-| `0` | wyczyszczenie listy ramek i stacji |
+| `*` | widok surowy wybranej ramki (w widoku ramek); w widoku stacji/radaru: ustaw stację jako waypoint GPS |
+| `GREEN` | odpowiedź na wiadomość / nowa wiadomość do wybranej stacji |
+| `0` | wyczyszczenie bieżącego widoku (ramki i stacje, wiadomości albo tekst DTMF/CW) |
 | `9` | wyłączenie monitora |
 | `RED` | wyjście z widoku surowego, potem z ekranu RSSI |
 
@@ -173,12 +184,23 @@ Na ekranie VFO lub kanału `SK1 + 4` włącza i wyłącza odbiór APRS w tle (ko
 
 Przy każdej odebranej ramce pojawia się na chwilę powiadomienie, np. `SP7ABC-9 12.3km` (albo `APRS SP7ABC`, gdy ramka nie ma pozycji). Ramki i stacje odebrane w tle widać potem w monitorze (RSSI, `9`).
 
-Ustawienie nie jest zapamiętywane po wyłączeniu radia.
+Ustawienie jest zapamiętywane po wyłączeniu radia. W tle radio pokazuje też sekwencje DTMF (`DTMF 1234`) i odbiera wiadomości APRS (z ACK).
 
 Uwagi:
 * Działa tylko w FM. Status `APRS RX: paused` oznacza nadawanie albo odtwarzany dźwięk (pisk klawisza, komunikat głosowy); odbiór wraca sam po chwili.
 * Zapamiętywanych jest 8 ostatnich ramek, do 200 bajtów każda (dłuższe są ucięte, w widoku hex widać wtedy `+`).
 * Gdy `E` rośnie, a `OK` nie: sygnał jest, ale za słaby lub zniekształcony; spróbuj lepszej anteny albo innego poziomu głośności nadawcy.
+
+### Ślad GPS do GPX
+
+Radio zapisuje ślad (zdania NMEA) do flasha, gdy w *Opcje → GPS* jest tryb **On+Log** (2 MB, kilka dni jazdy). Na komputerze, z radiem włączonym i podłączonym przez USB:
+
+```sh
+pip install pyserial
+python3 MDUV380_firmware/tools/opengd77_gps_log_to_gpx.py -o trasa.gpx
+```
+
+Każde włączenie logowania to osobny segment trasy w pliku GPX.
 
 ---
 

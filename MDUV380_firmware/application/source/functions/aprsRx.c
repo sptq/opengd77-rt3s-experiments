@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include "main.h"
 #include "functions/aprsRx.h"
+#include "functions/toneRxDecoders.h"
 #include "functions/aprs.h"
 #include "functions/settings.h"
 #include "functions/sound.h"
@@ -31,6 +32,12 @@
 #define NO_CLOCK_RETRY_MS       1000U
 #define LEVEL_WINDOW_MS         1000U
 #define NOTIFICATION_MS         2500U
+#define MSG_NOTIFICATION_MS     5000U
+#define ACK_DELAY_MS            2000U  // let the digipeaters finish first
+#define ACK_QUEUE_SIZE          2U
+#define MSG_RETRY_MS            30000U
+#define MSG_MAX_TRIES           3U
+#define TX_BUSY_RETRY_MS        3000U
 
 static APRS_RX_CCMRAM aprsRxFrame_t queue[QUEUE_SIZE];   // CCM: not zeroed, only read below queueHead
 static volatile uint32_t queueHead; // written by the IRQ
@@ -44,6 +51,31 @@ static uint32_t generation;
 
 static aprsRxStation_t stations[APRS_RX_MAX_STATIONS]; // [0] = last heard
 static uint32_t stationCount;
+
+static APRS_RX_CCMRAM aprsRxMsgEntry_t messages[APRS_RX_MAX_MESSAGES]; // CCM: only read below messageCount
+static uint32_t messageCount;
+
+typedef struct
+{
+	char     to[APRS_RX_CALL_LEN];
+	char     msgId[APRS_RX_MSG_ID_LEN];
+	uint32_t dueMs;
+	uint8_t  tries;
+} ackPending_t;
+static ackPending_t ackQueue[ACK_QUEUE_SIZE];
+static uint32_t ackCount;
+static uint32_t outNextTryMs;   // next (re)try of the pending outgoing message
+static uint32_t outMsgNumber;   // last message number used
+static bool txErrorShown;
+
+// DTMF / CW text rings, written by the IRQ
+static char dtmfRing[APRS_RX_TONE_TEXT_LEN];
+static volatile uint32_t dtmfHead;
+static char cwRing[APRS_RX_TONE_TEXT_LEN];
+static volatile uint32_t cwHead;
+static uint32_t dtmfSeen;          // main loop: chars already looked at (background notification)
+static char dtmfSequence[17];
+static uint32_t dtmfSequenceLen;
 
 static bool monitorOn = false;
 static bool backgroundOn = false;
@@ -92,6 +124,54 @@ void aprsRxProcessI2SBuffer(const int16_t *interleaved, uint32_t frames)
 	peakLevel = peak;
 
 	aprsRxDecoderProcess(interleaved, frames, 2U);
+	dtmfRxProcess(interleaved, frames, 2U);
+	cwRxProcess(interleaved, frames, 2U);
+}
+
+// IRQ context
+static void dtmfCharReceived(char c)
+{
+	dtmfRing[dtmfHead % APRS_RX_TONE_TEXT_LEN] = c;
+	__DMB();
+	dtmfHead++;
+}
+
+// IRQ context
+static void cwCharReceived(char c)
+{
+	cwRing[cwHead % APRS_RX_TONE_TEXT_LEN] = c;
+	__DMB();
+	cwHead++;
+}
+
+uint32_t aprsRxToneText(bool cw, char *out, uint32_t size, uint32_t *serial)
+{
+	const char *ring = (cw ? cwRing : dtmfRing);
+	uint32_t head = (cw ? cwHead : dtmfHead);
+	uint32_t n = ((head < APRS_RX_TONE_TEXT_LEN) ? head : APRS_RX_TONE_TEXT_LEN);
+
+	if (n > (size - 1U))
+	{
+		n = (size - 1U);
+	}
+	for (uint32_t i = 0U; i < n; i++)
+	{
+		out[i] = ring[(head - n + i) % APRS_RX_TONE_TEXT_LEN];
+	}
+	out[n] = 0;
+
+	if (serial)
+	{
+		*serial = head;
+	}
+	return n;
+}
+
+void aprsRxToneTextClear(void)
+{
+	dtmfHead = cwHead = 0U;
+	dtmfSeen = 0U;
+	dtmfSequenceLen = 0U;
 }
 
 static bool captureAllowed(void)
@@ -116,6 +196,8 @@ static void updateEnabled(void)
 	if (enable)
 	{
 		aprsRxDecoderInit(frameReceived);
+		dtmfRxInit(dtmfCharReceived);
+		cwRxInit(cwCharReceived);
 		queueHead = queueTail = 0U;
 		peakLevel = 0U;
 		levelPercent = 0U;
@@ -149,6 +231,7 @@ bool aprsRxGetBackground(void)
 void aprsRxToggleBackground(void)
 {
 	aprsRxSetBackground(!backgroundOn);
+	settingsSetOptionBit(BIT_APRS_RX_BACKGROUND, backgroundOn);
 	uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1500U, (backgroundOn ? "APRS RX: on" : "APRS RX: off"), false);
 }
 
@@ -270,6 +353,335 @@ static void notifyBackground(const aprsRxStation_t *st, bool hasPos)
 	uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, buf, false);
 }
 
+// --- Messages --------------------------------------------------------------------
+bool aprsRxGetOwnCall(char *buf, uint32_t size)
+{
+	return aprsGetOwnCallsign(buf, size);
+}
+
+static aprsRxMsgEntry_t *messageAdd(void)
+{
+	if (messageCount < APRS_RX_MAX_MESSAGES)
+	{
+		messageCount++;
+	}
+	memmove(&messages[1], &messages[0], ((messageCount - 1U) * sizeof(aprsRxMsgEntry_t)));
+	memset(&messages[0], 0, sizeof(aprsRxMsgEntry_t));
+	return &messages[0];
+}
+
+uint32_t aprsRxMessageCount(void)
+{
+	return messageCount;
+}
+
+const aprsRxMsgEntry_t *aprsRxMessageGet(uint32_t index)
+{
+	return ((index < messageCount) ? &messages[index] : NULL);
+}
+
+uint32_t aprsRxMessageUnreadCount(void)
+{
+	uint32_t n = 0U;
+
+	for (uint32_t i = 0U; i < messageCount; i++)
+	{
+		if (messages[i].unread)
+		{
+			n++;
+		}
+	}
+	return n;
+}
+
+void aprsRxMessagesMarkRead(void)
+{
+	for (uint32_t i = 0U; i < messageCount; i++)
+	{
+		messages[i].unread = false;
+	}
+}
+
+static aprsRxMsgEntry_t *messagePendingOut(void)
+{
+	for (uint32_t i = 0U; i < messageCount; i++)
+	{
+		if (messages[i].kind == APRS_MSG_OUT_PENDING)
+		{
+			return &messages[i];
+		}
+	}
+	return NULL;
+}
+
+void aprsRxSendMessage(const char *to, const char *text)
+{
+	aprsRxMsgEntry_t *pending = messagePendingOut();
+
+	if (pending)
+	{
+		pending->kind = APRS_MSG_OUT_FAILED; // only one in flight
+	}
+
+	aprsRxMsgEntry_t *m = messageAdd();
+
+	snprintf(m->peer, sizeof(m->peer), "%s", to);
+	snprintf(m->text, sizeof(m->text), "%s", text);
+	if (outMsgNumber == 0U)
+	{
+		outMsgNumber = (ticksGetMillis() % 89U); // do not restart at 1 on every boot
+	}
+	outMsgNumber = ((outMsgNumber % 99U) + 1U);
+	snprintf(m->msgId, sizeof(m->msgId), "%u", (unsigned)outMsgNumber);
+	m->timeMs = ticksGetMillis();
+	m->kind = APRS_MSG_OUT_PENDING;
+	m->tries = 0U;
+	outNextTryMs = m->timeMs;
+	txErrorShown = false;
+}
+
+static void queueAck(const char *to, const char *msgId, uint32_t now)
+{
+	for (uint32_t i = 0U; i < ackCount; i++)
+	{
+		if ((strcmp(ackQueue[i].to, to) == 0) && (strcmp(ackQueue[i].msgId, msgId) == 0))
+		{
+			return; // already queued
+		}
+	}
+
+	if (ackCount >= ACK_QUEUE_SIZE)
+	{
+		memmove(&ackQueue[0], &ackQueue[1], ((ACK_QUEUE_SIZE - 1U) * sizeof(ackPending_t)));
+		ackCount--;
+	}
+	snprintf(ackQueue[ackCount].to, sizeof(ackQueue[ackCount].to), "%s", to);
+	snprintf(ackQueue[ackCount].msgId, sizeof(ackQueue[ackCount].msgId), "%s", msgId);
+	ackQueue[ackCount].dueMs = (now + ACK_DELAY_MS);
+	ackQueue[ackCount].tries = 0U;
+	ackCount++;
+}
+
+static aprsInfoTxResult_t sendInfo(const char *info)
+{
+	i2sAprsRxStop(); // restarted by aprsRxTick() once the transmission is over
+	state = APRS_RX_STATE_PAUSED;
+	return aprsSendInfoFrame(info);
+}
+
+static void showTxError(aprsInfoTxResult_t res)
+{
+	if (txErrorShown == false)
+	{
+		txErrorShown = true;
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 2500U,
+				((res == APRS_INFO_TX_NO_CONFIG) ? "APRS: no ch. config" : "APRS: TX not allowed"), true);
+		soundSetMelody(MELODY_ERROR_BEEP);
+	}
+}
+
+static bool messageAddressedToMe(const char *addressee, const char *own)
+{
+	return (strcmp(addressee, own) == 0);
+}
+
+static void handleMessage(const aprsRxFrame_t *frame, uint32_t now)
+{
+	aprsRxParsed_t p;
+	aprsRxMessage_t msg;
+	char own[APRS_RX_CALL_LEN + 4];
+
+	if ((aprsRxParse(frame, &p) == false) || (aprsRxParseMessage(&p, &msg) == false))
+	{
+		return;
+	}
+
+	bool canTx = aprsGetOwnCallsign(own, sizeof(own));
+
+	if (messageAddressedToMe(msg.addressee, own))
+	{
+		if (msg.isAck || msg.isRej)
+		{
+			for (uint32_t i = 0U; i < messageCount; i++)
+			{
+				if ((messages[i].kind == APRS_MSG_OUT_PENDING) && (strcmp(messages[i].peer, p.src) == 0) && (strcmp(messages[i].msgId, msg.msgId) == 0))
+				{
+					char buf[SCREEN_LINE_BUFFER_SIZE];
+
+					messages[i].kind = (msg.isAck ? APRS_MSG_OUT_ACKED : APRS_MSG_OUT_REJECTED);
+					snprintf(buf, sizeof(buf), "%s %s", (msg.isAck ? "ACK" : "REJ"), p.src);
+					uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, buf, false);
+					soundSetMelody(msg.isAck ? MELODY_ACK_BEEP : MELODY_NACK_BEEP);
+					break;
+				}
+			}
+			return;
+		}
+
+		bool duplicate = false;
+		if (msg.msgId[0] != 0)
+		{
+			for (uint32_t i = 0U; i < messageCount; i++)
+			{
+				if ((messages[i].kind == APRS_MSG_IN) && (strcmp(messages[i].peer, p.src) == 0) && (strcmp(messages[i].msgId, msg.msgId) == 0))
+				{
+					duplicate = true; // a retry: our ack was lost, ack again
+					break;
+				}
+			}
+
+			if (canTx)
+			{
+				queueAck(p.src, msg.msgId, now);
+			}
+		}
+
+		if (duplicate == false)
+		{
+			char buf[SCREEN_LINE_BUFFER_SIZE];
+			aprsRxMsgEntry_t *m = messageAdd();
+
+			snprintf(m->peer, sizeof(m->peer), "%s", p.src);
+			snprintf(m->text, sizeof(m->text), "%s", msg.text);
+			snprintf(m->msgId, sizeof(m->msgId), "%s", msg.msgId);
+			m->timeMs = now;
+			m->kind = APRS_MSG_IN;
+			m->unread = true;
+
+			snprintf(buf, sizeof(buf), "%s:%s", p.src, msg.text);
+			uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, MSG_NOTIFICATION_MS, buf, false);
+			soundSetMelody(MELODY_PRIVATE_CALL);
+		}
+	}
+	else if ((strncmp(msg.addressee, "BLN", 3) == 0) && (msg.isAck == false) && (msg.isRej == false))
+	{
+		for (uint32_t i = 0U; i < messageCount; i++)
+		{
+			if ((messages[i].kind == APRS_MSG_IN_BULLETIN) && (strcmp(messages[i].peer, p.src) == 0) && (strcmp(messages[i].text, msg.text) == 0))
+			{
+				messages[i].timeMs = now; // repeated bulletin
+				return;
+			}
+		}
+
+		aprsRxMsgEntry_t *m = messageAdd();
+
+		snprintf(m->peer, sizeof(m->peer), "%s", p.src);
+		snprintf(m->text, sizeof(m->text), "%s", msg.text);
+		m->timeMs = now;
+		m->kind = APRS_MSG_IN_BULLETIN;
+		m->unread = true;
+	}
+}
+
+// One transmission at most per call (each one blocks the main loop for a while).
+static void messagesTxTick(uint32_t now)
+{
+	char info[APRS_RX_MSG_TEXT_LEN + 24];
+	aprsInfoTxResult_t res;
+
+	int menu = menuSystemGetCurrentMenuNumber();
+
+	if (aprsBeaconingIsTransmitting() || trxTransmissionEnabled ||
+			(menu == UI_TX_SCREEN) || (menu == UI_HOTSPOT_MODE) || (menu == UI_CPS) || (menu == MENU_SATELLITE))
+	{
+		return;
+	}
+
+	// Acks first
+	if ((ackCount > 0U) && ((int32_t)(now - ackQueue[0].dueMs) >= 0))
+	{
+		snprintf(info, sizeof(info), ":%-9s:ack%s", ackQueue[0].to, ackQueue[0].msgId);
+		res = sendInfo(info);
+
+		if ((res == APRS_INFO_TX_SENT) || (res == APRS_INFO_TX_NO_CONFIG) || (res == APRS_INFO_TX_NOT_ALLOWED) || (++ackQueue[0].tries >= MSG_MAX_TRIES))
+		{
+			if ((res == APRS_INFO_TX_NO_CONFIG) || (res == APRS_INFO_TX_NOT_ALLOWED))
+			{
+				showTxError(res);
+			}
+			memmove(&ackQueue[0], &ackQueue[1], ((ACK_QUEUE_SIZE - 1U) * sizeof(ackPending_t)));
+			ackCount--;
+		}
+		else
+		{
+			ackQueue[0].dueMs = (now + TX_BUSY_RETRY_MS);
+		}
+		return;
+	}
+
+	aprsRxMsgEntry_t *m = messagePendingOut();
+
+	if ((m == NULL) || ((int32_t)(now - outNextTryMs) < 0))
+	{
+		return;
+	}
+
+	if (m->tries >= MSG_MAX_TRIES)
+	{
+		m->kind = APRS_MSG_OUT_FAILED;
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, "APRS msg: no ACK", false);
+		soundSetMelody(MELODY_NACK_BEEP);
+		return;
+	}
+
+	snprintf(info, sizeof(info), ":%-9s:%s{%s", m->peer, m->text, m->msgId);
+	res = sendInfo(info);
+
+	switch (res)
+	{
+		case APRS_INFO_TX_SENT:
+			m->tries++;
+			outNextTryMs = (now + MSG_RETRY_MS);
+			break;
+		case APRS_INFO_TX_NO_CONFIG:
+		case APRS_INFO_TX_NOT_ALLOWED:
+			m->kind = APRS_MSG_OUT_NOT_SENT;
+			showTxError(res);
+			break;
+		default:
+			outNextTryMs = (now + TX_BUSY_RETRY_MS);
+			break;
+	}
+}
+
+static void dtmfBackgroundTick(void)
+{
+	uint32_t head = dtmfHead;
+
+	if ((head - dtmfSeen) > APRS_RX_TONE_TEXT_LEN)
+	{
+		dtmfSeen = (head - APRS_RX_TONE_TEXT_LEN);
+	}
+
+	while (dtmfSeen != head)
+	{
+		char c = dtmfRing[dtmfSeen % APRS_RX_TONE_TEXT_LEN];
+
+		dtmfSeen++;
+		if (c == ' ')
+		{
+			if (dtmfSequenceLen > 0U)
+			{
+				char buf[SCREEN_LINE_BUFFER_SIZE];
+				int menu = menuSystemGetCurrentMenuNumber();
+
+				dtmfSequence[dtmfSequenceLen] = 0;
+				if (backgroundOn && (monitorOn == false) && ((menu == UI_VFO_MODE) || (menu == UI_CHANNEL_MODE)))
+				{
+					snprintf(buf, sizeof(buf), "DTMF %s", dtmfSequence);
+					uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, buf, false);
+				}
+				dtmfSequenceLen = 0U;
+			}
+		}
+		else if (dtmfSequenceLen < (sizeof(dtmfSequence) - 1U))
+		{
+			dtmfSequence[dtmfSequenceLen++] = c;
+		}
+	}
+}
+
 void aprsRxTick(void)
 {
 	uint32_t now = ticksGetMillis();
@@ -344,7 +756,13 @@ void aprsRxTick(void)
 		{
 			notifyBackground(st, hasPos);
 		}
+
+		handleMessage(f, now);
 	}
+
+	dtmfBackgroundTick();
+
+	messagesTxTick(now);
 }
 
 void aprsRxGetStatus(aprsRxStatus_t *status)
@@ -376,6 +794,12 @@ void aprsRxHistoryClear(void)
 {
 	historyCount = 0U;
 	stationCount = 0U;
+}
+
+void aprsRxMessagesClear(void)
+{
+	messageCount = 0U;
+	ackCount = 0U;
 }
 
 uint32_t aprsRxStationCount(void)

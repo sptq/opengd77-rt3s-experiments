@@ -171,6 +171,18 @@ void aprsBeaconingToggles(void);
 aprsBeaconingMode_t aprsBeaconingGetMode(void);
 bool aprsBeaconingSendBeacon(bool fromSatScreen, bool forcedManualBeaconing);
 bool aprsBeaconingIsTransmitting(void);
+
+// Fork: APRS messaging
+typedef enum
+{
+	APRS_INFO_TX_SENT = 0,
+	APRS_INFO_TX_BUSY,          // already transmitting / scanning, try later
+	APRS_INFO_TX_CHANNEL_BUSY,  // the channel stayed busy
+	APRS_INFO_TX_NO_CONFIG,     // no APRS configuration on the channel / VFO
+	APRS_INFO_TX_NOT_ALLOWED    // TX inhibit, RX only, out of band, DMR without APRS QSY
+} aprsInfoTxResult_t;
+bool aprsGetOwnCallsign(char *buf, size_t size); // false when the channel has no APRS configuration
+aprsInfoTxResult_t aprsSendInfoFrame(const char *info);
 bool aprsBeaconingForcedManualBeaconingTriggered(void);
 bool aprsBeaconingOnDifferentFrequency(void);
 bool aprsBeaconingHasSatelliteConfiguration(void);

@@ -499,6 +499,10 @@ menuStatus_t uiMessageBox(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuSatelliteScreen(uiEvent_t *ev, bool isFirstRun);
 #if defined(HAS_GPS)
 menuStatus_t menuGPS(uiEvent_t *event, bool isFirstRun);
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+bool gpsWaypointGet(double *lat, double *lon); // Fork: GPS waypoint page target
+void gpsWaypointSet(double lat, double lon);
+#endif
 #endif
 menuStatus_t menuCalibration(uiEvent_t *ev, bool isFirstRun);
 #if !defined(PLATFORM_GD77S)

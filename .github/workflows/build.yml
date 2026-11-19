@@ -3,7 +3,7 @@ name: Build firmware
 on:
   push:
     branches: [main]
-    tags: ['R*-EA4IPW*']
+    tags: ['R*-EA4IPW*', 'R*-SP7TQ*']
   pull_request:
   workflow_dispatch:
 
@@ -80,7 +80,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/R') && contains(github.ref, '-EA4IPW')
+    if: startsWith(github.ref, 'refs/tags/R') && (contains(github.ref, '-EA4IPW') || contains(github.ref, '-SP7TQ'))
     runs-on: ubuntu-latest
 
     steps:
@@ -113,7 +113,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            Unofficial build by EA4IPW based on upstream OpenGD77 source.
+            Unofficial build of the SP7TQ fork (independent, based on the EA4IPW
+            fork) of the upstream OpenGD77 source.
 
             **Not affiliated with the OpenGD77 project.** For canonical
             firmware see <https://www.opengd77.com/>.

@@ -35,6 +35,7 @@
 #include "functions/sound.h"
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
+#include "functions/toneRxDecoders.h"
 #include "functions/ticks.h"
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
@@ -113,8 +114,10 @@ static void foxHuntDrawInfo(void);
 #if defined(I2S_APRS_RX)
 // Fork: APRS RX monitor. '9' toggles it; it takes the whole screen: status
 // line + one of the views, cycled with '#': received frames (UP/DOWN select,
-// '*' raw: full TNC2 text + hex dump), stations (distance / bearing / age)
-// and radar (north up, own position in the centre). '0' clears.
+// '*' raw: full TNC2 text + hex dump), stations (distance / bearing / age),
+// radar (north up, own position in the centre), APRS messages, DTMF and CW
+// decoders. '0' clears the current view. GREEN on a message / station:
+// reply / new message (canned texts); '*' on a station: GPS waypoint.
 #define APRS_MON_REDRAW_MS      1000U
 #define APRS_MON_CHARS          26     // 160 px / 6 px font
 #define APRS_MON_STATUS_Y       (MENU_HEADER_HEIGHT + 2)
@@ -128,8 +131,21 @@ typedef enum
 	APRS_MON_VIEW_FRAMES = 0,
 	APRS_MON_VIEW_STATIONS,
 	APRS_MON_VIEW_RADAR,
+	APRS_MON_VIEW_MESSAGES,
+	APRS_MON_VIEW_DTMF,
+	APRS_MON_VIEW_CW,
 	APRS_MON_VIEW_MAX
 } aprsMonView_t;
+#if defined(HAS_GPS) && (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701))
+#define APRS_MON_WAYPOINT
+#endif
+static const char *aprsMonReplies[] = { "QSL", "OK", "73", "Roger", "Thanks!", "Yes", "No", "Call me", "QRV?", "QRX 5 min", "On my way", "QRT" };
+#define APRS_MON_NUM_REPLIES    (sizeof(aprsMonReplies) / sizeof(aprsMonReplies[0]))
+static uint32_t aprsMonMsgSelected = 0;
+static bool aprsMonReplyActive = false;
+static uint32_t aprsMonReplyIndex = 0;
+static char aprsMonReplyTo[APRS_RX_CALL_LEN];
+static uint32_t aprsMonToneSerial = 0;
 static bool aprsMonEnabled = false;
 static aprsMonView_t aprsMonView = APRS_MON_VIEW_FRAMES;
 static char aprsMonStationName[APRS_RX_CALL_LEN]; // selection in the stations / radar views
@@ -692,6 +708,8 @@ static void aprsMonSetEnabled(bool enable)
 	aprsMonStationName[0] = 0;
 	aprsMonLastDraw = 0;
 	aprsMonLastGen = aprsRxGetGeneration();
+	aprsMonMsgSelected = 0;
+	aprsMonReplyActive = false;
 	aprsRxSetMonitor(enable);
 }
 
@@ -712,6 +730,19 @@ static void aprsMonUpdate(uint32_t now)
 		}
 		aprsMonLastGen = gen;
 		aprsMonLastDraw = 0; // redraw now
+	}
+
+	if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW))
+	{
+		char tmp[2];
+		uint32_t serial;
+
+		aprsRxToneText((aprsMonView == APRS_MON_VIEW_CW), tmp, sizeof(tmp), &serial);
+		if (serial != aprsMonToneSerial)
+		{
+			aprsMonToneSerial = serial;
+			aprsMonLastDraw = 0;
+		}
 	}
 
 	if ((aprsMonLastDraw == 0) || ((now - aprsMonLastDraw) >= APRS_MON_REDRAW_MS))
@@ -775,7 +806,7 @@ static void aprsMonDrawHint(const char *line1, const char *line2)
 	displayPrintCentered((APRS_MON_LIST_Y + 24), line1, FONT_SIZE_3);
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayPrintCentered((APRS_MON_LIST_Y + 56), line2, FONT_SIZE_1);
-	displayPrintCentered((APRS_MON_LIST_Y + 66), "#:view *:raw 0:clear", FONT_SIZE_1);
+	displayPrintCentered((APRS_MON_LIST_Y + 66), "#:view 0:clear 9:exit", FONT_SIZE_1);
 	displayThemeResetToDefault();
 }
 
@@ -1041,6 +1072,19 @@ static void aprsMonDrawRadar(void)
 		}
 	}
 
+#if defined(APRS_MON_WAYPOINT)
+	double wpLat, wpLon;
+	bool hasWp = gpsWaypointGet(&wpLat, &wpLon);
+	if (hasWp)
+	{
+		double d = aprsRxDistanceKm(myLat, myLon, wpLat, wpLon);
+		if (d > maxDist)
+		{
+			maxDist = d;
+		}
+	}
+#endif
+
 	float range = ranges[(sizeof(ranges) / sizeof(ranges[0])) - 1];
 	for (uint32_t i = 0; i < (sizeof(ranges) / sizeof(ranges[0])); i++)
 	{
@@ -1097,6 +1141,21 @@ static void aprsMonDrawRadar(void)
 		displayThemeResetToDefault();
 	}
 
+#if defined(APRS_MON_WAYPOINT)
+	if (hasWp)
+	{
+		double d = aprsRxDistanceKm(myLat, myLon, wpLat, wpLon);
+		double a = (aprsRxBearingDeg(myLat, myLon, wpLat, wpLon) * (M_PI / 180.0));
+		double r = ((d / range) * RADAR_R);
+		int16_t x = (int16_t)(RADAR_CX + (sin(a) * r));
+		int16_t y = (int16_t)(RADAR_CY - (cos(a) * r));
+
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawRect((x - 3), (y - 3), 7, 7, true); // waypoint: square
+		displayThemeResetToDefault();
+	}
+#endif
+
 	// Selected station panel
 	int16_t ty = APRS_MON_LIST_Y;
 	if (selSt)
@@ -1132,16 +1191,159 @@ static void aprsMonDrawRadar(void)
 	displayThemeResetToDefault();
 }
 
+// --- Messages view ---------------------------------------------------------------------
+static void aprsMonDrawMessages(void)
+{
+	static const char *status[] = { "", "BLN", "...", "ACK", "REJ", "FAIL", "noTX" };
+	char line[APRS_MON_CHARS + 1];
+	char right[APRS_MON_CHARS + 1];
+	char age[8];
+	uint32_t count = aprsRxMessageCount();
+	uint32_t now = ticksGetMillis();
+
+	if (count == 0)
+	{
+		char own[APRS_RX_CALL_LEN + 4];
+		bool canTx = aprsRxGetOwnCall(own, sizeof(own));
+
+		snprintf(line, sizeof(line), "%s%s", (own[0] ? own : "no callsign"), (canTx ? "" : " (no APRS cfg)"));
+		aprsMonDrawHint("No messages", line);
+		return;
+	}
+
+	if (aprsMonMsgSelected >= count)
+	{
+		aprsMonMsgSelected = (count - 1);
+	}
+
+	uint32_t first = ((aprsMonMsgSelected >= APRS_MON_BLOCKS) ? (aprsMonMsgSelected - APRS_MON_BLOCKS + 1) : 0);
+
+	for (uint32_t b = 0; b < APRS_MON_BLOCKS; b++)
+	{
+		const aprsRxMsgEntry_t *m = aprsRxMessageGet(first + b);
+		int16_t y = (APRS_MON_LIST_Y + (b * APRS_MON_BLOCK_H));
+
+		if (m == NULL)
+		{
+			break;
+		}
+
+		bool out = (m->kind >= APRS_MSG_OUT_PENDING);
+		aprsMonAge((now - m->timeMs), age, sizeof(age));
+		snprintf(line, sizeof(line), "%s%s", (out ? "> " : (m->kind == APRS_MSG_IN_BULLETIN ? "B " : "< ")), m->peer);
+		if (m->kind == APRS_MSG_OUT_PENDING)
+		{
+			snprintf(right, sizeof(right), "%s%u %s", status[m->kind], (unsigned)m->tries, age);
+		}
+		else
+		{
+			snprintf(right, sizeof(right), "%s%s%s", status[m->kind], (status[m->kind][0] ? " " : ""), age);
+		}
+		aprsMonPrintRow(y, line, right, ((first + b) == aprsMonMsgSelected));
+
+		uint32_t n = strlen(m->text);
+		for (uint32_t l = 0; l < 2; l++)
+		{
+			aprsMonSlice(m->text, n, (l * APRS_MON_CHARS), line);
+			displayPrintAt(0, (y + ((l + 1) * FONT_SIZE_1_HEIGHT)), line, FONT_SIZE_1);
+		}
+	}
+}
+
+// Reply / new message: canned texts
+static void aprsMonDrawReply(void)
+{
+	char line[APRS_MON_CHARS + 1];
+	uint32_t rows = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_1_HEIGHT);
+	uint32_t first = ((aprsMonReplyIndex >= rows) ? (aprsMonReplyIndex - rows + 1) : 0);
+
+	snprintf(line, sizeof(line), "To %s:", aprsMonReplyTo);
+	displayPrintAt(0, APRS_MON_LIST_Y, line, FONT_SIZE_1);
+
+	for (uint32_t r = 0; r < rows; r++)
+	{
+		uint32_t i = (first + r);
+
+		if (i >= APRS_MON_NUM_REPLIES)
+		{
+			break;
+		}
+		snprintf(line, sizeof(line), "%s", aprsMonReplies[i]);
+		aprsMonPrintRow((APRS_MON_LIST_Y + ((r + 1) * FONT_SIZE_1_HEIGHT) + 2), line, "", (i == aprsMonReplyIndex));
+	}
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintAt(0, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), "GREEN:send RED:cancel", FONT_SIZE_1);
+	displayThemeResetToDefault();
+}
+
+// --- DTMF / CW views -----------------------------------------------------------------
+static void aprsMonDrawToneText(bool cw)
+{
+	char text[APRS_RX_TONE_TEXT_LEN + 1];
+	char line[24];
+	uint32_t perLine = (DISPLAY_SIZE_X / 8); // FONT_SIZE_3: 8 px wide
+	uint32_t lines = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_3_HEIGHT);
+	uint32_t len = aprsRxToneText(cw, text, sizeof(text), NULL);
+
+	if (cw)
+	{
+		uint8_t wpm = cwRxGetWpm();
+
+		if (wpm)
+		{
+			snprintf(line, sizeof(line), "%uWPM %uHz %s", (unsigned)wpm, (unsigned)cwRxGetToneHz(), (cwRxIsKeyed() ? "#" : ""));
+		}
+		else
+		{
+			snprintf(line, sizeof(line), "CW: waiting...");
+		}
+	}
+	else
+	{
+		snprintf(line, sizeof(line), "DTMF: %s", (len ? "" : "waiting..."));
+	}
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintAt(0, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), line, FONT_SIZE_1);
+	displayThemeResetToDefault();
+
+	// Last 'lines' lines of text
+	uint32_t maxChars = (perLine * lines);
+	uint32_t start = ((len > maxChars) ? (len - maxChars) : 0);
+	if (start)
+	{
+		start += ((perLine - ((len - start) % perLine)) % perLine); // keep line alignment stable
+	}
+
+	for (uint32_t l = 0; l < lines; l++)
+	{
+		uint32_t off = (start + (l * perLine));
+		uint32_t n = 0;
+
+		if (off >= len)
+		{
+			break;
+		}
+		while ((n < perLine) && ((off + n) < len))
+		{
+			line[n] = text[off + n];
+			n++;
+		}
+		line[n] = 0;
+		displayPrintAt(0, (APRS_MON_LIST_Y + (l * FONT_SIZE_3_HEIGHT)), line, FONT_SIZE_3);
+	}
+}
+
 static void aprsMonDraw(void)
 {
-	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar" };
+	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages", "DTMF decoder", "CW decoder" };
 	char line[APRS_MON_CHARS + 1];
 	aprsRxStatus_t st;
 
 	aprsRxGetStatus(&st);
 
 	displayClearBuf();
-	menuDisplayTitle(aprsMonRawView ? "APRS raw" : titles[aprsMonView]);
+	menuDisplayTitle(aprsMonReplyActive ? "APRS message" : (aprsMonRawView ? "APRS raw" : titles[aprsMonView]));
 
 	switch (st.state)
 	{
@@ -1153,8 +1355,15 @@ static void aprsMonDraw(void)
 			}
 			else
 			{
+				uint32_t unread = aprsRxMessageUnreadCount();
+
 				snprintf(line, sizeof(line), "%ddBm L%u OK%u E%u", trxGetRSSIdBm(RADIO_DEVICE_PRIMARY), (unsigned)st.levelPercent,
 						(unsigned)st.framesOk, (unsigned)st.crcErrors);
+				if (unread)
+				{
+					size_t l = strlen(line);
+					snprintf(&line[l], (sizeof(line) - l), " M%u", (unsigned)unread);
+				}
 			}
 			break;
 		case APRS_RX_STATE_NO_CLOCK:
@@ -1170,7 +1379,11 @@ static void aprsMonDraw(void)
 	displayDrawFastHLine(0, (APRS_MON_LIST_Y - 2), DISPLAY_SIZE_X, true);
 	displayThemeResetToDefault();
 
-	if (aprsMonRawView)
+	if (aprsMonReplyActive)
+	{
+		aprsMonDrawReply();
+	}
+	else if (aprsMonRawView)
 	{
 		aprsMonDrawRaw();
 	}
@@ -1178,6 +1391,16 @@ static void aprsMonDraw(void)
 	{
 		switch (aprsMonView)
 		{
+			case APRS_MON_VIEW_MESSAGES:
+				aprsRxMessagesMarkRead();
+				aprsMonDrawMessages();
+				break;
+			case APRS_MON_VIEW_DTMF:
+				aprsMonDrawToneText(false);
+				break;
+			case APRS_MON_VIEW_CW:
+				aprsMonDrawToneText(true);
+				break;
 			case APRS_MON_VIEW_STATIONS:
 				aprsMonDrawStations();
 				break;
@@ -1206,6 +1429,67 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 		return false; // SK2 + number: quickkeys
 	}
 
+	if (aprsMonReplyActive)
+	{
+		if (KEYCHECK_PRESS(ev->keys, KEY_UP) && (aprsMonReplyIndex > 0))
+		{
+			aprsMonReplyIndex--;
+		}
+		else if (KEYCHECK_PRESS(ev->keys, KEY_DOWN) && ((aprsMonReplyIndex + 1) < APRS_MON_NUM_REPLIES))
+		{
+			aprsMonReplyIndex++;
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
+		{
+			aprsRxSendMessage(aprsMonReplyTo, aprsMonReplies[aprsMonReplyIndex]);
+			aprsMonReplyActive = false;
+			aprsMonView = APRS_MON_VIEW_MESSAGES;
+			aprsMonMsgSelected = 0;
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
+		{
+			aprsMonReplyActive = false;
+		}
+		else
+		{
+			return true; // modal
+		}
+		aprsMonDraw();
+		return true;
+	}
+
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN) && (aprsMonRawView == false))
+	{
+		const char *to = NULL;
+
+		if (aprsMonView == APRS_MON_VIEW_MESSAGES)
+		{
+			const aprsRxMsgEntry_t *m = aprsRxMessageGet(aprsMonMsgSelected);
+			if (m && (m->kind != APRS_MSG_IN_BULLETIN))
+			{
+				to = m->peer;
+			}
+		}
+		else if ((aprsMonView == APRS_MON_VIEW_STATIONS) || (aprsMonView == APRS_MON_VIEW_RADAR))
+		{
+			const aprsRxStation_t *st = aprsRxStationGet(aprsMonStationIndex());
+			if (st)
+			{
+				to = st->name;
+			}
+		}
+
+		if (to == NULL)
+		{
+			return false; // GREEN: leave the screen
+		}
+		snprintf(aprsMonReplyTo, sizeof(aprsMonReplyTo), "%s", to);
+		aprsMonReplyActive = true;
+		aprsMonReplyIndex = 0;
+		aprsMonDraw();
+		return true;
+	}
+
 	if (KEYCHECK_SHORTUP(ev->keys, KEY_9))
 	{
 		aprsMonSetEnabled(false);
@@ -1230,13 +1514,41 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 			aprsMonRawView = true;
 			aprsMonRawScroll = 0;
 		}
+#if defined(APRS_MON_WAYPOINT)
+		else if ((aprsMonView == APRS_MON_VIEW_STATIONS) || (aprsMonView == APRS_MON_VIEW_RADAR))
+		{
+			const aprsRxStation_t *st = aprsRxStationGet(aprsMonStationIndex());
+			if (st && st->hasPos)
+			{
+				char buf[SCREEN_LINE_BUFFER_SIZE];
+
+				gpsWaypointSet(st->lat, st->lon);
+				snprintf(buf, sizeof(buf), "Waypoint: %s", st->name);
+				uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1500U, buf, false);
+				soundSetMelody(MELODY_ACK_BEEP);
+			}
+		}
+#endif
 	}
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_0))
 	{
-		aprsRxHistoryClear();
-		aprsMonRawView = false;
-		aprsMonSelected = 0;
-		aprsMonStationName[0] = 0;
+		switch (aprsMonView)
+		{
+			case APRS_MON_VIEW_MESSAGES:
+				aprsRxMessagesClear();
+				aprsMonMsgSelected = 0;
+				break;
+			case APRS_MON_VIEW_DTMF:
+			case APRS_MON_VIEW_CW:
+				aprsRxToneTextClear();
+				break;
+			default:
+				aprsRxHistoryClear();
+				aprsMonRawView = false;
+				aprsMonSelected = 0;
+				aprsMonStationName[0] = 0;
+				break;
+		}
 	}
 	else if (KEYCHECK_PRESS(ev->keys, KEY_UP) || KEYCHECK_PRESS(ev->keys, KEY_DOWN))
 	{
@@ -1255,6 +1567,21 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 			{
 				aprsMonRawScroll++; // clamped when drawing
 			}
+		}
+		else if (aprsMonView == APRS_MON_VIEW_MESSAGES)
+		{
+			if ((dir < 0) && (aprsMonMsgSelected > 0))
+			{
+				aprsMonMsgSelected--;
+			}
+			else if ((dir > 0) && ((aprsMonMsgSelected + 1) < aprsRxMessageCount()))
+			{
+				aprsMonMsgSelected++;
+			}
+		}
+		else if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW))
+		{
+			return false;
 		}
 		else if (aprsMonView == APRS_MON_VIEW_FRAMES)
 		{
