@@ -29,6 +29,8 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
+#include "user_interface/uiIcons.h"
 
 enum LOCK_STATE { LOCK_NONE = 0x00, LOCK_KEYPAD = 0x01, LOCK_PTT = 0x02, LOCK_BOTH = 0x03 };
 
@@ -72,8 +74,53 @@ menuStatus_t menuLockScreen(uiEvent_t *ev, bool isFirstRun)
 	return MENU_STATUS_SUCCESS;
 }
 
+#if defined(HAS_EMCOM_UI)
+// Fork: EMCOM style lock screen: title bar, big padlock (16x16 icon drawn x3), the locked items, the unlock keys in the footer
+static void emcomLockScreen(bool unlocked, const char *what)
+{
+	uiIcon_t icon = (unlocked ? UI_ICON_UNLOCK : UI_ICON_LOCK);
+
+	displayClearBuf();
+	menuDisplayTitle(unlocked ? currentLanguage->unlocked : currentLanguage->locked);
+
+	displayThemeApply((unlocked ? THEME_ITEM_FG_RSSI_BAR : THEME_ITEM_FG_RSSI_BAR_S9P), THEME_ITEM_BG);
+	for (int16_t r = 0; r < 16; r++)
+	{
+		for (int16_t b = 0; b < 16; b++)
+		{
+			if (uiIcons[icon][r] & (0x8000U >> b))
+			{
+				displayFillRect((56 + (b * 3)), (22 + (r * 3)), 3, 3, false);
+			}
+		}
+	}
+
+	if (what && what[0])
+	{
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCentered(76, what, FONT_SIZE_3);
+	}
+
+	if (unlocked == false)
+	{
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+		displayFillRect(0, (DISPLAY_SIZE_Y - 18), DISPLAY_SIZE_X, 18, false);
+		displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCentered((DISPLAY_SIZE_Y - 17), currentLanguage->press_sk2_plus_star, FONT_SIZE_1);
+		displayPrintCentered((DISPLAY_SIZE_Y - 9), currentLanguage->to_unlock, FONT_SIZE_1);
+	}
+	displayThemeResetToDefault();
+}
+#endif
+
 static void redrawScreen(bool update, bool state)
 {
+#if defined(HAS_EMCOM_UI)
+	if (emcomStyleEnabled())
+	{
+		return; // drawn by emcomLockScreen()
+	}
+#endif
 
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_NOTIFICATION);
 
@@ -114,6 +161,14 @@ static void redrawScreen(bool update, bool state)
 		}
 		buf[bufferLen - 1] = 0;
 
+#if defined(HAS_EMCOM_UI)
+		if (emcomStyleEnabled())
+		{
+			emcomLockScreen(false, buf);
+		}
+		else
+#endif
+		{
 #if defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 		displayPrintCentered(16, buf, FONT_SIZE_3);
 		displayPrintCentered(32, currentLanguage->locked, FONT_SIZE_3);
@@ -132,6 +187,7 @@ static void redrawScreen(bool update, bool state)
 		displayPrintCentered(48, currentLanguage->to_unlock, FONT_SIZE_1);
   #endif
 #endif
+		}
 		voicePromptsInit();
 		voicePromptsAppendPrompt(PROMPT_SILENCE);
 
@@ -161,7 +217,16 @@ static void redrawScreen(bool update, bool state)
 	}
 	else
 	{
-		displayPrintCentered((DISPLAY_SIZE_Y - FONT_SIZE_3_HEIGHT) / 2, currentLanguage->unlocked, FONT_SIZE_3);
+#if defined(HAS_EMCOM_UI)
+		if (emcomStyleEnabled())
+		{
+			emcomLockScreen(true, NULL);
+		}
+		else
+#endif
+		{
+			displayPrintCentered((DISPLAY_SIZE_Y - FONT_SIZE_3_HEIGHT) / 2, currentLanguage->unlocked, FONT_SIZE_3);
+		}
 
 		voicePromptsInit();
 		voicePromptsAppendPrompt(PROMPT_SILENCE);

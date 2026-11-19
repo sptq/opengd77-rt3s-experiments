@@ -21,7 +21,7 @@ W, H, SCALE = 160, 128, 3
 def load_fonts():
     src = open(CHARSET, encoding='latin-1').read()
     fonts = {}
-    for name, key in (('font_6x8', 1), ('font_6x8_bold', '1b'), ('font_8x16', 3), ('font_16x32', 4)):
+    for name, key in (('font_6x8', 1), ('font_6x8_bold', '1b'), ('font_8x8', 2), ('font_8x16', 3), ('font_16x32', 4)):
         m = re.search(r'const uint8_t ' + name + r'\[\] = \{(.*?)\};', src, re.S)
         body = re.sub(r'//[^\n]*', '', m.group(1))
         vals = [int(v, 16) if v.lower().startswith('0x') else int(v) for v in re.findall(r'0x[0-9a-fA-F]+|\b\d+\b', body)]
