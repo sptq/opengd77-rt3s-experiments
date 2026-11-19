@@ -77,7 +77,7 @@ static const emcomPalette_t PALETTE_NIGHT =
 #define EMCOM_Y1        79
 #define EMCOM_Y2        89
 #define EMCOM_Y3        99
-#define FOOTER_Y        116
+#define FOOTER_Y        (DISPLAY_SIZE_Y - 12) // 116 on 128-line screens, 108 on the DM-1701
 #define S9_SEGMENT      20
 #define COL2_X          66   // parameter columns
 #define COL3_X          120
