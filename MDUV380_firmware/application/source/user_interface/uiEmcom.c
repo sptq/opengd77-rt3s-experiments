@@ -482,6 +482,35 @@ static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
 	uint32_t rxFreq = currentChannelData->rxFreq;
 	uint32_t txFreq = currentChannelData->txFreq;
 
+	if (info->isVFO && info->freqEntry)
+	{
+		// frequency being typed: 3 + 5 digits, cursor under the next one
+		const char *d = info->freqEntry;
+		int idx = info->freqEntryIndex;
+
+		snprintf(buf, sizeof(buf), "%c%c%c.%c%c%c%c%c", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+		text(1, HERO_Y, buf, FONT_SIZE_4, pal->scan, false);
+		if (idx < 8)
+		{
+			fill((int16_t)(1 + ((idx + ((idx > 2) ? 1 : 0)) * 16) + 2), (HERO_Y + 26), 12, 2, pal->scan);
+		}
+		return;
+	}
+
+	if ((info->isVFO == false) && (info->gotoChannel > 0))
+	{
+		snprintf(buf, sizeof(buf), "%d", info->gotoChannel);
+		int16_t w = text(1, HERO_Y, buf, FONT_SIZE_4, pal->scan, false);
+		text((w + 6), NAME_Y, "GO TO CH", FONT_SIZE_3, pal->scan, false);
+		text((w + 6), FREQ_Y, "GRN OK  RED CANCEL", FONT_SIZE_1, pal->mut, false);
+		return;
+	}
+
+	if (info->isVFO && info->entryTx)
+	{
+		txFreqShown = true; // TX frequency selected (UP / DOWN / knob change it)
+	}
+
 	if (info->isVFO)
 	{
 		uint32_t f = (txFreqShown ? txFreq : rxFreq);
@@ -542,8 +571,8 @@ static void drawZoneRow(const emcomMainInfo_t *info)
 
 	if (info->isVFO)
 	{
-		snprintf(buf, sizeof(buf), "VFO %c", info->vfoLetter);
-		text(2, ZONE_Y, buf, FONT_SIZE_1, pal->mut, false);
+		snprintf(buf, sizeof(buf), "VFO %c%s", info->vfoLetter, (info->freqEntry ? (info->entryTx ? "  ENTER TX" : "  ENTER RX") : (info->entryTx ? "  TX" : "")));
+		text(2, ZONE_Y, buf, FONT_SIZE_1, ((info->freqEntry || info->entryTx) ? pal->scan : pal->mut), false);
 
 		int32_t offset = ((int32_t)currentChannelData->txFreq - (int32_t)currentChannelData->rxFreq) / 100; // kHz
 		if (offset != 0)
@@ -644,6 +673,39 @@ static void drawParams(void)
 		totString(buf, sizeof(buf));
 	}
 	keyValue(COL3_X, PANEL_Y2, "TOT", buf, pal->fg);
+}
+
+// SK1 held: both frequencies with their tones / CC and TS
+static void drawDetailsPanel(void)
+{
+	char f[16], t[16];
+	bool digital = (trxGetMode() == RADIO_MODE_DIGITAL);
+
+	fill(0, (PANEL_Y1 - 1), 2, ((PANEL_Y2 + 9) - (PANEL_Y1 - 1)), pal->info);
+
+	formatFreq(currentChannelData->rxFreq, f, sizeof(f), false);
+	if (digital)
+	{
+		snprintf(t, sizeof(t), "CC%u", (unsigned)trxGetDMRColourCode());
+	}
+	else
+	{
+		toneString(currentChannelData->rxTone, t, sizeof(t));
+	}
+	keyValue(6, PANEL_Y1, "RX", f, pal->fg);
+	text((DISPLAY_SIZE_X - 2), PANEL_Y1, t, FONT_SIZE_1, pal->info, true);
+
+	formatFreq(currentChannelData->txFreq, f, sizeof(f), false);
+	if (digital)
+	{
+		snprintf(t, sizeof(t), "TS%d", (trxGetDMRTimeSlot() + 1));
+	}
+	else
+	{
+		toneString(currentChannelData->txTone, t, sizeof(t));
+	}
+	keyValue(6, PANEL_Y2, "TX", f, pal->fg);
+	text((DISPLAY_SIZE_X - 2), PANEL_Y2, t, FONT_SIZE_1, pal->info, true);
 }
 
 static void drawRxPanel(void)
@@ -972,6 +1034,10 @@ void emcomRenderMain(const emcomMainInfo_t *info)
 	if (st == ST_TX)
 	{
 		drawTxPanel(info);
+	}
+	else if (info->showDetails)
+	{
+		drawDetailsPanel();
 	}
 	else if ((trxGetMode() == RADIO_MODE_DIGITAL) && uiDataGlobal.isDisplayingQSOData)
 	{

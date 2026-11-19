@@ -331,7 +331,7 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 					if (rxPowerSavingIsRxOn())
 					{
 #if defined(HAS_EMCOM_UI)
-						emcomSetChannelAllowed((uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0));
+						emcomSetChannelAllowed(true); // details and channel number entry are drawn by the EMCOM screen too
 						if (emcomScreenActive())
 						{
 							if (emcomNeedsFullRedraw(ev->time))
@@ -842,6 +842,8 @@ static void emcomRenderChannel(int txTimeSecs, bool isTransmitting)
 	info.channelCount = currentZone.NOT_IN_CODEPLUGDATA_numChannelsInZone;
 	info.isTransmitting = isTransmitting;
 	info.txTimeSecs = txTimeSecs;
+	info.showDetails = uiDataGlobal.displayChannelSettings;
+	info.gotoChannel = directChannelNumber;
 	emcomRenderMain(&info);
 }
 #endif
@@ -875,7 +877,7 @@ void uiChannelModeUpdateScreen(int txTimeSecs)
 	}
 
 #if defined(HAS_EMCOM_UI)
-	emcomSetChannelAllowed((uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0));
+	emcomSetChannelAllowed(true); // details and channel number entry are drawn by the EMCOM screen too
 	if (emcomScreenActive())
 	{
 		switch(uiDataGlobal.displayQSOState)

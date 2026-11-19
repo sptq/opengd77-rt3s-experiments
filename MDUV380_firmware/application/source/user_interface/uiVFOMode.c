@@ -518,8 +518,6 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 static bool emcomVfoUpdateAllowed(void)
 {
 	bool allowed = ((screenOperationMode[nonVolatileSettings.currentVFONumber] == VFO_SCREEN_OPERATION_NORMAL) &&
-			(uiDataGlobal.FreqEnter.index == 0) && (selectedFreq == VFO_SELECTED_FREQUENCY_INPUT_RX) &&
-			(uiDataGlobal.displayChannelSettings == false) &&
 			(uiVFOModeDualWatchIsScanning() == false) && (uiVFOModeSweepScanning(true) == false));
 
 	emcomSetVfoAllowed(allowed);
@@ -535,6 +533,10 @@ static void emcomRenderVfo(int txTimeSecs, bool isTransmitting)
 	info.vfoLetter = (char)('A' + nonVolatileSettings.currentVFONumber);
 	info.isTransmitting = isTransmitting;
 	info.txTimeSecs = txTimeSecs;
+	info.showDetails = uiDataGlobal.displayChannelSettings;
+	info.freqEntry = ((uiDataGlobal.FreqEnter.index != 0) ? uiDataGlobal.FreqEnter.digits : NULL);
+	info.freqEntryIndex = uiDataGlobal.FreqEnter.index;
+	info.entryTx = (selectedFreq == VFO_SELECTED_FREQUENCY_INPUT_TX);
 	emcomRenderMain(&info);
 }
 #endif

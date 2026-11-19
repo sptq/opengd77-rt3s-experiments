@@ -32,6 +32,11 @@ typedef struct
 	char        vfoLetter;      // VFO mode
 	bool        isTransmitting;
 	int         txTimeSecs;
+	bool        showDetails;    // SK1 held: RX / TX frequencies and tones
+	int         gotoChannel;    // channel mode: number being typed, 0 = none
+	const char *freqEntry;      // VFO: FreqEnter digits ('-' = not typed yet), NULL = none
+	int         freqEntryIndex; // VFO: next digit
+	bool        entryTx;        // VFO: the TX frequency is selected / entered
 } emcomMainInfo_t;
 
 bool emcomStyleEnabled(void);       // the setting
