@@ -10,6 +10,7 @@
  * strictly forbidden (see license.txt).
  */
 #include <string.h>
+#include <math.h>
 #include <stdio.h>
 #include "main.h"
 #include "functions/aprsRx.h"
@@ -295,11 +296,11 @@ bool aprsRxOwnPosition(double *lat, double *lon)
 		return true;
 	}
 #endif
-	if ((nonVolatileSettings.location.lat != 0) || (nonVolatileSettings.location.lon != 0))
+	if (settingsLocationIsValid())
 	{
 		*lat = settingsLocationGetLatitude();
 		*lon = settingsLocationGetLongitude();
-		return true;
+		return ((fabs(*lat) <= 90.0) && (fabs(*lon) <= 180.0));
 	}
 	return false;
 }
