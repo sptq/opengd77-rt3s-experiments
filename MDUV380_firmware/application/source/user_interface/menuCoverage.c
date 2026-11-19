@@ -174,11 +174,11 @@ static void updateScreen(void)
 	y += 10;
 	if (cov.confirmClear)
 	{
-		text(2, y, "CLEAR ALL POINTS? GREEN=yes", FONT_SIZE_1_BOLD, THEME_ITEM_FG_TX_COUNTER);
+		text(2, y, "CLEAR ALL? GREEN = yes", FONT_SIZE_1_BOLD, THEME_ITEM_FG_TX_COUNTER);
 	}
 	else if (cov.sessCount > 0U)
 	{
-		snprintf(buf, sizeof(buf), "SESSION %u  MIN %d  MAX %d", (unsigned)cov.sessCount, cov.sessMin, cov.sessMax);
+		snprintf(buf, sizeof(buf), "SES %u  MIN %d  MAX %d", (unsigned)cov.sessCount, cov.sessMin, cov.sessMax);
 		text(2, y, buf, FONT_SIZE_1, THEME_ITEM_FG_RX_FREQ);
 	}
 	else if (fix)
@@ -192,7 +192,7 @@ static void updateScreen(void)
 	}
 	else
 	{
-		text(2, y, "No GPS fix: points need one", FONT_SIZE_1, THEME_ITEM_FG_RSSI_BAR_S9P);
+		text(2, y, "No GPS fix - not logging", FONT_SIZE_1, THEME_ITEM_FG_RSSI_BAR_S9P);
 	}
 
 	// key bar
