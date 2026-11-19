@@ -373,7 +373,7 @@ static void emcomRssiScreen(void)
 	displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
 	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
 #if defined(FOX_HUNT_SUPPORTED)
-	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), (foxHuntEnabled ? "* RAW  # FOX  0 RESET  9 APRS" : "* RAW  # FOX  9 APRS"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), (foxHuntEnabled ? "* RAW  # FOX  0 RST  9 APRS" : "* RAW  # FOX  9 APRS"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 #else
 	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "* RAW", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 #endif

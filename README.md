@@ -40,6 +40,23 @@ Screen pictures above are rendered from the firmware layout and fonts
 (`docs/screens/render_screens.py`, example data); `tools/opengd77_screenshot.py`
 takes real ones from a radio.
 
+## Screens
+
+All screens share one look: title bar with an accent and the position,
+status strips with coloured fields, full-width selection, key bars at the
+bottom, red-only palette at night. Pictures rendered from the firmware
+layout, fonts and icons (`docs/screens/`, example data).
+
+| | | |
+|---|---|---|
+| ![Boot](docs/screens/boot_sp7team.png)<br>Boot screen | ![Main menu](docs/screens/menu_main.png)<br>Main menu (keys 1–0 open a tile) | ![Options](docs/screens/menu_options.png)<br>Options |
+| ![Option list](docs/screens/options_display.png)<br>Option list, values right aligned | ![Channel](docs/screens/emcom_standby.png)<br>Channel, standby | ![RX](docs/screens/emcom_rx.png)<br>FM receive |
+| ![TX](docs/screens/emcom_tx.png)<br>Transmit | ![DMR](docs/screens/emcom_dmr.png)<br>DMR call | ![VFO](docs/screens/emcom_vfo.png)<br>VFO |
+| ![Scan](docs/screens/emcom_scan.png)<br>Scan | ![SOS](docs/screens/emcom_sos.png)<br>SOS | ![Night](docs/screens/emcom_night.png)<br>Night palette |
+| ![RSSI](docs/screens/rssi.png)<br>RSSI / fox hunt | ![Last heard](docs/screens/lastheard.png)<br>Last heard | ![Event log](docs/screens/eventlog.png)<br>Event log |
+| ![APRS frames](docs/screens/aprs_frames.png)<br>APRS frames | ![APRS radar](docs/screens/aprs_radar.png)<br>APRS radar | ![APRS messages](docs/screens/aprs_messages.png)<br>APRS messages |
+| ![TG entry](docs/screens/tg_entry.png)<br>TG / PC entry | ![Lock](docs/screens/lock.png)<br>Keypad lock | ![SSTV](docs/screens/sstv_pd120.png)<br>SSTV (PD 120) |
+
 ## Quick start
 
 1. Download `OpenGD77_MDUV380_RT3S.bin` (or the 10 W / RT-84 variant) and
