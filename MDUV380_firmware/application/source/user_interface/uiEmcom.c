@@ -92,6 +92,7 @@ typedef enum
 
 static const emcomPalette_t *pal = &PALETTE_DARK;
 static bool vfoAllowed = true;
+static bool channelAllowed = true;
 
 // last drawn state (for emcomNeedsFullRedraw)
 static struct
@@ -112,6 +113,7 @@ static struct
 #define SOS_FIRST_INTERVAL_MS   60000U
 #define SOS_INTERVAL_MS         120000U
 #define SOS_FAST_BEACONS        3U
+#define SOS_BUSY_RETRY_MS       20000U
 static bool sosOn = false;
 static uint32_t sosNextMs;
 static uint32_t sosSent;
@@ -179,6 +181,11 @@ void emcomSetVfoAllowed(bool allowed)
 	vfoAllowed = allowed;
 }
 
+void emcomSetChannelAllowed(bool allowed)
+{
+	channelAllowed = allowed;
+}
+
 bool emcomScreenActive(void)
 {
 	int menu = menuSystemGetCurrentMenuNumber();
@@ -194,12 +201,18 @@ bool emcomScreenActive(void)
 		return false;
 	}
 
+	// TX screen showing the last heard list, or transmitting from the satellite screen
+	if ((menu == UI_TX_SCREEN) && (menuTxScreenDisplaysLastHeard() || menuTxScreenIsSatellite()))
+	{
+		return false;
+	}
+
 	if (root == UI_VFO_MODE)
 	{
 		return vfoAllowed;
 	}
 
-	return (root == UI_CHANNEL_MODE);
+	return ((root == UI_CHANNEL_MODE) && channelAllowed);
 }
 
 static emcomState_t currentState(void)
@@ -438,8 +451,17 @@ static void sUnits(int dBm, char *buf, size_t size)
 // --- body -----------------------------------------------------------------------------------
 static void formatFreq(uint32_t freq, char *buf, size_t size, bool withUnit)
 {
-	// frequencies are in 10 Hz units
-	snprintf(buf, size, "%u.%04u%s", (unsigned)(freq / 100000U), (unsigned)((freq % 100000U) / 10U), (withUnit ? " MHz" : ""));
+	// frequencies are in 10 Hz units: 4 decimals, 5 when the 10 Hz digit is used (6.25 / 2.5 kHz steps)
+	uint32_t dec = (freq % 100000U);
+
+	if ((dec % 10U) != 0U)
+	{
+		snprintf(buf, size, "%u.%05u%s", (unsigned)(freq / 100000U), (unsigned)dec, (withUnit ? " MHz" : ""));
+	}
+	else
+	{
+		snprintf(buf, size, "%u.%04u%s", (unsigned)(freq / 100000U), (unsigned)(dec / 10U), (withUnit ? " MHz" : ""));
+	}
 }
 
 static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
@@ -454,8 +476,11 @@ static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
 		uint32_t f = (txFreqShown ? txFreq : rxFreq);
 
 		formatFreq(f, buf, sizeof(buf), false);
-		text(1, HERO_Y, buf, FONT_SIZE_4, (txFreqShown ? pal->tx : pal->fg), false);
-		text((DISPLAY_SIZE_X - 2), FREQ_Y, "MHz", FONT_SIZE_1, pal->mut, true);
+		int16_t w = text(1, HERO_Y, buf, FONT_SIZE_4, (txFreqShown ? pal->tx : pal->fg), false);
+		if ((w + 1 + 2 + 18) <= DISPLAY_SIZE_X) // 9 digits leave no room for the unit
+		{
+			text((DISPLAY_SIZE_X - 2), FREQ_Y, "MHz", FONT_SIZE_1, pal->mut, true);
+		}
 		return;
 	}
 
@@ -534,18 +559,19 @@ static void drawZoneRow(const emcomMainInfo_t *info)
 	text((DISPLAY_SIZE_X - 2), ZONE_Y, buf, FONT_SIZE_1, pal->mut, true);
 }
 
-// "3m" / "45s" (fits the third column)
+// "3m" / "45s" (fits the third column; minutes rounded)
 static void totString(char *buf, size_t size)
 {
 	uint32_t secs = (currentChannelData->tot * 15U);
 
-	if ((secs % 60U) == 0U)
+	// at most 3 characters
+	if (secs < 60U)
 	{
-		snprintf(buf, size, "%um", (unsigned)(secs / 60U));
+		snprintf(buf, size, "%us", (unsigned)secs);
 	}
 	else
 	{
-		snprintf(buf, size, "%us", (unsigned)secs);
+		snprintf(buf, size, "%um", (unsigned)((secs + 30U) / 60U));
 	}
 }
 
@@ -633,7 +659,7 @@ static void drawRxPanel(void)
 static void drawCallerPanel(void)
 {
 	char buf[40];
-	char call[24];
+	char call[SCREEN_LINE_BUFFER_SIZE]; // getCallsignOnly() writes up to SCREEN_LINE_BUFFER_SIZE bytes
 
 	if ((LinkHead == NULL) || (HRC6000GetReceivedTgOrPcId() == 0))
 	{
@@ -787,7 +813,7 @@ static void drawEmcomRows(void)
 	// Last heard: DMR station, else the last APRS station
 	if ((trxGetMode() == RADIO_MODE_DIGITAL) && (uiDataGlobal.lastHeardCount > 0) && (LinkHead != NULL))
 	{
-		char call[20];
+		char call[SCREEN_LINE_BUFFER_SIZE]; // getCallsignOnly() writes up to SCREEN_LINE_BUFFER_SIZE bytes
 		char age[8];
 
 		getCallsignOnly(call, (((LinkHead->talkerAlias[0] != 0) && (strncmp(LinkHead->contact, "ID:", 3) == 0)) ? LinkHead->talkerAlias : LinkHead->contact));
@@ -1106,8 +1132,12 @@ static void sosSend(void)
 					((res == APRS_INFO_TX_NO_CONFIG) ? "SOS: no APRS config" : "SOS: TX not allowed"), true);
 			sosNextMs = (ticksGetMillis() + SOS_INTERVAL_MS);
 			break;
+		case APRS_INFO_TX_CHANNEL_BUSY:
+			// the busy-channel wait blocks the UI for up to 2 s: do not retry too often
+			sosNextMs = (ticksGetMillis() + SOS_BUSY_RETRY_MS);
+			break;
 		default:
-			sosNextMs = (ticksGetMillis() + 5000U); // busy: retry soon
+			sosNextMs = (ticksGetMillis() + 5000U); // TX already in progress: retry soon
 			break;
 	}
 }

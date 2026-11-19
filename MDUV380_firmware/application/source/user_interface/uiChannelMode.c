@@ -289,7 +289,11 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 					(uiDataGlobal.Scan.active == false) &&
 					ticksTimerIsEnabled(&uiDataGlobal.DMRLastTalkerOnScreen.timer) &&
 					ticksTimerHasExpired(&uiDataGlobal.DMRLastTalkerOnScreen.timer) &&
-					((audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF) == 0));
+					((audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF) == 0)
+#if defined(HAS_EMCOM_UI)
+					&& (emcomScreenActive() == false) // the EMCOM screen shows the last heard station itself
+#endif
+					);
 
 #if defined(PLATFORM_GD77S)
 			// Just ensure rotary's selected channel is matching the already loaded one
@@ -327,7 +331,8 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 					if (rxPowerSavingIsRxOn())
 					{
 #if defined(HAS_EMCOM_UI)
-						if (emcomScreenActive() && (uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0))
+						emcomSetChannelAllowed((uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0));
+						if (emcomScreenActive())
 						{
 							if (emcomNeedsFullRedraw(ev->time))
 							{
@@ -870,7 +875,8 @@ void uiChannelModeUpdateScreen(int txTimeSecs)
 	}
 
 #if defined(HAS_EMCOM_UI)
-	if (emcomScreenActive() && (uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0))
+	emcomSetChannelAllowed((uiDataGlobal.displayChannelSettings == false) && (directChannelNumber == 0));
+	if (emcomScreenActive())
 	{
 		switch(uiDataGlobal.displayQSOState)
 		{

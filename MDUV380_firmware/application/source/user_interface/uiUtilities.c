@@ -1737,6 +1737,22 @@ void uiUtilityRenderQSODataAndUpdateScreen(void)
 {
 	if (isQSODataAvailableForCurrentTalker())
 	{
+#if defined(HAS_EMCOM_UI)
+		if (emcomScreenActive())
+		{
+			// The EMCOM screen has its own caller panel
+			uiDataGlobal.displayQSOState = QSO_DISPLAY_CALLER_DATA;
+			if (menuSystemGetRootMenuNumber() == UI_VFO_MODE)
+			{
+				uiVFOModeUpdateScreen(0);
+			}
+			else
+			{
+				uiChannelModeUpdateScreen(0);
+			}
+			return;
+		}
+#endif
 		displayClearBuf();
 		uiUtilityRenderHeader(false, false, false);
 		uiUtilityRenderQSOData();

@@ -330,7 +330,11 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 					(uiDataGlobal.Scan.active == false) &&
 					ticksTimerIsEnabled(&uiDataGlobal.DMRLastTalkerOnScreen.timer) &&
 					ticksTimerHasExpired(&uiDataGlobal.DMRLastTalkerOnScreen.timer) &&
-					((audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF) == 0));
+					((audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF) == 0)
+#if defined(HAS_EMCOM_UI)
+					&& (emcomScreenActive() == false) // the EMCOM screen shows the last heard station itself
+#endif
+					);
 
 			// We are entering digits, so update the screen as we have a cursor to blink
 			if ((uiDataGlobal.FreqEnter.index > 0) && ((ev->time - curm) > 300))

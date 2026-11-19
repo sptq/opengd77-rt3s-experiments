@@ -243,6 +243,7 @@ void menuPrivateCallDismiss(void);
 void menuHotspotRestoreSettings(void);
 
 bool menuTxScreenDisplaysLastHeard(void);
+bool menuTxScreenIsSatellite(void); // Fork: TX started from the satellite screen
 void menuTxScreenHandleTxTermination(uiEvent_t *ev, txTerminationReason_t reason);
 
 void menuSatelliteScreenClearPredictions(bool reloadKeps);

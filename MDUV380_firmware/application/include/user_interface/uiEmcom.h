@@ -37,6 +37,7 @@ typedef struct
 bool emcomStyleEnabled(void);       // the setting
 bool emcomScreenActive(void);       // the setting + a VFO / channel / TX screen that uses it now
 void emcomSetVfoAllowed(bool allowed); // VFO mode: false in sweep / dual watch / frequency entry
+void emcomSetChannelAllowed(bool allowed); // channel mode: false for the channel details / direct channel entry
 
 void emcomRenderMain(const emcomMainInfo_t *info); // whole screen, rendered
 void emcomRenderStatusBar(void);                   // rows 0..10 (no render)
