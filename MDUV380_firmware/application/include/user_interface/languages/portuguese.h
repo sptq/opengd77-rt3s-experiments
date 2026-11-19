@@ -330,6 +330,7 @@ const stringsTable_t portuguesLanguage =
 .reset_configuration			= "Repor config.", // MaxLen: 16
 .quickkeys				= "Teclas rapidas", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
 .sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
+.aprs_rx				= "APRS RX", // MaxLen: 16 - Main menu entry: APRS receive (frames, stations, radar, messages)
 };
 /********************************************************************
  *

@@ -326,7 +326,9 @@ enum MENU_SCREENS
 	MENU_QUICKKEYS,// View / edit the SK2 + digit quickkey slots
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) // = I2S_APRS_RX (interfaces/i2s.h)
 #define HAS_SSTV_MENU
+#define HAS_APRS_RX_MENU
 	MENU_SSTV,// Fork: SSTV picture receive
+	MENU_APRS_RX,// Fork: APRS receive (frames, stations, radar, messages, DTMF, CW)
 #endif
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 	UI_MESSAGE_BOX,
@@ -485,6 +487,7 @@ menuStatus_t menuTxScreen(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuRSSIScreen(uiEvent_t *event, bool isFirstRun);
 #if defined(HAS_SSTV_MENU)
 menuStatus_t menuSSTV(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuAPRSRx(uiEvent_t *event, bool isFirstRun);
 #endif
 menuStatus_t menuLastHeard(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuGeneralOptions(uiEvent_t *event, bool isFirstRun);

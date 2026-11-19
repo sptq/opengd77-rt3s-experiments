@@ -70,6 +70,7 @@ static const uint16_t quickkeyChoices[] =
 	QUICKKEY_MENUVALUE(MENU_APRS, 0, 0),
 #endif
 #if defined(HAS_SSTV_MENU)
+	QUICKKEY_MENUVALUE(MENU_APRS_RX, 0, 0),
 	QUICKKEY_MENUVALUE(MENU_SSTV, 0, 0),
 #endif
 };

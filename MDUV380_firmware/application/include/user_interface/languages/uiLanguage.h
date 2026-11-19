@@ -338,6 +338,7 @@ typedef struct
    const char reset_configuration[LANGUAGE_TEXTS_LENGTH];// Options-menu label for the OpenGD77 custom-data area format action
    const char quickkeys[LANGUAGE_TEXTS_LENGTH];// Options-menu label for the quickkeys (SK2 + digit) editor
    const char sstv[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the SSTV receive screen
+   const char aprs_rx[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the APRS receive screen
 } stringsTable_t;
 
 #endif // _OPENGD77_UILANGUAGE_H_

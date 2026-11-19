@@ -7,6 +7,7 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
+* **Main menu: APRS RX and SSTV entries** (also quickkey targets); the APRS monitor moved out of the RSSI screen, `9` there still opens it.
 * **DTMF decoder**: shows received digits on the RSSI monitor.
 * **CW (Morse) decoder**: decodes repeater IDs and CW tones on FM, with WPM and tone shown.
 * **SSTV receive** (main menu → SSTV, also a quickkey): Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120/180 (ISS: PD 120), VIS auto-detect, picture 160x120 on screen, line by line. Host tests with an encoder.

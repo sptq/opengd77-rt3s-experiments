@@ -244,7 +244,7 @@ the MCU runs at 8 kHz through a voice-band filter, while the sondes send
 3. Enter the landing prediction as a waypoint: GPS → waypoint page → `#`.
 4. Close in with fox-hunt mode on the RSSI screen.
 
-### APRS receive — *RSSI screen, key `9`; background: `SK1+4`*
+### APRS receive — *main menu → APRS RX (or `9` on the RSSI screen); background: `SK1+4`*
 
 A software AFSK 1200 demodulator runs on the FM RX audio the HR-C6000
 sends over I2S (8 kHz): mark/space correlators, four slicers covering
@@ -252,7 +252,8 @@ de-/pre-emphasis tone twist, DPLL bit clock, NRZI, HDLC, AX.25 FCS check.
 It only owns the I2S while nothing else needs it (beeps, voice prompts,
 DMR audio and TX take over and the capture restarts by itself).
 
-The monitor (`9` on the RSSI screen) has six views, cycled with `#`:
+The APRS RX screen (main menu, quickkey, or `9` on the RSSI screen) has six
+views, cycled with `#`:
 
 * **frames** — last 8 frames; `*` shows the selected one raw (full TNC2
   line + hex dump),

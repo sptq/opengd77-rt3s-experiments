@@ -135,12 +135,12 @@ Radio nie dekoduje telemetrii RS41 ani M20. Sondę da się jednak znaleźć:
 
 ---
 
-## Odbiór APRS (monitor ramek): ekran RSSI, klawisz `9`
+## Odbiór APRS: menu główne → APRS RX
 
 Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
 
 1. Ustaw kanał lub VFO w **FM** na **144.800** (APRS w Europie).
-2. Wejdź w **Menu → Sygnał (RSSI)** i naciśnij **`9`**. Monitor zajmuje cały ekran.
+2. Wejdź w **Menu → APRS RX** (albo na ekranie RSSI naciśnij **`9`**; ekran można też przypisać do quickkeya `SK2 + cyfra`). Monitor zajmuje cały ekran.
 3. Górna linia statusu: `-87dBm L45 OK3 E7`
    * `dBm` to siła sygnału;
    * `L` to poziom dźwięku w % (szczyt z ostatniej sekundy);
@@ -175,14 +175,14 @@ Klawisze w monitorze:
 | `*` | widok surowy wybranej ramki (w widoku ramek); w widoku stacji/radaru: ustaw stację jako waypoint GPS |
 | `GREEN` | odpowiedź na wiadomość / nowa wiadomość do wybranej stacji |
 | `0` | wyczyszczenie bieżącego widoku (ramki i stacje, wiadomości albo tekst DTMF/CW) |
-| `9` | wyłączenie monitora |
-| `RED` | wyjście z widoku surowego, potem z ekranu RSSI |
+| `9` | wyjście z ekranu APRS RX |
+| `RED` / `GREEN` | wyjście z widoku surowego / wyboru odpowiedzi, potem z ekranu APRS RX |
 
 ### Odbiór APRS w tle: `SK1 + 4`
 
 Na ekranie VFO lub kanału `SK1 + 4` włącza i wyłącza odbiór APRS w tle (komunikat `APRS RX: on/off`). Można też przypisać to do quickkeya (akcja `APRS RX on/off`).
 
-Przy każdej odebranej ramce pojawia się na chwilę powiadomienie, np. `SP7ABC-9 12.3km` (albo `APRS SP7ABC`, gdy ramka nie ma pozycji). Ramki i stacje odebrane w tle widać potem w monitorze (RSSI, `9`).
+Przy każdej odebranej ramce pojawia się na chwilę powiadomienie, np. `SP7ABC-9 12.3km` (albo `APRS SP7ABC`, gdy ramka nie ma pozycji). Ramki i stacje odebrane w tle widać potem w ekranie *Menu → APRS RX*.
 
 Ustawienie jest zapamiętywane po wyłączeniu radia. W tle radio pokazuje też sekwencje DTMF (`DTMF 1234`) i odbiera wiadomości APRS (z ACK).
 

@@ -94,6 +94,7 @@ menuDataGlobal_t menuDataGlobal =
 				NULL,// Quickkeys
 #if defined(HAS_SSTV_MENU)
 				NULL,// SSTV
+				NULL,// APRS RX
 #endif
 				// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 				NULL,// MessageBox
@@ -157,6 +158,7 @@ static menuFunctionData_t menuFunctions[] =
 		{ menuQuickkeys,            NULL, NULL, 0 },
 #if defined(HAS_SSTV_MENU)
 		{ menuSSTV,                 NULL, NULL, 0 },
+		{ menuAPRSRx,               NULL, NULL, 0 },
 #endif
 		// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 		{ uiMessageBox,             NULL, NULL, 0 },
@@ -670,6 +672,7 @@ const menuItemNewData_t mainMenuItems[] =
 	{ 195, MENU_GPS		        },
 #endif
 #if defined(HAS_SSTV_MENU)
+	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
 	{ 282, MENU_SSTV            },// stringOffset 282 = .sstv field (fork, end of stringsTable_t)
 #endif
 };
