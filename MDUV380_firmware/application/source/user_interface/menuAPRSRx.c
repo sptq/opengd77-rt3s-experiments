@@ -157,7 +157,8 @@ static void aprsMonSlice(const char *text, uint32_t textLen, uint32_t offset, ch
 	line[n] = 0;
 }
 
-// Line with left and right parts, the left one truncated; inverted when selected
+// Line with left and right parts, the left one truncated. Selected: full width bar with a
+// marker (as in the menus). Left part bold, right part muted.
 static void aprsMonPrintRow(int16_t y, char *left, const char *right, bool selected)
 {
 	size_t maxLeft = (APRS_MON_CHARS - strlen(right) - 1);
@@ -169,19 +170,77 @@ static void aprsMonPrintRow(int16_t y, char *left, const char *right, bool selec
 
 	if (selected)
 	{
+		displayThemeApply(THEME_ITEM_BG_MENU_ITEM_SELECTED, THEME_ITEM_BG);
 		displayFillRect(0, y, DISPLAY_SIZE_X, FONT_SIZE_1_HEIGHT, false);
+		displayThemeApply(THEME_ITEM_BG, THEME_ITEM_BG);
+		displayFillRect(0, (y + 2), 2, (FONT_SIZE_1_HEIGHT - 4), false);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(4, y, left, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+		displayPrintCore(0, y, right, FONT_SIZE_1, TEXT_ALIGN_RIGHT, true);
 	}
-	displayPrintCore(0, y, left, FONT_SIZE_1, TEXT_ALIGN_LEFT, selected);
-	displayPrintCore(0, y, right, FONT_SIZE_1, TEXT_ALIGN_RIGHT, selected);
+	else
+	{
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(4, y, left, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCore(0, y, right, FONT_SIZE_1, TEXT_ALIGN_RIGHT, false);
+	}
+	displayThemeResetToDefault();
 }
 
+// Empty view: a heading, a hint, the keys
 static void aprsMonDrawHint(const char *line1, const char *line2)
 {
-	displayPrintCentered((APRS_MON_LIST_Y + 24), line1, FONT_SIZE_3);
+	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+	displayPrintCentered((APRS_MON_LIST_Y + 22), line1, FONT_SIZE_3);
+	displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
+	displayPrintCentered((APRS_MON_LIST_Y + 44), line2, FONT_SIZE_1);
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintCentered((APRS_MON_LIST_Y + 56), line2, FONT_SIZE_1);
-	displayPrintCentered((APRS_MON_LIST_Y + 66), "#:view 0:clear 9:exit", FONT_SIZE_1);
+	displayDrawFastHLine(20, (APRS_MON_LIST_Y + 60), (DISPLAY_SIZE_X - 40), true);
+	displayPrintCentered((APRS_MON_LIST_Y + 66), "# VIEW  0 CLEAR  9 EXIT", FONT_SIZE_1);
 	displayThemeResetToDefault();
+}
+
+// Small filled field with the text in the background colour ("chip")
+static int16_t aprsMonChip(int16_t x, int16_t y, const char *text, themeItem_t colour)
+{
+	int16_t w = (int16_t)((strlen(text) * 6) + 4);
+
+	displayThemeApply(colour, THEME_ITEM_BG);
+	displayFillRect(x, (y - 1), w, (FONT_SIZE_1_HEIGHT + 1), false);
+	displayPrintCore((x + 2), y, text, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+	displayThemeResetToDefault();
+	return w;
+}
+
+// Bottom bar (as the EMCOM footer): text on the left, optional chip on the right
+#define APRS_MON_FOOTER_H   10
+static void aprsMonFooter(const char *text, const char *chip, themeItem_t chipColour)
+{
+	int16_t y = (DISPLAY_SIZE_Y - APRS_MON_FOOTER_H);
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, y, DISPLAY_SIZE_X, APRS_MON_FOOTER_H, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(3, (y + 1), text, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	if (chip)
+	{
+		aprsMonChip((DISPLAY_SIZE_X - 2 - (int16_t)((strlen(chip) * 6) + 4)), (y + 1), chip, chipColour);
+	}
+	displayThemeResetToDefault();
+}
+
+// "KEY value" with the key muted
+static int16_t aprsMonKeyValue(int16_t x, int16_t y, const char *key, const char *value, themeItem_t valueColour)
+{
+	int16_t w = (int16_t)((strlen(key) * 6) + 3);
+
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+	displayPrintCore(x, y, key, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayThemeApply(valueColour, THEME_ITEM_BG);
+	displayPrintCore((x + w), y, value, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayThemeResetToDefault();
+	return (int16_t)(w + (strlen(value) * 6));
 }
 
 // --- Frames view ---------------------------------------------------------------
@@ -235,11 +294,15 @@ static void aprsMonDrawFrames(void)
 		}
 		text[n] = 0;
 
+		displayThemeApply(THEME_ITEM_FG_CHANNEL_CONTACT_INFO, THEME_ITEM_BG);
 		for (uint32_t l = 0; l < 2; l++)
 		{
 			aprsMonSlice(text, n, (l * APRS_MON_CHARS), line);
-			displayPrintAt(0, (y + ((l + 1) * FONT_SIZE_1_HEIGHT)), line, FONT_SIZE_1);
+			displayPrintAt(4, (y + ((l + 1) * FONT_SIZE_1_HEIGHT)), line, FONT_SIZE_1);
 		}
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawFastHLine(0, (y + APRS_MON_BLOCK_H - 1), DISPLAY_SIZE_X, true);
+		displayThemeResetToDefault();
 	}
 }
 
@@ -348,7 +411,7 @@ static void aprsMonStationMove(int dir, bool needPos)
 }
 
 // --- Stations view -------------------------------------------------------------------
-#define APRS_MON_STATION_ROWS   ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - FONT_SIZE_1_HEIGHT - 1) / FONT_SIZE_1_HEIGHT)
+#define APRS_MON_STATION_ROWS   ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - APRS_MON_FOOTER_H - 1) / (FONT_SIZE_1_HEIGHT + 1))
 
 static void aprsMonDrawStations(void)
 {
@@ -389,7 +452,7 @@ static void aprsMonDrawStations(void)
 			snprintf(right, sizeof(right), "%s %3s", (st->hasPos ? "pos" : "-"), age);
 		}
 		snprintf(left, sizeof(left), "%s", st->name);
-		aprsMonPrintRow((APRS_MON_LIST_Y + (r * FONT_SIZE_1_HEIGHT)), left, right, ((first + r) == sel));
+		aprsMonPrintRow((APRS_MON_LIST_Y + (r * (FONT_SIZE_1_HEIGHT + 1))), left, right, ((first + r) == sel));
 	}
 
 	// Details of the selected station
@@ -398,22 +461,20 @@ static void aprsMonDrawStations(void)
 	{
 		if (st->speedKmh >= 0)
 		{
-			snprintf(left, sizeof(left), "%ukm/h %03u  n:%u%s", (unsigned)st->speedKmh, (unsigned)st->courseDeg, (unsigned)st->count, (hasOwn ? "" : " no own pos"));
+			snprintf(left, sizeof(left), "%ukm/h %03u  x%u", (unsigned)st->speedKmh, (unsigned)st->courseDeg, (unsigned)st->count);
 		}
 		else
 		{
-			snprintf(left, sizeof(left), "n:%u%s", (unsigned)st->count, (st->hasPos ? (hasOwn ? "" : " no own pos") : " no position"));
+			snprintf(left, sizeof(left), "x%u%s", (unsigned)st->count, (st->hasPos ? (hasOwn ? "" : "  no own pos") : "  no position"));
 		}
-		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-		displayPrintAt(0, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), left, FONT_SIZE_1);
-		displayThemeResetToDefault();
+		aprsMonFooter(left, "GRN MSG", THEME_ITEM_FG_RX_FREQ);
 	}
 }
 
 // --- Radar view (north up, own position in the centre) --------------------------------
-#define RADAR_R    48
-#define RADAR_CX   (RADAR_R + 2)
-#define RADAR_CY   (APRS_MON_LIST_Y + 1 + RADAR_R)
+#define RADAR_R    44
+#define RADAR_CX   (RADAR_R + 3)
+#define RADAR_CY   (APRS_MON_LIST_Y + 9 + RADAR_R)
 #define RADAR_TX   (RADAR_CX + RADAR_R + 6)
 
 static void aprsMonDrawRadar(void)
@@ -469,13 +530,20 @@ static void aprsMonDrawRadar(void)
 		}
 	}
 
-	// Rings, north tick, own position
+	// Rings, dotted cross, north, own position
 	displayThemeApply(THEME_ITEM_FG_POLAR_DRAWING, THEME_ITEM_BG);
 	displayDrawCircle(RADAR_CX, RADAR_CY, RADAR_R, true);
+	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayDrawCircle(RADAR_CX, RADAR_CY, (RADAR_R / 2), true);
-	displayDrawFastVLine(RADAR_CX, (RADAR_CY - RADAR_R - 1), 5, true);
-	displayDrawFastHLine((RADAR_CX - 2), RADAR_CY, 5, true);
-	displayDrawFastVLine(RADAR_CX, (RADAR_CY - 2), 5, true);
+	for (int16_t d = -RADAR_R + 2; d <= (RADAR_R - 2); d += 3)
+	{
+		displaySetPixel((RADAR_CX + d), RADAR_CY, true);
+		displaySetPixel(RADAR_CX, (RADAR_CY + d), true);
+	}
+	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+	displayPrintAt((RADAR_CX - 2), (RADAR_CY - RADAR_R - 8), "N", FONT_SIZE_1_BOLD);
+	displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
+	displayFillTriangle(RADAR_CX, (RADAR_CY - 4), (RADAR_CX - 3), (RADAR_CY + 3), (RADAR_CX + 3), (RADAR_CY + 3), true);
 	displayThemeResetToDefault();
 
 	// Stations
@@ -510,6 +578,7 @@ static void aprsMonDrawRadar(void)
 		displayFillCircle(x, y, 2, true);
 		if (st == selSt)
 		{
+			displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
 			displayDrawCircle(x, y, 5, true);
 		}
 		displayThemeResetToDefault();
@@ -524,45 +593,50 @@ static void aprsMonDrawRadar(void)
 		int16_t x = (int16_t)(RADAR_CX + (sin(a) * r));
 		int16_t y = (int16_t)(RADAR_CY - (cos(a) * r));
 
-		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR_S9P, THEME_ITEM_BG);
 		displayDrawRect((x - 3), (y - 3), 7, 7, true); // waypoint: square
 		displayThemeResetToDefault();
 	}
 #endif
 
 	// Selected station panel
-	int16_t ty = APRS_MON_LIST_Y;
+	int16_t ty = (APRS_MON_LIST_Y + 1);
 	if (selSt)
 	{
 		char dist[12];
 		double d = aprsRxDistanceKm(myLat, myLon, selSt->lat, selSt->lon);
 
-		displayPrintAt(RADAR_TX, ty, selSt->name, FONT_SIZE_1);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		snprintf(buf, sizeof(buf), "%s", selSt->name);
+		buf[10] = 0;
+		displayPrintAt(RADAR_TX, ty, buf, FONT_SIZE_1_BOLD);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawFastHLine(RADAR_TX, (ty + 9), (DISPLAY_SIZE_X - RADAR_TX - 2), true);
+		displayThemeResetToDefault();
+
 		aprsRxFormatDistance(d, dist, sizeof(dist));
-		displayPrintAt(RADAR_TX, (ty + 10), dist, FONT_SIZE_1);
-		snprintf(buf, sizeof(buf), "%03u deg", (unsigned)(aprsRxBearingDeg(myLat, myLon, selSt->lat, selSt->lon) + 0.5) % 360U);
-		displayPrintAt(RADAR_TX, (ty + 20), buf, FONT_SIZE_1);
+		aprsMonKeyValue(RADAR_TX, (ty + 13), "DST", dist, THEME_ITEM_FG_DEFAULT);
+		snprintf(buf, sizeof(buf), "%03u", (unsigned)(aprsRxBearingDeg(myLat, myLon, selSt->lat, selSt->lon) + 0.5) % 360U);
+		aprsMonKeyValue(RADAR_TX, (ty + 23), "BRG", buf, THEME_ITEM_FG_DEFAULT);
 		aprsMonAge((now - selSt->lastMs), age, sizeof(age));
-		snprintf(buf, sizeof(buf), "%s ago", age);
-		displayPrintAt(RADAR_TX, (ty + 30), buf, FONT_SIZE_1);
+		aprsMonKeyValue(RADAR_TX, (ty + 33), "AGE", age, THEME_ITEM_FG_DEFAULT);
 		if (selSt->speedKmh >= 0)
 		{
-			snprintf(buf, sizeof(buf), "%ukm/h", (unsigned)selSt->speedKmh);
-			displayPrintAt(RADAR_TX, (ty + 40), buf, FONT_SIZE_1);
+			snprintf(buf, sizeof(buf), "%u", (unsigned)selSt->speedKmh);
+			aprsMonKeyValue(RADAR_TX, (ty + 43), "KMH", buf, THEME_ITEM_FG_DEFAULT);
 		}
 	}
 	else
 	{
-		displayPrintAt(RADAR_TX, ty, "no pos", FONT_SIZE_1);
-		displayPrintAt(RADAR_TX, (ty + 10), "yet", FONT_SIZE_1);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintAt(RADAR_TX, ty, "no position", FONT_SIZE_1);
+		displayPrintAt(RADAR_TX, (ty + 10), "heard yet", FONT_SIZE_1);
+		displayThemeResetToDefault();
 	}
 
 	char rng[12];
 	aprsRxFormatDistance(range, rng, sizeof(rng));
-	snprintf(buf, sizeof(buf), "R %s", rng);
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintAt(RADAR_TX, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), buf, FONT_SIZE_1);
-	displayThemeResetToDefault();
+	aprsMonKeyValue(RADAR_TX, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT - 1), "R", rng, THEME_ITEM_FG_RX_FREQ);
 }
 
 // --- Messages view ---------------------------------------------------------------------
@@ -602,25 +676,45 @@ static void aprsMonDrawMessages(void)
 			break;
 		}
 
+		static const themeItem_t statusColour[] =
+		{
+			THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_FG_RSSI_BAR_S9P, THEME_ITEM_FG_RSSI_BAR_S9P, THEME_ITEM_FG_RSSI_BAR,
+			THEME_ITEM_FG_TX_COUNTER, THEME_ITEM_FG_TX_COUNTER, THEME_ITEM_FG_TX_COUNTER
+		};
 		bool out = (m->kind >= APRS_MSG_OUT_PENDING);
+		bool selected = ((first + b) == aprsMonMsgSelected);
+
 		aprsMonAge((now - m->timeMs), age, sizeof(age));
-		snprintf(line, sizeof(line), "%s%s", (out ? "> " : (m->kind == APRS_MSG_IN_BULLETIN ? "B " : "< ")), m->peer);
-		if (m->kind == APRS_MSG_OUT_PENDING)
+		snprintf(line, sizeof(line), "  %s", m->peer);
+		aprsMonPrintRow(y, line, age, selected);
+
+		// direction marker: in (green), out (blue), bulletin (amber)
+		aprsMonChip(3, y, (out ? ">" : ((m->kind == APRS_MSG_IN_BULLETIN) ? "B" : "<")),
+				(out ? THEME_ITEM_FG_RX_FREQ : ((m->kind == APRS_MSG_IN_BULLETIN) ? THEME_ITEM_FG_RSSI_BAR_S9P : THEME_ITEM_FG_RSSI_BAR)));
+
+		if (status[m->kind][0])
 		{
-			snprintf(right, sizeof(right), "%s%u %s", status[m->kind], (unsigned)m->tries, age);
+			if (m->kind == APRS_MSG_OUT_PENDING)
+			{
+				snprintf(right, sizeof(right), "%s%u", status[m->kind], (unsigned)m->tries);
+			}
+			else
+			{
+				snprintf(right, sizeof(right), "%s", status[m->kind]);
+			}
+			aprsMonChip((DISPLAY_SIZE_X - 2 - (int16_t)(strlen(age) * 6) - 4 - (int16_t)((strlen(right) * 6) + 4)), y, right, statusColour[m->kind]);
 		}
-		else
-		{
-			snprintf(right, sizeof(right), "%s%s%s", status[m->kind], (status[m->kind][0] ? " " : ""), age);
-		}
-		aprsMonPrintRow(y, line, right, ((first + b) == aprsMonMsgSelected));
 
 		uint32_t n = strlen(m->text);
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
 		for (uint32_t l = 0; l < 2; l++)
 		{
 			aprsMonSlice(m->text, n, (l * APRS_MON_CHARS), line);
-			displayPrintAt(0, (y + ((l + 1) * FONT_SIZE_1_HEIGHT)), line, FONT_SIZE_1);
+			displayPrintAt(4, (y + ((l + 1) * FONT_SIZE_1_HEIGHT)), line, FONT_SIZE_1);
 		}
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayDrawFastHLine(0, (y + APRS_MON_BLOCK_H - 1), DISPLAY_SIZE_X, true);
+		displayThemeResetToDefault();
 	}
 }
 
@@ -628,11 +722,10 @@ static void aprsMonDrawMessages(void)
 static void aprsMonDrawReply(void)
 {
 	char line[APRS_MON_CHARS + 1];
-	uint32_t rows = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_1_HEIGHT);
+	uint32_t rows = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - APRS_MON_FOOTER_H - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_1_HEIGHT);
 	uint32_t first = ((aprsMonReplyIndex >= rows) ? (aprsMonReplyIndex - rows + 1) : 0);
 
-	snprintf(line, sizeof(line), "To %s:", aprsMonReplyTo);
-	displayPrintAt(0, APRS_MON_LIST_Y, line, FONT_SIZE_1);
+	aprsMonKeyValue(4, APRS_MON_LIST_Y, "TO", aprsMonReplyTo, THEME_ITEM_FG_DEFAULT);
 
 	for (uint32_t r = 0; r < rows; r++)
 	{
@@ -646,9 +739,7 @@ static void aprsMonDrawReply(void)
 		aprsMonPrintRow((APRS_MON_LIST_Y + ((r + 1) * FONT_SIZE_1_HEIGHT) + 2), line, "", (i == aprsMonReplyIndex));
 	}
 
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintAt(0, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), "GREEN:send RED:cancel", FONT_SIZE_1);
-	displayThemeResetToDefault();
+	aprsMonFooter("GRN SEND  RED CANCEL", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 // --- DTMF / CW views -----------------------------------------------------------------
@@ -657,7 +748,7 @@ static void aprsMonDrawToneText(bool cw)
 	char text[APRS_RX_TONE_TEXT_LEN + 1];
 	char line[24];
 	uint32_t perLine = (DISPLAY_SIZE_X / 8); // FONT_SIZE_3: 8 px wide
-	uint32_t lines = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_3_HEIGHT);
+	uint32_t lines = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - APRS_MON_FOOTER_H - 2) / FONT_SIZE_3_HEIGHT);
 	uint32_t len = aprsRxToneText(cw, text, sizeof(text), NULL);
 
 	if (cw)
@@ -666,20 +757,19 @@ static void aprsMonDrawToneText(bool cw)
 
 		if (wpm)
 		{
-			snprintf(line, sizeof(line), "%uWPM %uHz %s", (unsigned)wpm, (unsigned)cwRxGetToneHz(), (cwRxIsKeyed() ? "#" : ""));
+			snprintf(line, sizeof(line), "%u WPM  %u Hz", (unsigned)wpm, (unsigned)cwRxGetToneHz());
 		}
 		else
 		{
-			snprintf(line, sizeof(line), "CW: waiting...");
+			snprintf(line, sizeof(line), "waiting for CW");
 		}
+		aprsMonFooter(line, (cwRxIsKeyed() ? "KEY" : NULL), THEME_ITEM_FG_RSSI_BAR);
 	}
 	else
 	{
-		snprintf(line, sizeof(line), "DTMF: %s", (len ? "" : "waiting..."));
+		aprsMonFooter((len ? "0 CLEAR" : "waiting for DTMF"), NULL, THEME_ITEM_FG_DEFAULT);
 	}
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintAt(0, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT), line, FONT_SIZE_1);
-	displayThemeResetToDefault();
+	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
 
 	// Last 'lines' lines of text
 	uint32_t maxChars = (perLine * lines);
@@ -706,6 +796,7 @@ static void aprsMonDrawToneText(bool cw)
 		line[n] = 0;
 		displayPrintAt(0, (APRS_MON_LIST_Y + (l * FONT_SIZE_3_HEIGHT)), line, FONT_SIZE_3);
 	}
+	displayThemeResetToDefault();
 }
 
 static void aprsMonSetView(aprsMonView_t view)
@@ -725,39 +816,70 @@ static void aprsMonDraw(void)
 	displayClearBuf();
 	menuDisplayTitle(aprsMonReplyActive ? "APRS message" : (aprsMonRawView ? "APRS raw" : titles[aprsMonView]));
 
+	// Status strip: state chip, audio level, frames OK / errors, unread messages or dBm
+	int16_t sy = (MENU_HEADER_HEIGHT + 2);
+	int16_t x = 2;
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, MENU_HEADER_HEIGHT, DISPLAY_SIZE_X, (APRS_MON_LIST_Y - 2 - MENU_HEADER_HEIGHT), false);
+
 	switch (st.state)
 	{
 		case APRS_RX_STATE_LISTENING:
-			if (aprsMonRawView)
-			{
-				snprintf(line, sizeof(line), "%u/%u  OK%u E%u", (unsigned)(aprsMonSelected + 1), (unsigned)aprsRxHistoryCount(),
-						(unsigned)st.framesOk, (unsigned)st.crcErrors);
-			}
-			else
-			{
-				uint32_t unread = aprsRxMessageUnreadCount();
-
-				snprintf(line, sizeof(line), "%ddBm L%u OK%u E%u", trxGetRSSIdBm(RADIO_DEVICE_PRIMARY), (unsigned)st.levelPercent,
-						(unsigned)st.framesOk, (unsigned)st.crcErrors);
-				if (unread)
-				{
-					size_t l = strlen(line);
-					snprintf(&line[l], (sizeof(line) - l), " M%u", (unsigned)unread);
-				}
-			}
+			x += aprsMonChip(x, sy, "RX", THEME_ITEM_FG_RSSI_BAR) + 4;
 			break;
 		case APRS_RX_STATE_NO_CLOCK:
-			snprintf(line, sizeof(line), "APRS RX: I2S no clock");
+			x += aprsMonChip(x, sy, "NO CLK", THEME_ITEM_FG_TX_COUNTER) + 4;
 			break;
 		default:
-			snprintf(line, sizeof(line), (trxGetMode() != RADIO_MODE_ANALOG) ? "APRS RX: FM only" : "APRS RX: paused");
+			x += aprsMonChip(x, sy, ((trxGetMode() != RADIO_MODE_ANALOG) ? "FM ONLY" : "PAUSE"), THEME_ITEM_FG_RSSI_BAR_S9P) + 4;
 			break;
 	}
-	displayPrintAt(0, APRS_MON_STATUS_Y, line, FONT_SIZE_1);
+
+	if (st.state == APRS_RX_STATE_LISTENING)
+	{
+		// audio level, 20 px
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+		displayDrawRect(x, (sy + 1), 22, 6, true);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_HEADER_TEXT);
+		displayFillRect((x + 1), (sy + 2), (int16_t)((st.levelPercent * 20U) / 100U), 4, false);
+		x += 26;
+	}
+
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	snprintf(line, sizeof(line), "OK%u E%u", (unsigned)st.framesOk, (unsigned)st.crcErrors);
+	displayPrintCore(x, sy, line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	uint32_t unread = aprsRxMessageUnreadCount();
+	if (aprsMonRawView)
+	{
+		snprintf(line, sizeof(line), "%u/%u", (unsigned)(aprsMonSelected + 1), (unsigned)aprsRxHistoryCount());
+		displayPrintCore((DISPLAY_SIZE_X - 2 - (int16_t)(strlen(line) * 6)), sy, line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	}
+	else if (unread)
+	{
+		snprintf(line, sizeof(line), "MSG %u", (unsigned)unread);
+		aprsMonChip((DISPLAY_SIZE_X - 2 - (int16_t)((strlen(line) * 6) + 4)), sy, line, THEME_ITEM_FG_RX_FREQ);
+	}
+	else
+	{
+		snprintf(line, sizeof(line), "%ddBm", trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCore((DISPLAY_SIZE_X - 2 - (int16_t)(strlen(line) * 6)), sy, line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	}
 
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayDrawFastHLine(0, (APRS_MON_LIST_Y - 2), DISPLAY_SIZE_X, true);
 	displayThemeResetToDefault();
+
+	// view position in the title bar
+	if ((aprsMonReplyActive == false) && (aprsMonRawView == false))
+	{
+		snprintf(line, sizeof(line), "%d/%d", (int)(aprsMonView + 1), (int)APRS_MON_VIEW_MAX);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_MENU_NAME);
+		displayPrintCore((DISPLAY_SIZE_X - 3 - (int16_t)(strlen(line) * 6)), 4, line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+		displayThemeResetToDefault();
+	}
 
 	if (aprsMonReplyActive)
 	{

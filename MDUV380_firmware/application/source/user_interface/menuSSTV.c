@@ -45,12 +45,15 @@ static void sstvPixel(uint16_t x, uint16_t row, uint8_t r, uint8_t g, uint8_t b)
 static void drawHint(void)
 {
 	displayFillRect(0, SSTV_Y0, DISPLAY_SIZE_X, SSTV_RX_ROWS, true);
-	displayPrintCentered((SSTV_Y0 + 24), "Waiting for", FONT_SIZE_3);
-	displayPrintCentered((SSTV_Y0 + 42), "SSTV picture", FONT_SIZE_3);
+	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+	displayPrintCentered((SSTV_Y0 + 22), "Waiting for", FONT_SIZE_3);
+	displayPrintCentered((SSTV_Y0 + 40), "SSTV picture", FONT_SIZE_3);
+	displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
+	displayPrintCentered((SSTV_Y0 + 64), "FM, e.g. ISS 145.800", FONT_SIZE_1);
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayPrintCentered((SSTV_Y0 + 70), "FM, e.g. ISS 145.800", FONT_SIZE_1);
-	displayPrintCentered((SSTV_Y0 + 82), "Robot Martin Scottie PD", FONT_SIZE_1);
-	displayPrintCentered((SSTV_Y0 + 100), "0:clear  RED:exit", FONT_SIZE_1);
+	displayPrintCentered((SSTV_Y0 + 76), "ROBOT MARTIN SCOTTIE PD", FONT_SIZE_1);
+	displayDrawFastHLine(20, (SSTV_Y0 + 92), (DISPLAY_SIZE_X - 40), true);
+	displayPrintCentered((SSTV_Y0 + 98), "0 CLEAR  RED EXIT", FONT_SIZE_1);
 	displayThemeResetToDefault();
 }
 
@@ -104,8 +107,13 @@ static void updateScreen(void)
 		}
 	}
 
-	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_STATUS_H, true);
-	displayPrintAt(0, ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_STATUS_H, false);
+	displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+	displayFillRect(0, 0, 3, SSTV_STATUS_H, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintAt(6, ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
+	displayThemeResetToDefault();
 	displayRender();
 }
 
