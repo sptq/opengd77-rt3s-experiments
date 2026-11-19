@@ -28,6 +28,7 @@
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiLocalisation.h"
+#include "user_interface/uiEmcom.h"
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 #include "interfaces/batteryAndPowerManagement.h"
 #include "hardware/radioHardwareInterface.h"
@@ -69,6 +70,28 @@ static void updateScreen(void)
 	uint16_t fontHeight = (FONT_SIZE_3_HEIGHT * (dblHeight ? 2 : 1));
 
 	displayClearBuf();
+
+#if defined(HAS_EMCOM_UI)
+	if (emcomStyleEnabled())
+	{
+		// Fork: SP7TEAM good-bye screen
+		emcomDrawEmblem((DISPLAY_SIZE_X / 2), 13, THEME_ITEM_FG_DECORATION, THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+		displayPrintCentered(37, "73", FONT_SIZE_4);
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG);
+		displayPrintCentered(68, "SP7TEAM", FONT_SIZE_3);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
+		displayPrintCentered(87, "THANKS FOR LISTENING", FONT_SIZE_1);
+
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+		displayFillRect(0, (DISPLAY_SIZE_Y - 18), DISPLAY_SIZE_X, 18, false);
+		displayThemeApply(THEME_ITEM_FG_WARNING_NOTIFICATION, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCentered((DISPLAY_SIZE_Y - 17), currentLanguage->power_off, FONT_SIZE_3);
+		displayThemeResetToDefault();
+		displayRender();
+		return;
+	}
+#endif
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_NOTIFICATION);
 	displayDrawRoundRectWithDropShadow(4, 4, 120 + DISPLAY_H_EXTRA_PIXELS, DISPLAY_SIZE_Y - 6, 5, true);
 

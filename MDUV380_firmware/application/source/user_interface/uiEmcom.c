@@ -1097,6 +1097,33 @@ bool emcomNeedsFullRedraw(uint32_t now)
 	return false;
 }
 
+// --- SP7TEAM emblem: antenna mast with radio waves (boot and power-off screens) ---------
+void emcomDrawEmblem(int16_t cx, int16_t ty, themeItem_t waves, themeItem_t mast, themeItem_t bg)
+{
+	displayThemeApply(waves, bg);
+	for (int16_t r = 7; r <= 19; r += 6)
+	{
+		for (int16_t a = -40; a <= 40; a += 2) // arcs, +/-40 degrees around the horizontal, both sides
+		{
+			double rad = ((double)a * (M_PI / 180.0));
+			int16_t dx = (int16_t)lround(cos(rad) * r);
+			int16_t dy = (int16_t)lround(sin(rad) * r);
+
+			displaySetPixel((cx + dx), (ty + dy), true);
+			displaySetPixel((cx - dx), (ty + dy), true);
+		}
+	}
+
+	displayThemeApply(mast, bg);
+	displayFillCircle(cx, ty, 2, true);
+	displayDrawFastVLine(cx, ty, 26, true);
+	displayDrawLine(cx, (ty + 8), (cx - 7), (ty + 26), true);
+	displayDrawLine(cx, (ty + 8), (cx + 7), (ty + 26), true);
+	displayDrawFastHLine((cx - 4), (ty + 17), 9, true);
+	displayDrawFastHLine((cx - 9), (ty + 26), 19, true);
+	displayThemeResetToDefault();
+}
+
 // --- theme preset (menus in the same colours as the EMCOM screen) ------------------------
 void emcomThemePreset(bool night, uint16_t *items)
 {

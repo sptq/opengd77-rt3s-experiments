@@ -56,6 +56,7 @@ layout, fonts and icons (`docs/screens/`, example data).
 | ![RSSI](docs/screens/rssi.png)<br>RSSI / fox hunt | ![Last heard](docs/screens/lastheard.png)<br>Last heard | ![Event log](docs/screens/eventlog.png)<br>Event log |
 | ![APRS frames](docs/screens/aprs_frames.png)<br>APRS frames | ![APRS radar](docs/screens/aprs_radar.png)<br>APRS radar | ![APRS messages](docs/screens/aprs_messages.png)<br>APRS messages |
 | ![TG entry](docs/screens/tg_entry.png)<br>TG / PC entry | ![Lock](docs/screens/lock.png)<br>Keypad lock | ![SSTV](docs/screens/sstv_pd120.png)<br>SSTV (PD 120) |
+| ![Power off](docs/screens/poweroff.png)<br>Power off | | |
 
 ## Quick start
 

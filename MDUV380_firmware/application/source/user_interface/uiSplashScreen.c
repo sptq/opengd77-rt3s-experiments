@@ -162,28 +162,8 @@ static void updateScreen(bool isFirstRun)
 
 		displayClearBuf();
 
-		// waves
-		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_SPLASHSCREEN);
-		for (int16_t r = 7; r <= 19; r += 6)
-		{
-			for (int16_t a = -40; a <= 40; a += 2) // arcs, +/-40 degrees around the horizontal, both sides
-			{
-				double rad = ((double)a * (M_PI / 180.0));
-				int16_t dx = (int16_t)lround(cos(rad) * r);
-				int16_t dy = (int16_t)lround(sin(rad) * r);
-
-				displaySetPixel((cx + dx), (ty + dy), true);
-				displaySetPixel((cx - dx), (ty + dy), true);
-			}
-		}
-		// mast
+		emcomDrawEmblem(cx, ty, THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
 		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
-		displayFillCircle(cx, ty, 2, true);
-		displayDrawFastVLine(cx, ty, 26, true);
-		displayDrawLine(cx, (ty + 8), (cx - 7), (ty + 26), true);
-		displayDrawLine(cx, (ty + 8), (cx + 7), (ty + 26), true);
-		displayDrawFastHLine((cx - 4), (ty + 17), 9, true);
-		displayDrawFastHLine((cx - 9), (ty + 26), 19, true);
 
 		// name
 		displayPrintCentered(36, "SP7TEAM", FONT_SIZE_4);

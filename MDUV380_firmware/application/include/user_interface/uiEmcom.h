@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "hardware/HX8353E.h"
 
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
 #define HAS_EMCOM_UI
@@ -50,6 +51,9 @@ void emcomRenderStatusBar(void);                   // rows 0..10 (no render)
 void emcomDrawBar(int barWidth, bool isTx);        // S-meter / mic level, y 12..14 (no render)
 void emcomDrawRssi(int dBm);                       // S-meter from dBm (no render)
 bool emcomNeedsFullRedraw(uint32_t now);           // state, clock, messages... changed
+
+// SP7TEAM emblem (antenna mast + waves), mast top at (cx, ty), 26 px high
+void emcomDrawEmblem(int16_t cx, int16_t ty, themeItem_t waves, themeItem_t mast, themeItem_t bg);
 
 // Theme items (native colours) matching the EMCOM screen: dark by day, red at night
 void emcomThemePreset(bool night, uint16_t *items);
