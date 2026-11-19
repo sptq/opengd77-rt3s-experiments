@@ -14,6 +14,7 @@
 #include "main.h"
 #include "functions/aprsRx.h"
 #include "functions/toneRxDecoders.h"
+#include "functions/sstvRx.h"
 #include "functions/aprs.h"
 #include "functions/settings.h"
 #include "functions/sound.h"
@@ -38,6 +39,8 @@
 #define MSG_RETRY_MS            30000U
 #define MSG_MAX_TRIES           3U
 #define TX_BUSY_RETRY_MS        3000U
+#define ACK_RATE_WINDOW_MS      (10U * 60U * 1000U) // at most ACK_RATE_MAX acks in this window,
+#define ACK_RATE_MAX            6U                  // so other stations cannot keep the radio transmitting
 
 static APRS_RX_CCMRAM aprsRxFrame_t queue[QUEUE_SIZE];   // CCM: not zeroed, only read below queueHead
 static volatile uint32_t queueHead; // written by the IRQ
@@ -77,6 +80,7 @@ static uint32_t dtmfSeen;          // main loop: chars already looked at (backgr
 static char dtmfSequence[17];
 static uint32_t dtmfSequenceLen;
 
+static volatile bool sstvOn = false; // SSTV replaces the APRS / DTMF / CW decoders
 static bool monitorOn = false;
 static bool backgroundOn = false;
 static bool enabled = false;
@@ -123,9 +127,49 @@ void aprsRxProcessI2SBuffer(const int16_t *interleaved, uint32_t frames)
 	}
 	peakLevel = peak;
 
+	if (sstvOn)
+	{
+		sstvRxProcess(interleaved, frames, 2U);
+		return;
+	}
+
 	aprsRxDecoderProcess(interleaved, frames, 2U);
 	dtmfRxProcess(interleaved, frames, 2U);
 	cwRxProcess(interleaved, frames, 2U);
+}
+
+void aprsRxSetSstv(bool on, sstvRxPixelCallback_t pixelCallback)
+{
+	if (on == sstvOn)
+	{
+		return;
+	}
+
+	i2sAprsRxStop(); // no IRQ while the shared memory changes hands; aprsRxTick() restarts the capture
+	state = APRS_RX_STATE_PAUSED;
+
+	if (on)
+	{
+		uint32_t size;
+		uint8_t *scratch = aprsRxDecoderScratch(&size);
+
+		if (size < SSTV_RX_SCRATCH_SIZE)
+		{
+			return;
+		}
+		sstvRxInit(scratch, pixelCallback);
+		sstvOn = true;
+	}
+	else
+	{
+		sstvOn = false;
+		aprsRxDecoderInit(frameReceived);
+	}
+}
+
+bool aprsRxGetSstv(void)
+{
+	return sstvOn;
 }
 
 // IRQ context
@@ -192,6 +236,7 @@ static void updateEnabled(void)
 
 	enabled = enable;
 	i2sAprsRxStop();
+	sstvOn = false;
 
 	if (enable)
 	{
@@ -440,8 +485,47 @@ void aprsRxSendMessage(const char *to, const char *text)
 	txErrorShown = false;
 }
 
+static bool msgIdIsValid(const char *id)
+{
+	uint32_t n = 0U;
+
+	for (; id[n]; n++)
+	{
+		char c = id[n];
+		if (((c >= '0') && (c <= '9')) || ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')))
+		{
+			continue;
+		}
+		return false;
+	}
+	return ((n >= 1U) && (n <= 5U));
+}
+
+static bool ackRateAllows(uint32_t now)
+{
+	static uint32_t windowStart;
+	static uint32_t acksInWindow;
+
+	if ((acksInWindow == 0U) || ((now - windowStart) >= ACK_RATE_WINDOW_MS))
+	{
+		windowStart = now;
+		acksInWindow = 0U;
+	}
+	if (acksInWindow >= ACK_RATE_MAX)
+	{
+		return false;
+	}
+	acksInWindow++;
+	return true;
+}
+
 static void queueAck(const char *to, const char *msgId, uint32_t now)
 {
+	if (msgIdIsValid(msgId) == false)
+	{
+		return;
+	}
+
 	for (uint32_t i = 0U; i < ackCount; i++)
 	{
 		if ((strcmp(ackQueue[i].to, to) == 0) && (strcmp(ackQueue[i].msgId, msgId) == 0))
@@ -591,6 +675,13 @@ static void messagesTxTick(uint32_t now)
 	// Acks first
 	if ((ackCount > 0U) && ((int32_t)(now - ackQueue[0].dueMs) >= 0))
 	{
+		if ((ackQueue[0].tries == 0U) && (ackRateAllows(now) == false))
+		{
+			memmove(&ackQueue[0], &ackQueue[1], ((ACK_QUEUE_SIZE - 1U) * sizeof(ackPending_t)));
+			ackCount--; // too many acks lately: dropped
+			return;
+		}
+
 		snprintf(info, sizeof(info), ":%-9s:ack%s", ackQueue[0].to, ackQueue[0].msgId);
 		res = sendInfo(info);
 

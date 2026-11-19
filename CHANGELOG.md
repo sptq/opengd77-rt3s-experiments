@@ -9,7 +9,8 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 * **DTMF decoder**: shows received digits on the RSSI monitor.
 * **CW (Morse) decoder**: decodes repeater IDs and CW tones on FM, with WPM and tone shown.
-* **APRS messages**: messages addressed to you are shown and acknowledged automatically, and you can reply with canned texts.
+* **SSTV receive**: Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120/180 (ISS: PD 120), VIS auto-detect, picture 160x120 on screen, line by line. Host tests with an encoder.
+* **APRS messages**: messages addressed to you are shown and acknowledged automatically (rate limited: 6 acks / 10 min, alphanumeric ids only), and you can reply with canned texts.
 * **APRS background RX** setting is kept after power off; DTMF sequences are notified in the background.
 * **Station → GPS waypoint** (`*` in the stations / radar view), waypoint drawn on the radar.
 * **GPS log → GPX**: `tools/opengd77_gps_log_to_gpx.py` downloads the upstream NMEA log (GPS mode On+Log) over USB.

@@ -42,6 +42,7 @@ Status legend: **done**, **in progress**, *idea*.
 | 9 | Satellite: automatic Doppler retune during a pass, cross-band hints | *idea* | `menuSatelliteScreen.c` |
 | 10 | APRS RX decode (AFSK 1200): station list with distance/bearing, radar view | **done** (2026-11-19) | AFSK/AX.25 decoder on I2S RX audio; RSSI `9` monitor: frames / raw (TNC2+hex) / stations (dist, bearing) / radar views (`#`); positions: uncompressed, compressed, Mic-E, objects, items; background RX on `SK1+4` / quickkey with notifications. Background setting persisted (bit 29); APRS messages with auto ACK and canned replies; station -> GPS waypoint |
 | 16 | Radiosonde hunting: 401/403/405 MHz scope presets + keypad waypoint entry + fox-hunt | **done** | no RS41/M20 decode: only 8 kHz voice-band audio reaches the MCU, the sondes send 4800/9600 bd GFSK |
+| 17 | SSTV receive (Robot, Martin, Scottie, PD) on the RSSI monitor | **done** | `sstvRx.c`, encoder-based host test; untested on air |
 | 11 | DMR SMS send/receive | *idea* | needs data-burst handling in `HR-C6000.c` |
 | 12 | DMR GPS position (LRRP / Brandmeister) | *idea* | |
 | 13 | Unify MD2017 / MD9600 trees | *idea* | `unify_sourcecodes.md` |

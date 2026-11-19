@@ -134,6 +134,7 @@ typedef enum
 	APRS_MON_VIEW_MESSAGES,
 	APRS_MON_VIEW_DTMF,
 	APRS_MON_VIEW_CW,
+	APRS_MON_VIEW_SSTV,
 	APRS_MON_VIEW_MAX
 } aprsMonView_t;
 #if defined(HAS_GPS) && (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701))
@@ -146,6 +147,8 @@ static bool aprsMonReplyActive = false;
 static uint32_t aprsMonReplyIndex = 0;
 static char aprsMonReplyTo[APRS_RX_CALL_LEN];
 static uint32_t aprsMonToneSerial = 0;
+#define SSTV_Y0                 (DISPLAY_SIZE_Y - SSTV_RX_ROWS) // picture under a one line status bar
+#define SSTV_REDRAW_MS          250U
 static bool aprsMonEnabled = false;
 static aprsMonView_t aprsMonView = APRS_MON_VIEW_FRAMES;
 static char aprsMonStationName[APRS_RX_CALL_LEN]; // selection in the stations / radar views
@@ -710,6 +713,7 @@ static void aprsMonSetEnabled(bool enable)
 	aprsMonLastGen = aprsRxGetGeneration();
 	aprsMonMsgSelected = 0;
 	aprsMonReplyActive = false;
+	aprsRxSetSstv(false, NULL);
 	aprsRxSetMonitor(enable);
 }
 
@@ -745,7 +749,7 @@ static void aprsMonUpdate(uint32_t now)
 		}
 	}
 
-	if ((aprsMonLastDraw == 0) || ((now - aprsMonLastDraw) >= APRS_MON_REDRAW_MS))
+	if ((aprsMonLastDraw == 0) || ((now - aprsMonLastDraw) >= ((aprsMonView == APRS_MON_VIEW_SSTV) ? SSTV_REDRAW_MS : APRS_MON_REDRAW_MS)))
 	{
 		aprsMonLastDraw = (now ? now : 1);
 		aprsMonDraw();
@@ -1334,11 +1338,88 @@ static void aprsMonDrawToneText(bool cw)
 	}
 }
 
+// --- SSTV view: the decoder writes the pixels straight into the screen buffer ---------------
+// IRQ context
+static void aprsMonSstvPixel(uint16_t x, uint16_t row, uint8_t r, uint8_t g, uint8_t b)
+{
+	uint16_t *fb = displayGetPrimaryScreenBuffer();
+
+	fb[((SSTV_Y0 + row) * DISPLAY_SIZE_X) + x] = displayConvertRGB888ToNative(((uint32_t)r << 16) | ((uint32_t)g << 8) | b);
+}
+
+static void aprsMonDrawSstvStatus(void)
+{
+	char line[APRS_MON_CHARS + 1];
+	sstvRxStatus_t st;
+	aprsRxStatus_t rx;
+
+	sstvRxGetStatus(&st);
+	aprsRxGetStatus(&rx);
+
+	if (rx.state != APRS_RX_STATE_LISTENING)
+	{
+		snprintf(line, sizeof(line), "SSTV: %s", ((trxGetMode() != RADIO_MODE_ANALOG) ? "FM only" : "paused"));
+	}
+	else
+	{
+		switch (st.state)
+		{
+			case SSTV_RX_RECEIVING:
+				snprintf(line, sizeof(line), "%s %u/%u", st.modeName, (unsigned)(st.row + 1), (unsigned)SSTV_RX_ROWS);
+				break;
+			case SSTV_RX_DONE:
+				snprintf(line, sizeof(line), "%s done, 0:clear", st.modeName);
+				break;
+			default:
+				if (st.lastVis)
+				{
+					snprintf(line, sizeof(line), "SSTV wait VIS (last %u)", (unsigned)st.lastVis);
+				}
+				else
+				{
+					snprintf(line, sizeof(line), "SSTV: waiting for VIS");
+				}
+				break;
+		}
+		if (st.freqHz && (strlen(line) < (APRS_MON_CHARS - 6)))
+		{
+			size_t l = strlen(line);
+			snprintf(&line[l], (sizeof(line) - l), " %uHz", (unsigned)st.freqHz);
+		}
+	}
+
+	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_Y0, true);
+	displayPrintAt(0, ((SSTV_Y0 - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
+	displayRender();
+}
+
+static void aprsMonSetView(aprsMonView_t view)
+{
+	bool sstv = (view == APRS_MON_VIEW_SSTV);
+
+	aprsMonRawView = false;
+	aprsMonView = view;
+	if (sstv != aprsRxGetSstv())
+	{
+		aprsRxSetSstv(sstv, aprsMonSstvPixel);
+		if (sstv)
+		{
+			displayClearBuf(); // the picture area starts black
+		}
+	}
+}
+
 static void aprsMonDraw(void)
 {
-	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages", "DTMF decoder", "CW decoder" };
+	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages", "DTMF decoder", "CW decoder", "SSTV" };
 	char line[APRS_MON_CHARS + 1];
 	aprsRxStatus_t st;
+
+	if ((aprsMonView == APRS_MON_VIEW_SSTV) && (aprsMonReplyActive == false))
+	{
+		aprsMonDrawSstvStatus();
+		return;
+	}
 
 	aprsRxGetStatus(&st);
 
@@ -1500,8 +1581,7 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 	}
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_HASH))
 	{
-		aprsMonRawView = false;
-		aprsMonView = (aprsMonView + 1) % APRS_MON_VIEW_MAX;
+		aprsMonSetView((aprsMonView + 1) % APRS_MON_VIEW_MAX);
 	}
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
 	{
@@ -1542,6 +1622,10 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 			case APRS_MON_VIEW_CW:
 				aprsRxToneTextClear();
 				break;
+			case APRS_MON_VIEW_SSTV:
+				sstvRxRestart();
+				displayClearBuf();
+				break;
 			default:
 				aprsRxHistoryClear();
 				aprsMonRawView = false;
@@ -1579,7 +1663,7 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 				aprsMonMsgSelected++;
 			}
 		}
-		else if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW))
+		else if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW) || (aprsMonView == APRS_MON_VIEW_SSTV))
 		{
 			return false;
 		}

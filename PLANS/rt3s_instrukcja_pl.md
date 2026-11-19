@@ -148,7 +148,7 @@ Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
    * `E` to ramki z błędną sumą kontrolną (zakłócone albo za słabe).
 4. Poniżej widać ostatnie ramki, najnowsza na górze: `NADAWCA>CEL` i wiek ramki, a pod spodem 2 linie treści.
 
-Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości → DTMF → CW**.
+Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości → DTMF → CW → SSTV**.
 
 * **Ramki** (`APRS frames`): ostatnie ramki, `*` otwiera widok surowy wybranej ramki: pełna linia TNC2 (`NADAWCA>CEL,ŚCIEŻKA*:treść`) i zrzut hex bajtów.
 * **Stacje** (`APRS stations`): ostatnio słyszane stacje i obiekty, najnowsza na górze: znak, odległość, azymut, wiek. W dolnej linii prędkość, kurs i liczba odebranych ramek wybranej stacji.
@@ -156,6 +156,7 @@ Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości →
 * **Wiadomości** (`APRS messages`): wiadomości APRS do Ciebie (`<`), biuletyny (`B`) i wysłane przez Ciebie (`>`), ze statusem `...` (czeka na ACK, z numerem próby), `ACK`, `REJ`, `FAIL` (brak ACK po 3 próbach) albo `noTX` (brak konfiguracji APRS na kanale). Liczba nieprzeczytanych to `M2` w linii statusu.
 * **DTMF** (`DTMF decoder`): odebrane cyfry DTMF dużą czcionką; przerwa ponad 1,5 s rozdziela sekwencje spacją.
 * **CW** (`CW decoder`): dekodowany Morse (np. znaki przemienników) z prędkością w WPM i częstotliwością tonu; `#` w dolnej linii, gdy ton jest kluczowany.
+* **SSTV**: odbiór obrazków SSTV (Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120/180, ISS nadaje PD 120 na 145.800). Tryb rozpoznaje się sam z nagłówka VIS, obraz 160×120 rysuje się linia po linii, w górnej linii tryb, numer linii i częstotliwość audio. `0` czyści obraz i czeka na następny. W tym widoku APRS, DTMF i CW są wstrzymane.
 
 #### Wiadomości APRS
 

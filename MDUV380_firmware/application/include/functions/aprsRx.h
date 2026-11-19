@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "functions/aprsRxDecoder.h"
+#include "functions/sstvRx.h"
 
 #define APRS_RX_HISTORY_SIZE   8U
 #define APRS_RX_STORED_LEN     200U // longer frames are kept truncated (typical APRS frames are < 150 bytes)
@@ -145,6 +146,10 @@ bool aprsRxGetOwnCall(char *buf, uint32_t size);         // false: no APRS confi
 // DTMF / CW decoded text (oldest .. newest), returns the length; 'serial' changes on new chars
 uint32_t aprsRxToneText(bool cw, char *out, uint32_t size, uint32_t *serial);
 void aprsRxToneTextClear(void);
+
+// SSTV: while on, the RX audio goes to the SSTV decoder only (it borrows the APRS decoder memory)
+void aprsRxSetSstv(bool on, sstvRxPixelCallback_t pixelCallback);
+bool aprsRxGetSstv(void);
 
 // Parsing (aprsRxParse.c)
 bool aprsRxParse(const aprsRxFrame_t *frame, aprsRxParsed_t *parsed);
