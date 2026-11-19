@@ -5,6 +5,10 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
+## Unreleased
+
+* **Volume indicator in the header** (VFO / channel screens): 4 bars left of the GPS label following the volume knob, `x` when muted. The pop-up bar on knob turns is still *Options → Display → Visual volume*.
+
 ## R20260131-SP7TQ.1 — 2026-11-19
 
 First release under the SP7TQ tag. `.gla` language packs changed (new menu strings): flash the ones from this release.

@@ -90,6 +90,9 @@ static ticksTimer_t batOrTimeTimer = { 0, 0 };
 static bool         displayTimeInHeader = false;
 #endif
 #endif
+#if defined(HAS_SOFT_VOLUME)
+static int          volumeIndicatorLevel = -2; // level drawn in the header (fork)
+#endif
 
 static void announceChannelNameOrVFOFrequency(bool voicePromptWasPlaying, bool announceVFOName);
 static void dmrDbTextDecode(uint8_t *compressedBufIn, uint8_t *decompressedBufOut, int compressedSize);
@@ -2179,6 +2182,39 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 	// Display battery percentage/voltage
 	bool apoEnabled = (nonVolatileSettings.apo > 0);
 
+#if defined(HAS_SOFT_VOLUME) && (defined(HAS_COLOURS) || defined(PLATFORM_MD9600))
+	// Fork: volume knob position, 4 bars left of the GPS label ('x' when muted)
+	if (isVFOSweepScanning == false)
+	{
+		int16_t volX = (DISPLAY_SIZE_X - (50 + (displayTime ? 2 : 0))) - 9;
+		int level = uiUtilityVolumeLevel();
+
+		volumeIndicatorLevel = level;
+		if (level < 0)
+		{
+			displayDrawLine(volX, (DISPLAY_Y_POS_HEADER + 1), (volX + 5), (DISPLAY_Y_POS_HEADER + 6), true);
+			displayDrawLine(volX, (DISPLAY_Y_POS_HEADER + 6), (volX + 5), (DISPLAY_Y_POS_HEADER + 1), true);
+		}
+		else
+		{
+			for (int b = 0; b < 4; b++)
+			{
+				int16_t h = (2 * (b + 1));
+				int16_t x = (volX + (b * 2));
+
+				if (b < level)
+				{
+					displayDrawFastVLine(x, ((DISPLAY_Y_POS_HEADER + 8) - h), h, true);
+				}
+				else
+				{
+					displaySetPixel(x, (DISPLAY_Y_POS_HEADER + 7), true); // unlit bar: a dot
+				}
+			}
+		}
+	}
+#endif
+
 #if defined(HAS_GPS)
 #if defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) >= GPS_MODE_ON)
@@ -2223,6 +2259,23 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 
 	displayThemeResetToDefault();
 }
+
+#if defined(HAS_SOFT_VOLUME)
+// Fork: volume indicator in the header. -1 = muted, 0..4 bars.
+int uiUtilityVolumeLevel(void)
+{
+	if (lastVolume <= -99)
+	{
+		return -1;
+	}
+	return (((lastVolume + 31) * 4) + 31) / 62;
+}
+
+bool uiUtilityVolumeIndicatorChanged(void)
+{
+	return (uiUtilityVolumeLevel() != volumeIndicatorLevel);
+}
+#endif
 
 void uiUtilityRedrawHeaderOnly(bool isVFODualWatchScanning, bool isVFOSweepScanning, bool forceBatteryDisplay)
 {

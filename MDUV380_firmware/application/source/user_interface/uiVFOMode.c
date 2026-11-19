@@ -358,6 +358,12 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 				{
 					if (rxPowerSavingIsRxOn())
 					{
+#if defined(HAS_SOFT_VOLUME)
+						if (uiUtilityVolumeIndicatorChanged() && (uiDataGlobal.Scan.active == false) && (uiVFOModeSweepScanning(true) == false))
+						{
+							uiUtilityRedrawHeaderOnly(uiVFOModeDualWatchIsScanning(), false, false); // Fork: volume indicator
+						}
+#endif
 						bool doRendering = true;
 
 						if (uiDataGlobal.Scan.active && (screenOperationMode[nonVolatileSettings.currentVFONumber] != VFO_SCREEN_OPERATION_SWEEP) && (uiDataGlobal.Scan.state == SCAN_STATE_PAUSED))

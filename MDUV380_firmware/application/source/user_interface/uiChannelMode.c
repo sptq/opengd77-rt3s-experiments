@@ -322,6 +322,12 @@ menuStatus_t uiChannelMode(uiEvent_t *ev, bool isFirstRun)
 				{
 					if (rxPowerSavingIsRxOn())
 					{
+#if defined(HAS_SOFT_VOLUME)
+						if (uiUtilityVolumeIndicatorChanged() && (uiDataGlobal.Scan.active == false))
+						{
+							uiUtilityRedrawHeaderOnly(false, false, false); // Fork: volume indicator
+						}
+#endif
 						if (uiDataGlobal.Scan.active && (uiDataGlobal.Scan.state == SCAN_STATE_PAUSED))
 						{
 #if defined(PLATFORM_RD5R)

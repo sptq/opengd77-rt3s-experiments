@@ -201,6 +201,10 @@ Odbiór obrazków SSTV w FM: Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120
 
 `0` czyści obraz i czeka na następny, `GREEN` / `RED` wychodzi. Ekran można przypisać do quickkeya (`SK2 + cyfra`). Gdy ekran SSTV jest otwarty, APRS, DTMF i CW są wstrzymane. Wyjście z ekranu (także nadawanie) kasuje obraz.
 
+### Wskaźnik głośności
+
+W nagłówku ekranu VFO i kanału, na lewo od napisu `GPS`, są 4 słupki pokazujące położenie gałki głośności; `x` oznacza wyciszenie. Duży pasek głośności podczas kręcenia gałką włącza się w *Opcje → Wyświetlacz → Visual volume* (opcja z oryginalnego OpenGD77).
+
 ### Ślad GPS do GPX
 
 Radio zapisuje ślad (zdania NMEA) do flasha, gdy w *Opcje → GPS* jest tryb **On+Log** (2 MB, kilka dni jazdy). Na komputerze, z radiem włączonym i podłączonym przez USB:

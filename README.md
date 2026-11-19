@@ -290,6 +290,13 @@ frequency). `0` clears and waits for the next picture, `GREEN` / `RED`
 leave; also available as a quickkey. While the screen is open APRS / DTMF /
 CW decoding is paused (the SSTV decoder borrows their memory).
 
+### Volume indicator
+
+The header of the VFO / channel screens shows the volume knob position as
+4 bars left of the GPS label (`x` when muted). The pop-up bar shown while
+turning the knob is the upstream *Options → Display → Visual volume*
+option.
+
 ### GPS log to GPX
 
 With the GPS mode set to *On+Log* the firmware records NMEA into the last
