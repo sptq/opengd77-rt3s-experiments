@@ -28,6 +28,7 @@
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 
 static void updateScreen(bool isFirstRun);
@@ -151,6 +152,31 @@ static void updateScreen(bool isFirstRun)
 #endif
 	}
 
+#if defined(HAS_EMCOM_UI)
+	if ((customDataHasImage == false) && emcomStyleEnabled())
+	{
+		// Fork: EMCOM boot screen
+		displayClearBuf();
+
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_SPLASHSCREEN);
+		displayFillRect(0, 0, 4, 64, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintAt(10, 6, "OpenGD77", FONT_SIZE_1);
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintAt(8, 14, "EMCOM", FONT_SIZE_4);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintAt(10, 48, "FIELD RADIO FIRMWARE", FONT_SIZE_1);
+
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintAt(10, 70, line1, FONT_SIZE_3);
+		displayPrintAt(10, 88, line2, FONT_SIZE_3);
+
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
+		displayDrawFastHLine(0, (DISPLAY_SIZE_Y - 13), DISPLAY_SIZE_X, true);
+		displayPrintAt(10, (DISPLAY_SIZE_Y - 10), "SP7TQ fork " GITVERSION, FONT_SIZE_1);
+	}
+	else
+#endif
 	if (!customDataHasImage)
 	{
 		displayClearBuf();

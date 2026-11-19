@@ -176,6 +176,16 @@ bool emcomStyleEnabled(void)
 	return (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE) == false);
 }
 
+// Applies the screen style setting to the whole UI: flat boxes and the default colours
+// (a theme saved by the user in the custom data still wins).
+void emcomApplyStyle(void)
+{
+	displaySetFlatStyle(emcomStyleEnabled());
+	themeInit(true);
+	displayThemeResetToDefault();
+	drawn.valid = false;
+}
+
 void emcomSetVfoAllowed(bool allowed)
 {
 	vfoAllowed = allowed;

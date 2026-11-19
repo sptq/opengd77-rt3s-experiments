@@ -38,6 +38,7 @@
 #include "functions/settings.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/menuSystem.h"
+#include "user_interface/uiEmcom.h"
 #include "utils.h"
 #include "stm32f4xx_hal.h"
 
@@ -999,8 +1000,27 @@ void displayFillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t
 /*
  * Draw a rounded rectangle
  */
+// Fork: EMCOM style draws square boxes without drop shadows
+static bool displayFlatStyle = false;
+
+void displaySetFlatStyle(bool flat)
+{
+	displayFlatStyle = flat;
+}
+
+bool displayGetFlatStyle(void)
+{
+	return displayFlatStyle;
+}
+
 void displayDrawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayDrawRect(x, y, w, h, isInverted);
+		return;
+	}
+
 	// smarter version
 	displayDrawFastHLine(x + r    , y        , w - 2 * r, isInverted); // Top
 	displayDrawFastHLine(x + r    , y + h - 1, w - 2 * r, isInverted); // Bottom
@@ -1018,6 +1038,12 @@ void displayDrawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r,
  */
 void displayFillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, y, w, h, !isInverted);
+		return;
+	}
+
 	displayFillRect(x + r, y, w - 2 * r, h, !isInverted);
 
 	// draw four corners
@@ -1030,6 +1056,14 @@ void displayFillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r,
  */
 void displayDrawRoundRectWithDropShadow(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, (y - 2), (w + 2), h, isInverted);     // box (also where the shadow would be)
+		displayDrawRect(x, (y - 2), w, h, isInverted);           // outline
+		displayFillRect(x, (y - 2), w, 2, !isInverted);          // thicker top edge
+		return;
+	}
+
 	displayFillRoundRect(x + 2, y, w, h, r, isInverted); // Shadow
 	displayFillRoundRect(x, y - 2, w, h, r, !isInverted); // Empty box
 	displayDrawRoundRect(x, y - 2, w, h, r, isInverted); // Outline
@@ -1068,6 +1102,13 @@ void displayFillRect(int16_t x, int16_t y, int16_t width, int16_t height, bool i
  */
 void displayDrawRectWithDropShadow(int16_t x, int16_t y, int16_t w, int16_t h, bool isInverted)
 {
+	if (displayFlatStyle)
+	{
+		displayFillRect(x, (y - 2), (w + 2), h, isInverted);
+		displayDrawRect(x, (y - 2), w, h, isInverted);
+		return;
+	}
+
 	displayFillRect(x + 2, y, w, h, !isInverted); // Shadow
 	displayFillRect(x, y - 2, w, h, isInverted); // Empty box
 	displayDrawRect(x, y - 2, w, h, isInverted); // Outline
@@ -1329,6 +1370,9 @@ void displayBegin(bool isInverted, bool SPIFlashAvailable)
 {
 	displaySetInvertedState(isInverted);
 	themeInit(SPIFlashAvailable);
+#if defined(HAS_EMCOM_UI)
+	displaySetFlatStyle(emcomStyleEnabled()); // Fork: EMCOM style for the whole UI
+#endif
 }
 
 void displaySetContrast(uint8_t contrast)
@@ -1439,6 +1483,19 @@ void themeInitToDefaultValues(DayTime_t daytime, bool invert)
 	themeItems[daytime][THEME_ITEM_FG_GPS_NUMBER] = foregroundColour;
 	themeItems[daytime][THEME_ITEM_FG_GPS_COLOUR] = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT(0x0000FFU));
 	themeItems[daytime][THEME_ITEM_FG_BD_COLOUR] = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT(0xFF0000U));
+
+#if defined(HAS_EMCOM_UI)
+	// Fork: EMCOM style default colours (dark by day, red at night)
+	if (emcomStyleEnabled())
+	{
+		emcomThemePreset((daytime == NIGHT), themeItems[daytime]);
+		if (daytime == DAY)
+		{
+			foregroundColour = themeItems[DAY][THEME_ITEM_FG_DEFAULT];
+			backgroundColour = themeItems[DAY][THEME_ITEM_BG];
+		}
+	}
+#endif
 }
 
 void themeInit(bool SPIFlashAvailable)

@@ -684,6 +684,7 @@ static void handleEvent(uiEvent_t *ev)
 					if (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE))
 					{
 						settingsSetOptionBit(BIT_UI_CLASSIC_STYLE, false);
+						emcomApplyStyle();
 					}
 					break;
 #endif
@@ -895,6 +896,7 @@ static void handleEvent(uiEvent_t *ev)
 					if (settingsIsOptionBitSet(BIT_UI_CLASSIC_STYLE) == false)
 					{
 						settingsSetOptionBit(BIT_UI_CLASSIC_STYLE, true);
+						emcomApplyStyle();
 					}
 					break;
 #endif

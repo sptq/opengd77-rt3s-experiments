@@ -35,6 +35,7 @@ typedef struct
 } emcomMainInfo_t;
 
 bool emcomStyleEnabled(void);       // the setting
+void emcomApplyStyle(void);         // flat boxes + default colours for the whole UI (boot, setting change)
 bool emcomScreenActive(void);       // the setting + a VFO / channel / TX screen that uses it now
 void emcomSetVfoAllowed(bool allowed); // VFO mode: false in sweep / dual watch / frequency entry
 void emcomSetChannelAllowed(bool allowed); // channel mode: false for the channel details / direct channel entry
