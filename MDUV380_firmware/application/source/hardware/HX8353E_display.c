@@ -1531,6 +1531,20 @@ void themeInitToDefaultValues(DayTime_t daytime, bool invert)
 #endif
 }
 
+#if defined(HAS_EMCOM_UI)
+// Fork: a stored theme that is just the classic black / white default (e.g. written when the
+// custom data area was formatted) must not hide the EMCOM colours. A customised one still wins.
+static bool themeIsClassicDefault(const uint16_t *items, bool invert)
+{
+	uint16_t fg = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT((invert ? 0xFFFFFFU : 0x000000U)));
+	uint16_t bg = PLATFORM_COLOUR_FORMAT_SWAP_BYTES(RGB888_TO_PLATFORM_COLOUR_FORMAT((invert ? 0x000000U : 0xFFFFFFU)));
+
+	return ((items[THEME_ITEM_FG_DEFAULT] == fg) && (items[THEME_ITEM_BG] == bg) &&
+			(items[THEME_ITEM_BG_MENU_ITEM_SELECTED] == fg) && (items[THEME_ITEM_BG_HEADER_TEXT] == bg) &&
+			(items[THEME_ITEM_FG_RSSI_BAR] == fg) && (items[THEME_ITEM_FG_MENU_NAME] == fg));
+}
+#endif
+
 void themeInit(bool SPIFlashAvailable)
 {
 	themeInitToDefaultValues(NIGHT, true);
@@ -1541,7 +1555,11 @@ void themeInit(bool SPIFlashAvailable)
 	{
 		uint16_t themingTmp[THEME_ITEM_MAX];
 
-		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_DAY, (uint8_t *) &themingTmp))
+		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_DAY, (uint8_t *) &themingTmp)
+#if defined(HAS_EMCOM_UI)
+				&& ((emcomStyleEnabled() == false) || (themeIsClassicDefault(themingTmp, false) == false))
+#endif
+				)
 		{
 			memcpy(&themeItems[DAY], &themingTmp, sizeof(themingTmp));
 
@@ -1549,7 +1567,11 @@ void themeInit(bool SPIFlashAvailable)
 			backgroundColour = themeItems[DAY][THEME_ITEM_BG];
 		}
 
-		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_NIGHT, (uint8_t *) &themingTmp))
+		if (codeplugGetOpenGD77CustomData(CODEPLUG_CUSTOM_DATA_TYPE_THEME_NIGHT, (uint8_t *) &themingTmp)
+#if defined(HAS_EMCOM_UI)
+				&& ((emcomStyleEnabled() == false) || (themeIsClassicDefault(themingTmp, true) == false))
+#endif
+				)
 		{
 			memcpy(&themeItems[NIGHT], &themingTmp, sizeof(themingTmp));
 		}
