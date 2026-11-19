@@ -37,22 +37,12 @@ volatile bool stopOnNextI2SDMAInterrupt = false;
 uint16_t i2s_Tx_Buffer[NUM_I2S_BUFFERS][2][WAV_BUFFER_SIZE];
 uint16_t i2s_Rx_Buffer[NUM_I2S_BUFFERS][2][WAV_BUFFER_SIZE];
 
-#if defined(I2S_RX_AUDIO_PROBE)
-// Fork: diagnostic "RX audio probe". Captures a short burst of whatever the
-// HR-C6000 sends on I2S while nothing else uses it (no TX, no beep/voice
-// prompt), to find out whether FM RX audio reaches the MCU (prerequisite for
-// APRS RX). The burst stops itself from the DMA callback.
-#define I2S_PROBE_BURST_HALVES   25U   // 25 x 20 ms = 0.5 s
-#define I2S_PROBE_ZC_HYSTERESIS  256
-static volatile bool i2sProbeActive = false;
-static volatile uint16_t i2sProbeHalves;
-static volatile uint16_t i2sProbePeak;
-static volatile uint32_t i2sProbeZc;
-static int8_t i2sProbeSign;
-static volatile uint16_t i2sProbeLastPeak;
-static volatile uint32_t i2sProbeLastZc;
-static volatile uint32_t i2sProbeBursts;
-static void i2sProbeProcess(uint32_t bufNum);
+#if defined(I2S_APRS_RX)
+// Fork: continuous capture of the HR-C6000 FM RX audio for the APRS decoder.
+// It only owns the I2S while nothing else uses it (no TX, no beep / voice
+// prompt / DMR audio); anything that starts a sound transfer stops it first,
+// and aprsRxTick() restarts it later.
+static volatile bool i2sAprsRxActive = false;
 #endif
 
 static void clearI2SBuffersAndFlags(void)
@@ -65,8 +55,8 @@ static void clearI2SBuffersAndFlags(void)
 	 HAL_I2S_DMAStop(&hi2s3);
 	 __HAL_I2SEXT_FLUSH_RX_DR(&hi2s3);
 	g_TX_SAI_in_use = false;
-#if defined(I2S_RX_AUDIO_PROBE)
-	i2sProbeActive = false; // a beep took over the DMA during a probe burst
+#if defined(I2S_APRS_RX)
+	i2sAprsRxActive = false;
 #endif
 	soundInit();
 }
@@ -83,10 +73,10 @@ void HAL_I2SEx_TxRxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 		{
 			soundReceiveRefillData(0);
 		}
-#if defined(I2S_RX_AUDIO_PROBE)
-		else if (i2sProbeActive)
+#if defined(I2S_APRS_RX)
+		else if (i2sAprsRxActive)
 		{
-			i2sProbeProcess(0);
+			aprsRxProcessI2SBuffer((const int16_t *)i2s_Rx_Buffer[0], (2 * WAV_BUFFER_SIZE) / 2);
 		}
 #endif
 	}
@@ -108,10 +98,10 @@ void HAL_I2SEx_TxRxCpltCallback(I2S_HandleTypeDef *hi2s)
 		{
 			soundReceiveRefillData(1);
 		}
-#if defined(I2S_RX_AUDIO_PROBE)
-		else if (i2sProbeActive)
+#if defined(I2S_APRS_RX)
+		else if (i2sAprsRxActive)
 		{
-			i2sProbeProcess(1);
+			aprsRxProcessI2SBuffer((const int16_t *)i2s_Rx_Buffer[1], (2 * WAV_BUFFER_SIZE) / 2);
 		}
 #endif
 	}
@@ -123,6 +113,9 @@ void HAL_I2SEx_TxRxCpltCallback(I2S_HandleTypeDef *hi2s)
 
 void I2SStartDMA(uint16_t *txbuff, uint16_t *rxbuff, size_t bufferLen)
 {
+#if defined(I2S_APRS_RX)
+	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
+#endif
 	// Need to wait for WS line has just toggled from logic low to high
 	while(!HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15));
 	while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15));
@@ -146,55 +139,10 @@ void init_I2S(void)
 
 }
 
-#if defined(I2S_RX_AUDIO_PROBE)
-static void i2sProbeProcess(uint32_t bufNum)
-{
-	for (int j = 0; j < 2; j++)
-	{
-		for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
-		{
-			int16_t v = (int16_t)i2s_Rx_Buffer[bufNum][j][i * 2]; // Left channel only
-			uint16_t a = (uint16_t)((v < 0) ? -(int32_t)v : v);
-
-			if (a > i2sProbePeak)
-			{
-				i2sProbePeak = a;
-			}
-
-			// Zero crossings with hysteresis, so noise around 0 is not counted
-			if ((v > I2S_PROBE_ZC_HYSTERESIS) && (i2sProbeSign <= 0))
-			{
-				if (i2sProbeSign < 0)
-				{
-					i2sProbeZc++;
-				}
-				i2sProbeSign = 1;
-			}
-			else if ((v < -I2S_PROBE_ZC_HYSTERESIS) && (i2sProbeSign >= 0))
-			{
-				if (i2sProbeSign > 0)
-				{
-					i2sProbeZc++;
-				}
-				i2sProbeSign = -1;
-			}
-		}
-	}
-
-	if (++i2sProbeHalves >= I2S_PROBE_BURST_HALVES)
-	{
-		HAL_I2S_DMAStop(&hi2s3);
-		__HAL_I2SEXT_FLUSH_RX_DR(&hi2s3);
-		i2sProbeLastPeak = i2sProbePeak;
-		i2sProbeLastZc = i2sProbeZc;
-		i2sProbeBursts++;
-		i2sProbeActive = false;
-	}
-}
-
-// Wait for a WS rising edge, with a bounded number of polls (WS is driven by
-// the HR-C6000; when it does not clock I2S, I2SStartDMA() would hang).
-static bool i2sProbeWaitWS(GPIO_PinState level)
+#if defined(I2S_APRS_RX)
+// Wait for a WS level, with a bounded number of polls (WS is driven by the
+// HR-C6000; when it does not clock I2S, I2SStartDMA() would hang).
+static bool i2sAprsRxWaitWS(GPIO_PinState level)
 {
 	for (uint32_t n = 0; n < 200000U; n++)
 	{
@@ -206,51 +154,48 @@ static bool i2sProbeWaitWS(GPIO_PinState level)
 	return false;
 }
 
-i2sProbeStatus_t i2sProbeStart(void)
+i2sAprsRxStatus_t i2sAprsRxStart(void)
 {
-	if (i2sProbeActive)
+	if (i2sAprsRxActive)
 	{
-		if ((HAL_I2S_GetState(&hi2s3) == HAL_I2S_STATE_READY) && (isSending == false) && (isReceiving == false))
-		{
-			i2sProbeActive = false; // the burst was stopped by someone else, recover
-		}
-		else
-		{
-			return I2S_PROBE_RUNNING;
-		}
+		return I2S_APRS_RX_RUNNING;
 	}
 
 	if (g_TX_SAI_in_use || isSending || isReceiving || (HAL_I2S_GetState(&hi2s3) != HAL_I2S_STATE_READY))
 	{
-		return I2S_PROBE_BUSY;
+		return I2S_APRS_RX_BUSY;
 	}
 
-	if ((i2sProbeWaitWS(GPIO_PIN_SET) && i2sProbeWaitWS(GPIO_PIN_RESET) && i2sProbeWaitWS(GPIO_PIN_SET)) == false)
+	if ((i2sAprsRxWaitWS(GPIO_PIN_SET) && i2sAprsRxWaitWS(GPIO_PIN_RESET) && i2sAprsRxWaitWS(GPIO_PIN_SET)) == false)
 	{
-		return I2S_PROBE_NO_CLOCK;
+		return I2S_APRS_RX_NO_CLOCK;
 	}
 
 	memset(i2s_Tx_Buffer, 0x00, sizeof(i2s_Tx_Buffer)); // send silence
-	i2sProbeHalves = 0U;
-	i2sProbePeak = 0U;
-	i2sProbeZc = 0U;
-	i2sProbeSign = 0;
 	stopOnNextI2SDMAInterrupt = false;
-	i2sProbeActive = true;
+	i2sAprsRxActive = true;
 
 	if (HAL_I2SEx_TransmitReceive_DMA(&hi2s3, (uint16_t *)i2s_Tx_Buffer, (uint16_t *)i2s_Rx_Buffer, (NUM_I2S_BUFFERS * 2 * WAV_BUFFER_SIZE)) != HAL_OK)
 	{
-		i2sProbeActive = false;
-		return I2S_PROBE_BUSY;
+		i2sAprsRxActive = false;
+		return I2S_APRS_RX_BUSY;
 	}
 
-	return I2S_PROBE_STARTED;
+	return I2S_APRS_RX_STARTED;
 }
 
-void i2sProbeGetLast(uint16_t *peak, uint32_t *zeroCrossingsPerSecond, uint32_t *bursts)
+void i2sAprsRxStop(void)
 {
-	*peak = i2sProbeLastPeak;
-	*zeroCrossingsPerSecond = (i2sProbeLastZc * 1000U) / (I2S_PROBE_BURST_HALVES * 20U);
-	*bursts = i2sProbeBursts;
+	if (i2sAprsRxActive)
+	{
+		i2sAprsRxActive = false; // first, so a late DMA callback does nothing
+		HAL_I2S_DMAStop(&hi2s3);
+		__HAL_I2SEXT_FLUSH_RX_DR(&hi2s3);
+	}
+}
+
+bool i2sAprsRxIsActive(void)
+{
+	return i2sAprsRxActive;
 }
 #endif

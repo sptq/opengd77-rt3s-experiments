@@ -116,18 +116,20 @@ void I2STerminateTransfers(void);
 void I2SStartDMA(uint16_t *txbuff, uint16_t *rxbuff, size_t bufferLen);
 
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
-// Fork: diagnostic RX audio probe (see i2s.c)
-#define I2S_RX_AUDIO_PROBE
+// Fork: FM RX audio capture for the APRS decoder (see i2s.c, functions/aprsRx.c)
+#define I2S_APRS_RX
 typedef enum
 {
-	I2S_PROBE_STARTED = 0,
-	I2S_PROBE_RUNNING,
-	I2S_PROBE_BUSY,
-	I2S_PROBE_NO_CLOCK
-} i2sProbeStatus_t;
+	I2S_APRS_RX_STARTED = 0,
+	I2S_APRS_RX_RUNNING,
+	I2S_APRS_RX_BUSY,
+	I2S_APRS_RX_NO_CLOCK
+} i2sAprsRxStatus_t;
 
-i2sProbeStatus_t i2sProbeStart(void);
-void i2sProbeGetLast(uint16_t *peak, uint32_t *zeroCrossingsPerSecond, uint32_t *bursts);
+i2sAprsRxStatus_t i2sAprsRxStart(void);
+void i2sAprsRxStop(void);
+bool i2sAprsRxIsActive(void);
+void aprsRxProcessI2SBuffer(const int16_t *interleaved, uint32_t frames); // in functions/aprsRx.c, DMA IRQ context
 #endif
 
 #endif /* _OPENGD77_I2S_H_ */

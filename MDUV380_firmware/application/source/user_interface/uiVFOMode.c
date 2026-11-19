@@ -36,6 +36,8 @@
 #include "user_interface/uiUtilities.h"
 #include "user_interface/uiLocalisation.h"
 #include "utils.h"
+#include "interfaces/i2s.h"
+#include "functions/aprsRx.h"
 
 // Colour-display platforms render the sweep as a band-scope + scrolling waterfall.
 #if defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
@@ -2130,6 +2132,12 @@ static void handleEvent(uiEvent_t *ev)
 					{
 						aprsBeaconingToggles();
 					}
+#if defined(I2S_APRS_RX)
+					else if (keyval == 4)
+					{
+						aprsRxToggleBackground(); // Fork: APRS receive in background
+					}
+#endif
 					else if (keyval == 2)
 					{
 						switch (aprsBeaconingGetMode())

@@ -55,6 +55,8 @@ See the `LICENSE`/`LICENSE.txt` files inside each subdirectory.
   the upstream README ([`UPSTREAM_README.md`](UPSTREAM_README.md))
   (Kai DG4KLU, Roger VK3KYY, Daniel F1RMB, Alex DL4LEX, Colin G4EML and
   many others).
+- Fork contributors: EA4IPW (maintainer), Marcin SP7TQ (RT3S features:
+  GPS pages, VFO sweep, radiosonde helpers, APRS RX).
 
 If you are looking for the canonical firmware: **use
 [opengd77.com](https://www.opengd77.com/)**, not this repo.
@@ -217,17 +219,28 @@ the MCU runs at 8 kHz through a voice-band filter, while the sondes send
 3. Enter the landing prediction as a waypoint: GPS → waypoint page → `#`.
 4. Close in with fox-hunt mode on the RSSI screen.
 
-### RX audio probe (APRS RX feasibility test) — *RSSI screen, key `9`*
+### APRS receive — *RSSI screen, key `9`; background: `SK1+4`*
 
-This is a diagnostic. In FM mode it records 0.5 s of whatever the HR-C6000
-sends over I2S, once per second, and shows the peak level (`Aud pk`) and a
-rough dominant frequency.
+A software AFSK 1200 demodulator runs on the FM RX audio the HR-C6000
+sends over I2S (8 kHz): mark/space correlators, four slicers covering
+de-/pre-emphasis tone twist, DPLL bit clock, NRZI, HDLC, AX.25 FCS check.
+It only owns the I2S while nothing else needs it (beeps, voice prompts,
+DMR audio and TX take over and the capture restarts by itself).
 
-* If the reading follows the received FM audio (for example APRS on 144.800
-  shows about 1200–2200 Hz), the received audio reaches the MCU, and APRS RX
-  decoding is possible.
-* `I2S: no clock` or a flat reading means the received audio does not reach
-  the MCU this way.
+The monitor (`9` on the RSSI screen) has three views, cycled with `#`:
+
+* **frames** — last 8 frames; `*` shows the selected one raw (full TNC2
+  line + hex dump),
+* **stations** — last heard stations / objects with distance, bearing, age,
+  speed and course,
+* **radar** — north-up plot around your position, auto range.
+
+Positions are decoded from uncompressed, compressed and Mic-E reports,
+objects and items. Own position: GPS fix, else the location from the
+settings. `SK1+4` on the VFO / channel screen (or the *APRS RX on/off*
+quickkey action) keeps decoding in the background and pops a short
+notification (`SP7ABC-9 12.3km`) per frame. The decoder and the parser are
+hardware independent and have host tests.
 
 ### Trip computer — *GPS menu, last page*
 

@@ -14,6 +14,8 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
+#include "interfaces/i2s.h"
+#include "functions/aprsRx.h"
 
 //
 // Options -> Quickkeys
@@ -52,6 +54,9 @@ static const uint16_t quickkeyChoices[] =
 #endif
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_BAND_SCOPE),
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_SWEEP_TUNE_PEAK),
+#if defined(I2S_APRS_RX)
+	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_APRS_RX_TOGGLE),
+#endif
 	QUICKKEY_MENUVALUE(MENU_RSSI_SCREEN, 0, 0),
 	QUICKKEY_MENUVALUE(MENU_LAST_HEARD, 0, 0),
 	QUICKKEY_MENULONGVALUE(MENU_ZONE_LIST, 0),
@@ -88,6 +93,8 @@ const char *quickkeyActionGetName(quickkeyAction_t action)
 			return "Band scope";
 		case QUICKKEY_ACTION_SWEEP_TUNE_PEAK:
 			return "Scope: to peak";
+		case QUICKKEY_ACTION_APRS_RX_TOGGLE:
+			return "APRS RX on/off";
 		default:
 			break;
 	}
@@ -159,6 +166,13 @@ bool quickkeyActionExecute(quickkeyAction_t action, bool isChannelMode)
 		case QUICKKEY_ACTION_SWEEP_TUNE_PEAK:
 			// Same as SK1 + 0 while sweeping
 			return ((isChannelMode == false) && uiVFOModeSweepTuneToPeak());
+
+#if defined(I2S_APRS_RX)
+		case QUICKKEY_ACTION_APRS_RX_TOGGLE:
+			// Same as SK1 + 4
+			aprsRxToggleBackground();
+			return true;
+#endif
 
 		default:
 			break;

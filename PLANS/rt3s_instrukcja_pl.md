@@ -135,27 +135,50 @@ Radio nie dekoduje telemetrii RS41 ani M20. Sondę da się jednak znaleźć:
 
 ---
 
-## Test odbioru APRS (sonda dźwięku): ekran RSSI, klawisz `9`
+## Odbiór APRS (monitor ramek): ekran RSSI, klawisz `9`
 
-To test diagnostyczny. Sprawdza, czy dźwięk odebrany w FM dociera do procesora, bo bez tego nie da się zrobić odbioru APRS.
+Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
 
-1. Ustaw kanał lub VFO w **FM** na częstotliwość, na której coś słychać, np. **144.800** (APRS) albo przemiennik FM.
-2. Wejdź w **Menu → Sygnał (RSSI)** i naciśnij **`9`**.
-3. Co sekundę na ekranie odświeża się:
-   * `Aud pk:` czyli szczytowy poziom dźwięku odebranego przez I2S;
-   * `f~…Hz` czyli przybliżona dominująca częstotliwość;
-   * `n:` czyli licznik pomiarów.
-4. Daj mi znać, co widzisz w tych trzech sytuacjach:
-   * **cisza** (squelch zamknięty);
-   * **szum** (otwarty squelch, Monitor przez długie SK2);
-   * **sygnał**, najlepiej pakiet APRS albo ktoś mówiący.
+1. Ustaw kanał lub VFO w **FM** na **144.800** (APRS w Europie).
+2. Wejdź w **Menu → Sygnał (RSSI)** i naciśnij **`9`**. Monitor zajmuje cały ekran.
+3. Górna linia statusu: `-87dBm L45 OK3 E7`
+   * `dBm` to siła sygnału;
+   * `L` to poziom dźwięku w % (szczyt z ostatniej sekundy);
+   * `OK` to liczba poprawnie odebranych ramek;
+   * `E` to ramki z błędną sumą kontrolną (zakłócone albo za słabe).
+4. Poniżej widać ostatnie ramki, najnowsza na górze: `NADAWCA>CEL` i wiek ramki, a pod spodem 2 linie treści.
 
-Jak czytać wynik:
-* `Aud pk` wyraźnie rośnie przy sygnale, a przy APRS `f~` pokazuje ok. 1200–2200 Hz: dźwięk dociera, odbiór APRS jest możliwy.
-* `Aud pk` stoi w miejscu, np. ciągle 0 albo stała wartość: ta droga nie przenosi dźwięku z odbiornika.
-* `I2S: no clock`: HR-C6000 w trybie FM nie taktuje I2S.
+Klawisz `#` przełącza widoki: **ramki → stacje → radar**.
 
-Ponowne `9` wyłącza test. Test działa tylko w FM i nie przeszkadza w słuchaniu. Pisk klawiszy może się na chwilę nałożyć na pomiar.
+* **Ramki** (`APRS frames`): ostatnie ramki, `*` otwiera widok surowy wybranej ramki: pełna linia TNC2 (`NADAWCA>CEL,ŚCIEŻKA*:treść`) i zrzut hex bajtów.
+* **Stacje** (`APRS stations`): ostatnio słyszane stacje i obiekty, najnowsza na górze: znak, odległość, azymut, wiek. W dolnej linii prędkość, kurs i liczba odebranych ramek wybranej stacji.
+* **Radar** (`APRS radar`): północ u góry, Ty w środku, stacje jako kropki, wybrana w kółku. Po prawej znak, odległość, azymut, wiek i prędkość, na dole zasięg radaru (`R 10km`), dobierany sam do najdalszej stacji.
+
+Pozycje są odczytywane z ramek zwykłych, skompresowanych, Mic-E (popularne w radiach mobilnych), obiektów i itemów. Twoja pozycja to fix GPS, a bez fixa lokalizacja z ustawień radia.
+
+Klawisze w monitorze:
+
+| Klawisz | Działanie |
+|---|---|
+| `#` | następny widok: ramki, stacje, radar |
+| `▲` / `▼` | wybór ramki lub stacji (w widoku surowym: przewijanie) |
+| `*` | widok surowy wybranej ramki (w widoku ramek) |
+| `0` | wyczyszczenie listy ramek i stacji |
+| `9` | wyłączenie monitora |
+| `RED` | wyjście z widoku surowego, potem z ekranu RSSI |
+
+### Odbiór APRS w tle: `SK1 + 4`
+
+Na ekranie VFO lub kanału `SK1 + 4` włącza i wyłącza odbiór APRS w tle (komunikat `APRS RX: on/off`). Można też przypisać to do quickkeya (akcja `APRS RX on/off`).
+
+Przy każdej odebranej ramce pojawia się na chwilę powiadomienie, np. `SP7ABC-9 12.3km` (albo `APRS SP7ABC`, gdy ramka nie ma pozycji). Ramki i stacje odebrane w tle widać potem w monitorze (RSSI, `9`).
+
+Ustawienie nie jest zapamiętywane po wyłączeniu radia.
+
+Uwagi:
+* Działa tylko w FM. Status `APRS RX: paused` oznacza nadawanie albo odtwarzany dźwięk (pisk klawisza, komunikat głosowy); odbiór wraca sam po chwili.
+* Zapamiętywanych jest 8 ostatnich ramek, do 200 bajtów każda (dłuższe są ucięte, w widoku hex widać wtedy `+`).
+* Gdy `E` rośnie, a `OK` nie: sygnał jest, ale za słaby lub zniekształcony; spróbuj lepszej anteny albo innego poziomu głośności nadawcy.
 
 ---
 

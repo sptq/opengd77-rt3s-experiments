@@ -50,6 +50,7 @@ static const char *creditTexts[] =
 #if defined(PLATFORM_RD5R)
 		"Dzmitry EW1ADG",
 #endif
+		"Marcin SP7TQ", // Fork: RT3S features (GPS pages, VFO sweep, APRS RX)
 		"Jason VK7ZJA (SK)"
 };
 static const int maxCredits = (sizeof(creditTexts) / sizeof(creditTexts[0]));

@@ -34,6 +34,7 @@
 #include "functions/voicePrompts.h"
 #include "functions/rxPowerSaving.h"
 #include "interfaces/interrupts.h"
+#include "interfaces/i2s.h"
 
 
 #define MIC_AVERAGE_COUNTER_RELOAD     10
@@ -316,6 +317,9 @@ void soundRetrieveBuffer(void)
 // Subsequent data fills are done using soundRefillData()
 bool soundFillData(void)
 {
+#if defined(I2S_APRS_RX)
+	i2sAprsRxStop(); // before refilling, so the APRS capture DMA does not play/consume the sound buffers
+#endif
 	for(int i = 0; i < 2; i++)
 	{
 		soundRefillData(i);
@@ -427,6 +431,9 @@ bool soundReceiveData(void)
 	{
 		return false;
 	}
+#if defined(I2S_APRS_RX)
+	i2sAprsRxStop();
+#endif
     isSending = false;
     isReceiving = true;
 	soundStartDMA();
