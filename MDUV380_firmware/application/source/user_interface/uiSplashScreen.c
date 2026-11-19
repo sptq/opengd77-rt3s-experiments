@@ -25,6 +25,7 @@
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#include <math.h>
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
@@ -155,25 +156,52 @@ static void updateScreen(bool isFirstRun)
 #if defined(HAS_EMCOM_UI)
 	if ((customDataHasImage == false) && emcomStyleEnabled())
 	{
-		// Fork: EMCOM boot screen
+		// Fork: SP7TEAM boot screen (emblem: antenna mast with radio waves)
+		const int16_t cx = (DISPLAY_SIZE_X / 2);
+		const int16_t ty = 13; // top of the mast
+
 		displayClearBuf();
 
+		// waves
 		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_SPLASHSCREEN);
-		displayFillRect(0, 0, 4, 64, false);
-		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintAt(10, 6, "OpenGD77", FONT_SIZE_1);
-		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintAt(8, 14, "EMCOM", FONT_SIZE_4);
-		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintAt(10, 48, "FIELD RADIO FIRMWARE", FONT_SIZE_1);
+		for (int16_t r = 7; r <= 19; r += 6)
+		{
+			for (int16_t a = -40; a <= 40; a += 2) // arcs, +/-40 degrees around the horizontal, both sides
+			{
+				double rad = ((double)a * (M_PI / 180.0));
+				int16_t dx = (int16_t)lround(cos(rad) * r);
+				int16_t dy = (int16_t)lround(sin(rad) * r);
 
+				displaySetPixel((cx + dx), (ty + dy), true);
+				displaySetPixel((cx - dx), (ty + dy), true);
+			}
+		}
+		// mast
 		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintAt(10, 70, line1, FONT_SIZE_3);
-		displayPrintAt(10, 88, line2, FONT_SIZE_3);
+		displayFillCircle(cx, ty, 2, true);
+		displayDrawFastVLine(cx, ty, 26, true);
+		displayDrawLine(cx, (ty + 8), (cx - 7), (ty + 26), true);
+		displayDrawLine(cx, (ty + 8), (cx + 7), (ty + 26), true);
+		displayDrawFastHLine((cx - 4), (ty + 17), 9, true);
+		displayDrawFastHLine((cx - 9), (ty + 26), 19, true);
 
+		// name
+		displayPrintCentered(36, "SP7TEAM", FONT_SIZE_4);
+		displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintCentered(64, "EMCOM FIELD FIRMWARE", FONT_SIZE_1);
+		displayFillRect(30, 75, (DISPLAY_SIZE_X - 60), 1, false);
+
+		// user lines (codeplug boot text)
+		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
+		displayPrintCentered(81, line1, FONT_SIZE_3);
 		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
-		displayDrawFastHLine(0, (DISPLAY_SIZE_Y - 13), DISPLAY_SIZE_X, true);
-		displayPrintAt(10, (DISPLAY_SIZE_Y - 10), "SP7TQ fork " GITVERSION, FONT_SIZE_1);
+		displayPrintCentered(99, line2, FONT_SIZE_1);
+
+		// version bar
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG_SPLASHSCREEN);
+		displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_HEADER_TEXT);
+		displayPrintCentered((DISPLAY_SIZE_Y - 9), "OpenGD77 " GITVERSION, FONT_SIZE_1);
 	}
 	else
 #endif

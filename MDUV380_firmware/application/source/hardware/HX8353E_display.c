@@ -1231,6 +1231,39 @@ void displayDrawChoice(ucChoice_t choice, bool clearRegion)
 	lText = choices[choice].lText;
 	rText = choices[choice].rText;
 
+	if (displayFlatStyle)
+	{
+		// Fork: EMCOM soft key bar: GREEN action on the left, RED action on the right
+		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+		displayFillRect(0, FILLRECT_Y, DISPLAY_SIZE_X, 16, false);
+
+		if (lText)
+		{
+			int16_t w = (int16_t)((strlen(lText) * 8) + 8);
+			displayThemeApply(THEME_ITEM_FG_RSSI_BAR, THEME_ITEM_BG);
+			displayFillRect(2, (FILLRECT_Y + 2), w, 12, false);
+			displayPrintCore(6, (FILLRECT_Y + 4), lText, FONT_SIZE_2, TEXT_ALIGN_LEFT, true);
+		}
+		if (rText)
+		{
+			int16_t w = (int16_t)((strlen(rText) * 8) + 8);
+			displayThemeApply(THEME_ITEM_FG_TX_COUNTER, THEME_ITEM_BG);
+			displayFillRect((DISPLAY_SIZE_X - 2 - w), (FILLRECT_Y + 2), w, 12, false);
+			displayPrintCore((DISPLAY_SIZE_X - 2 - w + 4), (FILLRECT_Y + 4), rText, FONT_SIZE_2, TEXT_ALIGN_LEFT, true);
+		}
+		if (choice == CHOICES_OKARROWS)
+		{
+			displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+			for (int a = 0; a < 2; a++)
+			{
+				displayFillTriangle(ucTriangleArrows[a][0], (ucTriangleArrows[a][1] - 1), ucTriangleArrows[a][2], (ucTriangleArrows[a][3] - 1),
+						ucTriangleArrows[a][4], (ucTriangleArrows[a][5] - 1), true);
+			}
+		}
+		displayThemeResetToDefault();
+		return;
+	}
+
 	displayThemeApply(THEME_ITEM_FG_NOTIFICATION, THEME_ITEM_BG);
 	if (lText)
 	{
