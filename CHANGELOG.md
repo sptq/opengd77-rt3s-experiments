@@ -5,7 +5,9 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
-## Unreleased
+## R20260131-SP7TQ.1 — 2026-11-19
+
+First release under the SP7TQ tag. `.gla` language packs changed (new menu strings): flash the ones from this release.
 
 * **Main menu: APRS RX and SSTV entries** (also quickkey targets); the APRS monitor moved out of the RSSI screen, `9` there still opens it.
 * **DTMF decoder**: shows received digits on the RSSI monitor.
@@ -16,6 +18,7 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 * **Station → GPS waypoint** (`*` in the stations / radar view), waypoint drawn on the radar.
 * **GPS log → GPX**: `tools/opengd77_gps_log_to_gpx.py` downloads the upstream NMEA log (GPS mode On+Log) over USB.
 * `make build-all` no longer deletes the bins of the variants it has already built.
+* DM-1701 / RT-84 (120-line screen): the SSTV status line covers the top of the picture.
 * README and changelog: the fork is now developed independently, maintained by SP7TQ.
 
 ## R20260131-EA4IPW.3 — 2026-11-19
