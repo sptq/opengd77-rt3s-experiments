@@ -266,6 +266,7 @@ void uiChannelModeHeartBeatActivityForGD77S(uiEvent_t *ev);
 void uiNotificationShow(uiNotificationType_t type, uiNotificationID_t id, uint32_t msTimeout, const char *message, bool immediateRender);
 void uiNotificationBearingShow(uiNotificationBearingInfo_t *bearing, uint32_t msTimeout, bool immediateRender);
 void uiNotificationRefresh(void);
+uint16_t *uiNotificationScratchBuffer(void); // Fork: off-screen drawing (EMCOM UI)
 bool uiNotificationHasTimedOut(void);
 bool uiNotificationIsVisible(void);
 void uiNotificationHide(bool immediateRender);

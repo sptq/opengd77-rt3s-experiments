@@ -159,6 +159,17 @@ void uiNotificationBearingShow(uiNotificationBearingInfo_t *bearing, uint32_t ms
 	uiNotificationShow(NOTIFICATION_TYPE_BEARING, NOTIFICATION_ID_BEARING, msTimeout, NULL, immediateRender);
 }
 
+// Fork: scratch screen buffer for off-screen drawing (refilled from the primary buffer
+// every time a notification is drawn, so borrowing it in between is harmless)
+uint16_t *uiNotificationScratchBuffer(void)
+{
+#if defined(HAS_COLOURS)
+	return (uint16_t *)screenNotificationBufData;
+#else
+	return NULL;
+#endif
+}
+
 void uiNotificationRefresh(void)
 {
 	if (notificationData.visible)
