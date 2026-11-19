@@ -339,6 +339,7 @@ typedef struct
    const char quickkeys[LANGUAGE_TEXTS_LENGTH];// Options-menu label for the quickkeys (SK2 + digit) editor
    const char sstv[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the SSTV receive screen
    const char aprs_rx[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the APRS receive screen
+   const char event_log[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the EMCOM event log
 } stringsTable_t;
 
 #endif // _OPENGD77_UILANGUAGE_H_

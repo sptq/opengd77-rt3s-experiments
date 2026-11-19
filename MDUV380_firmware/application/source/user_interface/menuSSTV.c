@@ -20,6 +20,7 @@
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
 #include "functions/sstvRx.h"
+#include "functions/eventLog.h"
 #include "functions/ticks.h"
 
 #if defined(HAS_SSTV_MENU) && defined(I2S_APRS_RX)
@@ -72,6 +73,12 @@ static void updateScreen(void)
 		displayFillRect(0, SSTV_Y0, DISPLAY_SIZE_X, SSTV_RX_ROWS, true);
 		hasPicture = true;
 	}
+#if defined(HAS_EVENT_LOG)
+	if ((st.state == SSTV_RX_DONE) && (lastState == SSTV_RX_RECEIVING))
+	{
+		eventLogAdd(EVENT_LOG_SSTV, "%s %u lines", st.modeName, (unsigned)(st.row + 1));
+	}
+#endif
 	lastState = st.state;
 
 	if (rx.state != APRS_RX_STATE_LISTENING)

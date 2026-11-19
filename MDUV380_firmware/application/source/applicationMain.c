@@ -55,6 +55,7 @@
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
 #include "user_interface/uiEmcom.h"
+#include "functions/eventLog.h"
 
 #if defined(USING_EXTERNAL_DEBUGGER)
 #include "SeggerRTT/RTT/SEGGER_RTT.h"
@@ -565,6 +566,9 @@ void applicationMainTask(void)
 	aprsBeaconingStart();
 #if defined(I2S_APRS_RX)
 	aprsRxSetBackground(settingsIsOptionBitSet(BIT_APRS_RX_BACKGROUND)); // Fork: restore APRS RX background mode
+#endif
+#if defined(HAS_EVENT_LOG)
+	eventLogAdd(EVENT_LOG_SYS, "power on");
 #endif
 
 	/* Infinite loop */
@@ -1419,6 +1423,9 @@ void applicationMainTask(void)
 #endif
 #if defined(HAS_EMCOM_UI)
 		emcomSosTick(); // Fork: EMCOM SOS beacons
+#endif
+#if defined(HAS_EVENT_LOG)
+		eventLogTick(); // Fork: EMCOM event log (TX, FM RX, DMR calls)
 #endif
 		settingsSaveIfNeeded(false);
 

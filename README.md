@@ -1,4 +1,4 @@
-# RT3S EMCOM firmware — OpenGD77, SP7TQ fork
+# SP7TEAM EMCOM firmware for the Retevis RT3S (OpenGD77 fork)
 
 [![Release](https://img.shields.io/github/v/release/sptq/opengd77-rt3s-experiments?include_prereleases&label=release)](https://github.com/sptq/opengd77-rt3s-experiments/releases)
 ![Radio](https://img.shields.io/badge/radio-Retevis%20RT3S%20%2F%20MD--UV380-2b6b3f)
@@ -19,6 +19,7 @@ on [OpenGD77](https://www.opengd77.com/).
 | ![Standby](docs/screens/emcom_standby.png) | **EMCOM main screen.** Channel number first, fixed positions, state by colour *and* word (RX green, TX red, SCAN amber, SOS flashing), UTC clock, locator and GPS position, APRS stations and unread messages always in view. Red-only night mode. |
 | ![DMR call](docs/screens/emcom_dmr.png) | **DMR and FM.** Caller callsign, talker alias, talkgroup; live RX level in dBm and S units on FM; TX timer with the TOT. |
 | ![SOS](docs/screens/emcom_sos.png) | **SOS.** `SK1+9` twice: APRS position beacons with the emergency symbol, every minute then every two minutes, flashing banner. Same again to stop. |
+| ![Boot screen](docs/screens/boot_sp7team.png) | **One look across the whole radio.** Menus, lists, option boxes, notifications, soft key bars (GREEN / RED fields), APRS and SSTV screens and the SP7TEAM boot screen share the EMCOM style and colours; *Options → Display → Screen* switches everything back to classic. |
 | ![SSTV](docs/screens/sstv_pd120.png) | **SSTV receive** (Robot, Martin, Scottie, PD — the ISS uses PD 120), picture drawn line by line. |
 
 And more, all decoded by the radio itself from the FM audio:
@@ -28,6 +29,9 @@ And more, all decoded by the radio itself from the FM audio:
 * **DTMF and CW decoders** (CW: repeater IDs, speed and tone shown).
 * **Band scope / waterfall**, fox hunting with GPS max-hold, radiosonde hunting
   (401–405 MHz presets, keypad waypoint), GPS waypoint page and trip computer.
+* **EMCOM event log** — every TX, FM reception, DMR call, new APRS station, APRS
+  message, DTMF sequence, SOS and SSTV picture with its UTC time, kept in flash
+  across power cycles (2048 entries), on the radio and exported as CSV.
 * **GPS track log to GPX**, **screenshots** over USB, quickkeys, Polish translation
   and a Polish how-to ([`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md)).
 
@@ -207,7 +211,13 @@ aligned:
 | Channel | zone and `CH n/m`, channel number (16x32), name, frequency (`TX`, `REV`, `TA` marks); VFO: the frequency in 16x32 |
 | Panel | FM: offset, RX/TX tone, squelch, bandwidth, TOT; DMR: TG/PC, CC, TS, contact. Receiving FM: level in dBm and S units. DMR call: callsign, TG, rest of the alias. Transmitting: timer in 16x32 |
 | EMCOM rows | APRS stations heard, unread APRS messages, Maidenhead locator, position (GPS, else the fixed location), last heard (DMR station, or the last APRS station with distance) |
-| Footer | UTC time and date, key / PTT lock, scan, SOS |
+| Footer | UTC time and date, key / PTT lock, scan, SOS, `TX OFF` when TX inhibit is on |
+
+The same style covers the whole UI: menu title bars (accent, capitals,
+list position), full-width selection, square boxes without shadows, soft
+key bars with a green (GREEN key) and a red (RED key) field, the APRS RX,
+SSTV and event log screens, and the SP7TEAM boot screen (when no custom
+boot image is set).
 
 By day the screen is dark; at night (the existing day/night switch and
 auto-night) it uses a red-only palette that keeps night vision. VFO sweep,
@@ -222,6 +232,20 @@ To give the menus the same colours: *Options → Theme → Day* (then *Night*),
 position beacons with the emergency symbol and `EMERGENCY SOS` (3 at one
 minute, then every two minutes) through the channel APRS configuration
 (its QSY frequency when set), and a flashing banner; the same again stops it.
+
+### Event log — *main menu → Event log*
+
+The radio keeps a station log by itself: own transmissions (frequency,
+duration), FM receptions of 2 s or more (frequency, duration, peak dBm),
+DMR calls (callsign, TG), new APRS stations (with distance), APRS messages
+in and out (and ACKs), DTMF sequences, SOS on / off and beacons, SSTV
+pictures, and power-on. Each entry has its UTC time (GPS or CPS clock). The
+log is a 64 KB ring in the SPI flash (2048 entries, the GPS NMEA log now
+starts 64 KB later) and survives a power cycle.
+
+On the radio: newest first, type field in colour, the selected entry in
+full with its date in the footer; `0` then `GREEN` clears it. On a computer:
+`MDUV380_firmware/tools/opengd77_event_log.py --csv log.csv`.
 
 ### Screenshots over USB
 

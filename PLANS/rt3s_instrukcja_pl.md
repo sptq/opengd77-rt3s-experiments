@@ -33,6 +33,14 @@ W nocy (przełączanie dzień/noc albo auto-noc) ekran jest tylko czerwony, żeb
 
 Menu w tych samych kolorach: *Opcje → Motyw → Dzień* (potem *Noc*), `*` wczytuje kolory EMCOM (w dzień ciemne, w nocy czerwone), `GREEN` stosuje, `SK2 + GREEN` stosuje i zapisuje.
 
+Ten sam styl obejmuje całe radio: paski tytułu menu (akcent, wielkie litery, pozycja na liście), zaznaczenie przez całą szerokość, kanciaste okna bez cieni, dolny pasek z zielonym (klawisz GREEN) i czerwonym (RED) polem, ekrany APRS RX, SSTV, dziennika oraz ekran startowy SP7TEAM. Gdy włączona jest blokada nadawania (TX inhibit), w stopce świeci czerwone `TX OFF`.
+
+### Dziennik: menu główne → Dziennik
+
+Radio samo prowadzi dziennik łączności z czasem UTC: własne nadawanie (częstotliwość, czas), odbiory FM od 2 s (częstotliwość, czas, szczyt dBm), rozmowy DMR (znak, TG), nowe stacje APRS (z odległością), wiadomości APRS (przychodzące, wysłane, ACK), sekwencje DTMF, SOS i jego beacony, obrazki SSTV, włączenie radia. 2048 wpisów w pamięci flash, przetrwa wyłączenie.
+
+Na radiu: najnowsze na górze, typ w kolorowym polu, wybrany wpis w całości z datą w stopce; `0` i potem `GREEN` czyści dziennik. Na komputerze: `python3 MDUV380_firmware/tools/opengd77_event_log.py --csv dziennik.csv`.
+
 ### SOS: `SK1 + 9` dwa razy
 
 Dwa naciśnięcia `SK1 + 9` w ciągu 3 s (albo akcja quickkey *SOS*) włączają alarm: migający pasek `EMERGENCY SOS` i beacony APRS z pozycją, symbolem alarmu i tekstem `EMERGENCY SOS` (3 razy co minutę, potem co 2 minuty). Nadawanie idzie przez konfigurację APRS kanału (na jej częstotliwość QSY, jeśli jest ustawiona); bez niej radio pokaże `SOS: no APRS config`. Wyłączenie: znowu dwa razy `SK1 + 9`.

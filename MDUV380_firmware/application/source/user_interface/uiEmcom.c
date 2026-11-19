@@ -28,6 +28,7 @@
 #include "functions/ticks.h"
 #include "functions/sound.h"
 #include "functions/aprs.h"
+#include "functions/eventLog.h"
 #include "interfaces/batteryAndPowerManagement.h"
 #include "interfaces/i2s.h"
 #include "io/LEDs.h"
@@ -892,6 +893,11 @@ static void drawFooter(emcomState_t st)
 		right = "SCAN";
 		rightCol = pal->scan;
 	}
+	else if (settingsIsOptionBitSet(BIT_TX_INHIBIT))
+	{
+		right = "TX OFF";
+		rightCol = pal->tx;
+	}
 	else if (keypadLocked && PTTLocked)
 	{
 		right = "LOCK";
@@ -1092,6 +1098,9 @@ void emcomSosToggle(void)
 	drawn.valid = false;
 
 	uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 2000U, (sosOn ? "SOS: ON" : "SOS: OFF"), false);
+#if defined(HAS_EVENT_LOG)
+	eventLogAdd(EVENT_LOG_SOS, "%s", (sosOn ? "SOS ON" : "SOS OFF"));
+#endif
 	soundSetMelody(sosOn ? MELODY_ERROR_BEEP : MELODY_ACK_BEEP);
 }
 
@@ -1134,6 +1143,9 @@ static void sosSend(void)
 	{
 		case APRS_INFO_TX_SENT:
 			sosSent++;
+#if defined(HAS_EVENT_LOG)
+			eventLogAdd(EVENT_LOG_SOS, "beacon %u", (unsigned)sosSent);
+#endif
 			sosNextMs = (ticksGetMillis() + ((sosSent < SOS_FAST_BEACONS) ? SOS_FIRST_INTERVAL_MS : SOS_INTERVAL_MS));
 			break;
 		case APRS_INFO_TX_NO_CONFIG:

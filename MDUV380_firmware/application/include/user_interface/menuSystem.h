@@ -330,6 +330,7 @@ enum MENU_SCREENS
 #define HAS_APRS_RX_MENU
 	MENU_SSTV,// Fork: SSTV picture receive
 	MENU_APRS_RX,// Fork: APRS receive (frames, stations, radar, messages, DTMF, CW)
+	MENU_EVENT_LOG,// Fork: EMCOM event log
 #endif
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 	UI_MESSAGE_BOX,
@@ -490,6 +491,7 @@ menuStatus_t menuRSSIScreen(uiEvent_t *event, bool isFirstRun);
 #if defined(HAS_SSTV_MENU)
 menuStatus_t menuSSTV(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuAPRSRx(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuEventLog(uiEvent_t *event, bool isFirstRun);
 #endif
 menuStatus_t menuLastHeard(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuGeneralOptions(uiEvent_t *event, bool isFirstRun);

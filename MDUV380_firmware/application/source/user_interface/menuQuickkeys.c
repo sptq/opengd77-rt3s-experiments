@@ -75,6 +75,7 @@ static const uint16_t quickkeyChoices[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	QUICKKEY_MENUVALUE(MENU_APRS_RX, 0, 0),
+	QUICKKEY_MENUVALUE(MENU_EVENT_LOG, 0, 0),
 	QUICKKEY_MENUVALUE(MENU_SSTV, 0, 0),
 #endif
 };

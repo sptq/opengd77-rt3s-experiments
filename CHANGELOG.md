@@ -7,6 +7,9 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
+* **SP7TEAM look for the whole UI**: EMCOM colours as the default theme, flat boxes without shadows, menu title bars and full-width selection, soft key bars (GREEN / RED fields), restyled APRS RX (status strip, chips, radar panel), SSTV and boot screen (SP7TEAM emblem).
+* **Event log** (main menu → Event log): TX, FM RX, DMR calls, APRS stations and messages, DTMF, SOS, SSTV, power-on with UTC time, 2048 entries in flash; `tools/opengd77_event_log.py` exports CSV. The GPS NMEA log starts 64 KB later.
+* **TX OFF** in the EMCOM footer when TX inhibit is on.
 * **EMCOM main screen** (default, Options → Display → Screen): status bar with state field, segmented S-meter, big channel number, parameter panel, live RX level, DMR caller, TX timer, APRS / messages / locator / position rows, UTC footer; red-only night palette.
 * **EMCOM colours for the menus**: `*` in the theme editor loads them (dark day / red night theme).
 * **SOS**: `SK1+9` twice or a quickkey: APRS emergency position beacons and a flashing banner.

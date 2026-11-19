@@ -191,11 +191,11 @@ static void updateScreen(bool isFirstRun)
 		displayPrintCentered(64, "EMCOM FIELD FIRMWARE", FONT_SIZE_1);
 		displayFillRect(30, 75, (DISPLAY_SIZE_X - 60), 1, false);
 
-		// user lines (codeplug boot text)
+		// what it does
 		displayThemeApply(THEME_ITEM_FG_SPLASHSCREEN, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintCentered(81, line1, FONT_SIZE_3);
+		displayPrintCentered(82, "FM  DMR  APRS", FONT_SIZE_3);
 		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_SPLASHSCREEN);
-		displayPrintCentered(99, line2, FONT_SIZE_1);
+		displayPrintCentered(101, "SSTV  DTMF  CW  GPS", FONT_SIZE_1);
 
 		// version bar
 		displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG_SPLASHSCREEN);

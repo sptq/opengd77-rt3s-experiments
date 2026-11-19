@@ -16,6 +16,7 @@
 #include "functions/aprsRx.h"
 #include "functions/toneRxDecoders.h"
 #include "functions/sstvRx.h"
+#include "functions/eventLog.h"
 #include "functions/aprs.h"
 #include "functions/settings.h"
 #include "functions/sound.h"
@@ -335,6 +336,7 @@ static aprsRxStation_t *stationUpdate(const aprsRxFrame_t *frame, uint32_t now, 
 	}
 
 	aprsRxStation_t st;
+	bool isNew = false;
 
 	if (i < stationCount)
 	{
@@ -343,6 +345,7 @@ static aprsRxStation_t *stationUpdate(const aprsRxFrame_t *frame, uint32_t now, 
 	}
 	else
 	{
+		isNew = true;
 		memset(&st, 0, sizeof(st));
 		strcpy(st.name, pos.name);
 		st.courseDeg = st.speedKmh = -1;
@@ -371,6 +374,24 @@ static aprsRxStation_t *stationUpdate(const aprsRxFrame_t *frame, uint32_t now, 
 	}
 
 	stations[0] = st;
+
+#if defined(HAS_EVENT_LOG)
+	if (isNew)
+	{
+		double myLat, myLon;
+
+		if (st.hasPos && aprsRxOwnPosition(&myLat, &myLon))
+		{
+			char dist[10];
+			aprsRxFormatDistance(aprsRxDistanceKm(myLat, myLon, st.lat, st.lon), dist, sizeof(dist));
+			eventLogAdd(EVENT_LOG_APRS, "%s %s", st.name, dist);
+		}
+		else
+		{
+			eventLogAdd(EVENT_LOG_APRS, "%s", st.name);
+		}
+	}
+#endif
 	return &stations[0];
 }
 
@@ -482,6 +503,9 @@ void aprsRxSendMessage(const char *to, const char *text)
 	m->timeMs = ticksGetMillis();
 	m->kind = APRS_MSG_OUT_PENDING;
 	m->tries = 0U;
+#if defined(HAS_EVENT_LOG)
+	eventLogAdd(EVENT_LOG_MSG_OUT, "%s:%s", to, text);
+#endif
 	outNextTryMs = m->timeMs;
 	txErrorShown = false;
 }
@@ -595,6 +619,9 @@ static void handleMessage(const aprsRxFrame_t *frame, uint32_t now)
 
 					messages[i].kind = (msg.isAck ? APRS_MSG_OUT_ACKED : APRS_MSG_OUT_REJECTED);
 					snprintf(buf, sizeof(buf), "%s %s", (msg.isAck ? "ACK" : "REJ"), p.src);
+#if defined(HAS_EVENT_LOG)
+					eventLogAdd(EVENT_LOG_MSG_OUT, "%s", buf);
+#endif
 					uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, buf, false);
 					soundSetMelody(msg.isAck ? MELODY_ACK_BEEP : MELODY_NACK_BEEP);
 					break;
@@ -635,6 +662,9 @@ static void handleMessage(const aprsRxFrame_t *frame, uint32_t now)
 
 			snprintf(buf, sizeof(buf), "%s:%s", p.src, msg.text);
 			uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, MSG_NOTIFICATION_MS, buf, false);
+#if defined(HAS_EVENT_LOG)
+			eventLogAdd(EVENT_LOG_MSG_IN, "%s:%s", p.src, msg.text);
+#endif
 			soundSetMelody(MELODY_PRIVATE_CALL);
 		}
 	}
@@ -759,6 +789,9 @@ static void dtmfBackgroundTick(void)
 				int menu = menuSystemGetCurrentMenuNumber();
 
 				dtmfSequence[dtmfSequenceLen] = 0;
+#if defined(HAS_EVENT_LOG)
+				eventLogAdd(EVENT_LOG_DTMF, "%s", dtmfSequence);
+#endif
 				if (backgroundOn && (monitorOn == false) && ((menu == UI_VFO_MODE) || (menu == UI_CHANNEL_MODE)))
 				{
 					snprintf(buf, sizeof(buf), "DTMF %s", dtmfSequence);
