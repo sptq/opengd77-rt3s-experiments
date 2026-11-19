@@ -188,10 +188,16 @@ static void aprsMonPrintRow(int16_t y, char *left, const char *right, bool selec
 	displayThemeResetToDefault();
 }
 
-// Empty view: a heading, a hint, the keys
+// Empty view: a heading, a hint, the keys (on a DMR channel: the radio must be on FM)
 static void aprsMonDrawHint(const char *line1, const char *line2)
 {
-	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+	if (trxGetMode() != RADIO_MODE_ANALOG)
+	{
+		line1 = "FM only";
+		line2 = "Switch to an FM channel";
+	}
+
+	displayThemeApply(((trxGetMode() != RADIO_MODE_ANALOG) ? THEME_ITEM_FG_RSSI_BAR_S9P : THEME_ITEM_FG_DEFAULT), THEME_ITEM_BG);
 	displayPrintCentered((APRS_MON_LIST_Y + 22), line1, FONT_SIZE_3);
 	displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
 	displayPrintCentered((APRS_MON_LIST_Y + 44), line2, FONT_SIZE_1);
