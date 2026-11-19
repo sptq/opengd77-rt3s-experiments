@@ -214,6 +214,10 @@ auto-night) it uses a red-only palette that keeps night vision. VFO sweep,
 dual watch, frequency entry and the channel details view keep the classic
 screen.
 
+To give the menus the same colours: *Options → Theme → Day* (then *Night*),
+`*` loads the EMCOM colours (dark by day, red at night), `GREEN` applies,
+`SK2+GREEN` applies and saves.
+
 **SOS:** `SK1+9` twice within 3 s (or the *SOS* quickkey action) starts APRS
 position beacons with the emergency symbol and `EMERGENCY SOS` (3 at one
 minute, then every two minutes) through the channel APRS configuration

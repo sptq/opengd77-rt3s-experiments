@@ -31,6 +31,8 @@ Od góry:
 
 W nocy (przełączanie dzień/noc albo auto-noc) ekran jest tylko czerwony, żeby nie psuć widzenia nocnego. W trybach specjalnych VFO (sweep, dual watch, wpisywanie częstotliwości) i w podglądzie szczegółów kanału zostaje stary ekran.
 
+Menu w tych samych kolorach: *Opcje → Motyw → Dzień* (potem *Noc*), `*` wczytuje kolory EMCOM (w dzień ciemne, w nocy czerwone), `GREEN` stosuje, `SK2 + GREEN` stosuje i zapisuje.
+
 ### SOS: `SK1 + 9` dwa razy
 
 Dwa naciśnięcia `SK1 + 9` w ciągu 3 s (albo akcja quickkey *SOS*) włączają alarm: migający pasek `EMERGENCY SOS` i beacony APRS z pozycją, symbolem alarmu i tekstem `EMERGENCY SOS` (3 razy co minutę, potem co 2 minuty). Nadawanie idzie przez konfigurację APRS kanału (na jej częstotliwość QSY, jeśli jest ustawiona); bez niej radio pokaże `SOS: no APRS config`. Wyłączenie: znowu dwa razy `SK1 + 9`.

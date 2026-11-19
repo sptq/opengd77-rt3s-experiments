@@ -44,6 +44,9 @@ void emcomDrawBar(int barWidth, bool isTx);        // S-meter / mic level, y 12.
 void emcomDrawRssi(int dBm);                       // S-meter from dBm (no render)
 bool emcomNeedsFullRedraw(uint32_t now);           // state, clock, messages... changed
 
+// Theme items (native colours) matching the EMCOM screen: dark by day, red at night
+void emcomThemePreset(bool night, uint16_t *items);
+
 // SOS: APRS emergency beacons + banner
 void emcomSosToggle(void);
 void emcomSosRequest(void);                        // SK1 + 9 / quickkey: confirm with a second press
