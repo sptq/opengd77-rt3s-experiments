@@ -824,6 +824,35 @@ void menuDisplayEntry(int loopOffset, int focusedItem, const char *entryText, in
 
 	displayThemeApply(fgItem, bgItem);
 
+#if defined(HAS_EMCOM_UI)
+	// Fork: EMCOM style option rows: label on the left (without the ':'), value right aligned
+	if (emcomStyleEnabled() && (optStart > 0) && ((size_t)optStart <= strlen(entryText)))
+	{
+		char label[SCREEN_LINE_BUFFER_SIZE];
+		const char *value = (entryText + optStart);
+		int16_t y = (DISPLAY_Y_POS_MENU_ENTRY_HIGHLIGHT + (loopOffset * MENU_ENTRY_HEIGHT));
+
+		snprintf(label, ((optStart < SCREEN_LINE_BUFFER_SIZE) ? optStart : SCREEN_LINE_BUFFER_SIZE), "%s", entryText); // drops the ':'
+		while (*value == ' ')
+		{
+			value++;
+		}
+
+		int16_t valueW = (int16_t)(strlen(value) * 8);
+		int16_t labelW = (int16_t)(strlen(label) * 8);
+
+		if ((DISPLAY_X_POS_MENU_TEXT_OFFSET + labelW + 8 + valueW) <= (DISPLAY_SIZE_X - 4))
+		{
+			displayThemeApply(fgItem, bgItem);
+			displayPrintCore(DISPLAY_X_POS_MENU_TEXT_OFFSET, y, label, FONT_SIZE_3, TEXT_ALIGN_LEFT, focused);
+			displayThemeApply((focused ? fgItem : fgOptItem), bgItem);
+			displayPrintCore((DISPLAY_SIZE_X - 4 - valueW), y, value, FONT_SIZE_3, TEXT_ALIGN_LEFT, focused);
+			displayThemeResetToDefault();
+			return;
+		}
+	}
+#endif
+
 	if ((focused == false) && ((optStart < 0) || (optStart > 0)))
 	{
 		char buffer[SCREEN_LINE_BUFFER_SIZE];

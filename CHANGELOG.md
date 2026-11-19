@@ -7,6 +7,7 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
+* **Launcher menus**: main menu, Options and Contacts as 4x3 icon tiles (26 icons, `docs/icons/`), key numbers open a tile directly, name bar; option lists with right-aligned values.
 * **SP7TEAM look for the whole UI**: EMCOM colours as the default theme, flat boxes without shadows, menu title bars and full-width selection, soft key bars (GREEN / RED fields), restyled APRS RX (status strip, chips, radar panel), SSTV and boot screen (SP7TEAM emblem).
 * **Event log** (main menu → Event log): TX, FM RX, DMR calls, APRS stations and messages, DTMF, SOS, SSTV, power-on with UTC time, 2048 entries in flash; `tools/opengd77_event_log.py` exports CSV. The GPS NMEA log starts 64 KB later.
 * **TX OFF** in the EMCOM footer when TX inhibit is on.

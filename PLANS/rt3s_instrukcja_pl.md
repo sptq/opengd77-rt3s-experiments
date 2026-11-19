@@ -35,6 +35,10 @@ Menu w tych samych kolorach: *Opcje → Motyw → Dzień* (potem *Noc*), `*` wcz
 
 Ten sam styl obejmuje całe radio: paski tytułu menu (akcent, wielkie litery, pozycja na liście), zaznaczenie przez całą szerokość, kanciaste okna bez cieni, dolny pasek z zielonym (klawisz GREEN) i czerwonym (RED) polem, ekrany APRS RX, SSTV, dziennika oraz ekran startowy SP7TEAM. Gdy włączona jest blokada nadawania (TX inhibit), w stopce świeci czerwone `TX OFF`.
 
+### Menu z kafelkami
+
+Menu główne, Opcje i Kontakty to kafelki z ikonami (4 w rzędzie). Numer w rogu kafelka to klawisz: `1`…`9`, `0` otwiera go od razu; ▲▼ przesuwa zaznaczenie, pełna nazwa jest w dolnym pasku. W listach ustawień nazwa opcji jest po lewej, a wartość wyrównana do prawej.
+
 ### Dziennik: menu główne → Dziennik
 
 Radio samo prowadzi dziennik łączności z czasem UTC: własne nadawanie (częstotliwość, czas), odbiory FM od 2 s (częstotliwość, czas, szczyt dBm), rozmowy DMR (znak, TG), nowe stacje APRS (z odległością), wiadomości APRS (przychodzące, wysłane, ACK), sekwencje DTMF, SOS i jego beacony, obrazki SSTV, włączenie radia. 2048 wpisów w pamięci flash, przetrwa wyłączenie.
