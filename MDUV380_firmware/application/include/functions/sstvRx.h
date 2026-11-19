@@ -37,7 +37,7 @@ typedef struct
 	const char   *modeName;   // "" when none yet
 	uint16_t      row;        // last row written
 	uint16_t      freqHz;     // smoothed audio frequency (tuning aid), 0 = no signal
-	uint8_t       lastVis;    // last VIS code seen (also unsupported ones)
+	uint8_t       lastVis;    // last VIS code of an unsupported mode, 0 = none
 } sstvRxStatus_t;
 
 // 'scratch' must hold SSTV_RX_SCRATCH_SIZE bytes, it is only used while the decoder runs.

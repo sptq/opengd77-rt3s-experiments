@@ -329,6 +329,7 @@ const stringsTable_t hungarianLanguage=
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Konfig. reset", // MaxLen: 16
 .quickkeys				= "Gyorsgombok", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
 };
 /********************************************************************
  *

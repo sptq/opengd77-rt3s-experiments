@@ -329,6 +329,7 @@ const stringsTable_t japaneseLanguage =
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reset config.", // MaxLen: 16
 .quickkeys				= "Quickkeys", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
 };
 /********************************************************************
  *

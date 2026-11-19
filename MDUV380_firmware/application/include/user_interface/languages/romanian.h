@@ -329,6 +329,7 @@ const stringsTable_t romanianLanguage =
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Reset config.", // MaxLen: 16
 .quickkeys				= "Taste rapide", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
 };
 /********************************************************************
  *

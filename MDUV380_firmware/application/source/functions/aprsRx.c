@@ -782,6 +782,14 @@ void aprsRxTick(void)
 		return;
 	}
 
+#if defined(HAS_SSTV_MENU)
+	// The SSTV decoder draws into the screen buffer: only while its screen is shown
+	if (sstvOn && (menuSystemGetCurrentMenuNumber() != MENU_SSTV))
+	{
+		aprsRxSetSstv(false, NULL);
+	}
+#endif
+
 	// Capture management
 	if (captureAllowed() == false)
 	{

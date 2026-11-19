@@ -165,6 +165,7 @@ void sstvRxRestart(void)
 	sstv.visRun = 0;
 	sstv.mode = NULL;
 	sstv.lastRow = -1;
+	sstv.lastVis = 0;
 }
 
 void sstvRxInit(uint8_t *scratch, sstvRxPixelCallback_t pixelCallback)
@@ -523,14 +524,14 @@ static void visSample(float f)
 
 					sstv.visState = VIS_LEADER;
 					sstv.visRun = 0;
-					sstv.lastVis = sstv.visBits;
-
 					if ((ones & 1U) == 0U) // even parity
 					{
+						sstv.lastVis = sstv.visBits; // cleared below when the mode is known
 						for (uint32_t i = 0; i < NUM_MODES; i++)
 						{
 							if (modes[i].vis == sstv.visBits)
 							{
+								sstv.lastVis = 0;
 								startMode(&modes[i]);
 								// we are 22 ms into the parity bit: the stop bit (30 ms) follows, then the first sync
 								sstv.pos = -(MS(8.0f) + MS(30.0f) + MS(modes[i].preMs));

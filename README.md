@@ -252,7 +252,7 @@ de-/pre-emphasis tone twist, DPLL bit clock, NRZI, HDLC, AX.25 FCS check.
 It only owns the I2S while nothing else needs it (beeps, voice prompts,
 DMR audio and TX take over and the capture restarts by itself).
 
-The monitor (`9` on the RSSI screen) has seven views, cycled with `#`:
+The monitor (`9` on the RSSI screen) has six views, cycled with `#`:
 
 * **frames** — last 8 frames; `*` shows the selected one raw (full TNC2
   line + hex dump),
@@ -268,13 +268,7 @@ The monitor (`9` on the RSSI screen) has seven views, cycled with `#`:
   every 30 s, 3 times at most. Your call is the radio name + the SSID of the
   channel APRS configuration, TX goes to its QSY frequency when set,
 * **DTMF** — decoded DTMF digits (Goertzel, twist / energy checks),
-* **CW** — Morse decoder for FM (repeater IDs), with WPM and tone,
-* **SSTV** — picture receive (Robot 36/72, Martin M1/M2, Scottie S1/S2,
-  PD 90/120/180; the ISS uses PD 120 on 145.800). The mode comes from the
-  VIS header, every line is re-timed on its sync pulse, the picture is
-  scaled to 160x120 and drawn as it arrives. `0` clears and waits for the
-  next VIS. While this view is open APRS / DTMF / CW decoding is paused
-  (the SSTV decoder borrows their memory).
+* **CW** — Morse decoder for FM (repeater IDs), with WPM and tone.
 
 Positions are decoded from uncompressed, compressed and Mic-E reports,
 objects and items. Own position: GPS fix, else the location from the
@@ -284,6 +278,16 @@ notification (`SP7ABC-9 12.3km`) per frame, DTMF sequences and APRS
 messages; the setting survives a power cycle. The decoders and the parser
 are hardware independent and have host tests
 (`make -C MDUV380_firmware/tests/aprs_rx`).
+
+### SSTV receive — *main menu → SSTV*
+
+Picture receive on FM: Robot 36/72, Martin M1/M2, Scottie S1/S2,
+PD 90/120/180 (the ISS uses PD 120 on 145.800). The mode comes from the VIS
+header, every line is re-timed on its sync pulse, the picture is scaled to
+160x120 and drawn as it arrives under a status line (mode, line, audio
+frequency). `0` clears and waits for the next picture, `GREEN` / `RED`
+leave; also available as a quickkey. While the screen is open APRS / DTMF /
+CW decoding is paused (the SSTV decoder borrows their memory).
 
 ### GPS log to GPX
 

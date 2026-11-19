@@ -148,7 +148,7 @@ Radio samo dekoduje ramki APRS (AFSK 1200, AX.25) z odbieranego dźwięku FM.
    * `E` to ramki z błędną sumą kontrolną (zakłócone albo za słabe).
 4. Poniżej widać ostatnie ramki, najnowsza na górze: `NADAWCA>CEL` i wiek ramki, a pod spodem 2 linie treści.
 
-Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości → DTMF → CW → SSTV**.
+Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości → DTMF → CW**.
 
 * **Ramki** (`APRS frames`): ostatnie ramki, `*` otwiera widok surowy wybranej ramki: pełna linia TNC2 (`NADAWCA>CEL,ŚCIEŻKA*:treść`) i zrzut hex bajtów.
 * **Stacje** (`APRS stations`): ostatnio słyszane stacje i obiekty, najnowsza na górze: znak, odległość, azymut, wiek. W dolnej linii prędkość, kurs i liczba odebranych ramek wybranej stacji.
@@ -156,7 +156,6 @@ Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości →
 * **Wiadomości** (`APRS messages`): wiadomości APRS do Ciebie (`<`), biuletyny (`B`) i wysłane przez Ciebie (`>`), ze statusem `...` (czeka na ACK, z numerem próby), `ACK`, `REJ`, `FAIL` (brak ACK po 3 próbach) albo `noTX` (brak konfiguracji APRS na kanale). Liczba nieprzeczytanych to `M2` w linii statusu.
 * **DTMF** (`DTMF decoder`): odebrane cyfry DTMF dużą czcionką; przerwa ponad 1,5 s rozdziela sekwencje spacją.
 * **CW** (`CW decoder`): dekodowany Morse (np. znaki przemienników) z prędkością w WPM i częstotliwością tonu; `#` w dolnej linii, gdy ton jest kluczowany.
-* **SSTV**: odbiór obrazków SSTV (Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120/180, ISS nadaje PD 120 na 145.800). Tryb rozpoznaje się sam z nagłówka VIS, obraz 160×120 rysuje się linia po linii, w górnej linii tryb, numer linii i częstotliwość audio. `0` czyści obraz i czeka na następny. W tym widoku APRS, DTMF i CW są wstrzymane.
 
 #### Wiadomości APRS
 
@@ -191,6 +190,16 @@ Uwagi:
 * Działa tylko w FM. Status `APRS RX: paused` oznacza nadawanie albo odtwarzany dźwięk (pisk klawisza, komunikat głosowy); odbiór wraca sam po chwili.
 * Zapamiętywanych jest 8 ostatnich ramek, do 200 bajtów każda (dłuższe są ucięte, w widoku hex widać wtedy `+`).
 * Gdy `E` rośnie, a `OK` nie: sygnał jest, ale za słaby lub zniekształcony; spróbuj lepszej anteny albo innego poziomu głośności nadawcy.
+
+### SSTV: menu główne → SSTV
+
+Odbiór obrazków SSTV w FM: Robot 36/72, Martin M1/M2, Scottie S1/S2, PD 90/120/180 (ISS nadaje PD 120 na 145.800).
+
+1. Ustaw kanał lub VFO w **FM** na częstotliwość, na której nadawane są obrazki.
+2. Wejdź w *Menu → SSTV*.
+3. Tryb rozpoznaje się sam z nagłówka VIS, obraz 160×120 rysuje się linia po linii. W górnej linii jest tryb, numer linii i częstotliwość audio (pomaga sprawdzić, czy sygnał w ogóle dochodzi).
+
+`0` czyści obraz i czeka na następny, `GREEN` / `RED` wychodzi. Ekran można przypisać do quickkeya (`SK2 + cyfra`). Gdy ekran SSTV jest otwarty, APRS, DTMF i CW są wstrzymane. Wyjście z ekranu (także nadawanie) kasuje obraz.
 
 ### Ślad GPS do GPX
 

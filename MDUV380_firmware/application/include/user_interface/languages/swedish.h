@@ -329,6 +329,7 @@ const stringsTable_t swedishLanguage =
 .mute					= "Mute", // MaxLen: 16 (with ':' + .on or .off)
 .reset_configuration			= "Nollst. konfig.", // MaxLen: 16
 .quickkeys				= "Snabbtangenter", // MaxLen: 16 - Options menu entry listing the SK2+digit quickkey slots
+.sstv					= "SSTV", // MaxLen: 16 - Main menu entry: SSTV picture receive
 };
 /********************************************************************
  *
