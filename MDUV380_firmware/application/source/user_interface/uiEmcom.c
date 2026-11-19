@@ -79,6 +79,8 @@ static const emcomPalette_t PALETTE_NIGHT =
 #define EMCOM_Y3        99
 #define FOOTER_Y        116
 #define S9_SEGMENT      20
+#define COL2_X          66   // parameter columns
+#define COL3_X          120
 
 typedef enum
 {
@@ -532,6 +534,21 @@ static void drawZoneRow(const emcomMainInfo_t *info)
 	text((DISPLAY_SIZE_X - 2), ZONE_Y, buf, FONT_SIZE_1, pal->mut, true);
 }
 
+// "3m" / "45s" (fits the third column)
+static void totString(char *buf, size_t size)
+{
+	uint32_t secs = (currentChannelData->tot * 15U);
+
+	if ((secs % 60U) == 0U)
+	{
+		snprintf(buf, size, "%um", (unsigned)(secs / 60U));
+	}
+	else
+	{
+		snprintf(buf, size, "%us", (unsigned)secs);
+	}
+}
+
 static void drawParams(void)
 {
 	char buf[16];
@@ -544,9 +561,9 @@ static void drawParams(void)
 		snprintf(buf, sizeof(buf), "%u", (unsigned)(PCorTG & 0xFFFFFF));
 		keyValue(2, PANEL_Y1, (((PCorTG >> 24) == PC_CALL_FLAG) ? "PC" : "TG"), buf, pal->fg);
 		snprintf(buf, sizeof(buf), "%u", (unsigned)trxGetDMRColourCode());
-		keyValue(78, PANEL_Y1, "CC", buf, pal->fg);
+		keyValue(COL2_X, PANEL_Y1, "CC", buf, pal->fg);
 		snprintf(buf, sizeof(buf), "%d", (trxGetDMRTimeSlot() + 1));
-		keyValue(118, PANEL_Y1, "TS", buf, pal->fg);
+		keyValue(COL3_X, PANEL_Y1, "TS", buf, pal->fg);
 
 		codeplugUtilConvertBufToString(currentContactData.name, contact, 16);
 		if (nonVolatileSettings.overrideTG != 0)
@@ -570,16 +587,16 @@ static void drawParams(void)
 	keyValue(2, PANEL_Y1, "OFS", buf, pal->fg);
 
 	toneString(currentChannelData->rxTone, buf, sizeof(buf));
-	keyValue(62, PANEL_Y1, "RXT", buf, pal->fg);
+	keyValue(COL2_X, PANEL_Y1, "RXT", buf, pal->fg);
 
 	uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
 	snprintf(buf, sizeof(buf), "%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
-	keyValue(118, PANEL_Y1, "SQL", buf, pal->fg);
+	keyValue(COL3_X, PANEL_Y1, "SQL", buf, pal->fg);
 
 	keyValue(2, PANEL_Y2, "BW", (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"), pal->fg);
 
 	toneString(currentChannelData->txTone, buf, sizeof(buf));
-	keyValue(62, PANEL_Y2, "TXT", buf, pal->fg);
+	keyValue(COL2_X, PANEL_Y2, "TXT", buf, pal->fg);
 
 	if (currentChannelData->tot == 0)
 	{
@@ -587,10 +604,9 @@ static void drawParams(void)
 	}
 	else
 	{
-		uint32_t s = (currentChannelData->tot * 15U);
-		snprintf(buf, sizeof(buf), "%u:%02u", (unsigned)(s / 60U), (unsigned)(s % 60U));
+		totString(buf, sizeof(buf));
 	}
-	keyValue(118, PANEL_Y2, "TOT", buf, pal->fg);
+	keyValue(COL3_X, PANEL_Y2, "TOT", buf, pal->fg);
 }
 
 static void drawRxPanel(void)
@@ -669,7 +685,15 @@ static void drawTxPanel(const emcomMainInfo_t *info)
 	snprintf(buf, sizeof(buf), "%d:%02d", (t / 60), (t % 60));
 	text(1, (PANEL_Y1 - 10), buf, FONT_SIZE_4, pal->tx, false);
 
-	keyValue(84, PANEL_Y1, ((currentChannelData->tot != 0) ? "LEFT" : "TIME"), ((currentChannelData->tot != 0) ? "TOT" : "UP"), pal->fg);
+	if (currentChannelData->tot != 0)
+	{
+		totString(buf, sizeof(buf));
+		keyValue(84, PANEL_Y1, "TOT", buf, pal->fg); // the timer counts down
+	}
+	else
+	{
+		keyValue(84, PANEL_Y1, "TOT", "off", pal->mut);
+	}
 
 	if (trxGetMode() == RADIO_MODE_DIGITAL)
 	{

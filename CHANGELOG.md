@@ -7,6 +7,9 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
+* **EMCOM main screen** (default, Options → Display → Screen): status bar with state field, segmented S-meter, big channel number, parameter panel, live RX level, DMR caller, TX timer, APRS / messages / locator / position rows, UTC footer; red-only night palette.
+* **SOS**: `SK1+9` twice or a quickkey: APRS emergency position beacons and a flashing banner.
+* **Screenshots** over USB (`tools/opengd77_screenshot.py`); README pictures rendered from the firmware layout (`docs/screens/`).
 * **Volume indicator in the header** (VFO / channel screens): 4 bars left of the GPS label following the volume knob, `x` when muted. The pop-up bar on knob turns is still *Options → Display → Visual volume*.
 
 ## R20260131-SP7TQ.1 — 2026-11-19

@@ -15,6 +15,32 @@ RT3S nie ma pomarańczowego przycisku. Firmware zastępuje go kombinacją **SK1 
 
 ---
 
+## Ekran główny EMCOM (domyślny)
+
+Ekran kanału i VFO jest wzorowany na radiach profesjonalnych i wojskowych: wszystko ma stałe miejsce, numer kanału jest najważniejszy, stan radia widać kolorem **i** napisem. Powrót do starego wyglądu: *Opcje → Wyświetlacz → Screen: Classic*.
+
+![Ekran EMCOM](../docs/screens/emcom_standby.png)
+
+Od góry:
+* **Pasek stanu:** pole stanu (tryb FM/FMN/DMR w spoczynku, `RX` zielone, `TX` czerwone razem z całym paskiem, `SCAN` bursztynowe), moc, ton CTCSS/DCS albo szczelina TS, `a` (beacon APRS), `GPS` (zielony = fix), głośność (4 słupki, `x` = wyciszone), bateria.
+* **S-metr:** 32 segmenty, od S9 w górę bursztynowe; przy nadawaniu poziom mikrofonu na czerwono.
+* **Kanał:** strefa i `CH 3/16`, duży numer, nazwa, częstotliwość (`TX` przy nadawaniu, `REV` odwrócony przemiennik, `TA` talkaround). W VFO duża częstotliwość.
+* **Panel:** w FM offset, ton RX/TX, blokada szumów, szerokość kanału, TOT; w DMR TG, CC, TS i kontakt. Przy odbiorze FM poziom w dBm i S, przy rozmowie DMR znak, TG i reszta aliasu, przy nadawaniu duży licznik czasu.
+* **Wiersze EMCOM:** liczba stacji APRS, nieprzeczytane wiadomości (`MSG 1` na niebiesko), lokator, pozycja (GPS albo stała lokalizacja z ustawień), ostatnio słyszana stacja (DMR albo ostatnia stacja APRS z odległością).
+* **Stopka:** czas UTC i data, blokada klawiatury/PTT, skanowanie, SOS.
+
+W nocy (przełączanie dzień/noc albo auto-noc) ekran jest tylko czerwony, żeby nie psuć widzenia nocnego. W trybach specjalnych VFO (sweep, dual watch, wpisywanie częstotliwości) i w podglądzie szczegółów kanału zostaje stary ekran.
+
+### SOS: `SK1 + 9` dwa razy
+
+Dwa naciśnięcia `SK1 + 9` w ciągu 3 s (albo akcja quickkey *SOS*) włączają alarm: migający pasek `EMERGENCY SOS` i beacony APRS z pozycją, symbolem alarmu i tekstem `EMERGENCY SOS` (3 razy co minutę, potem co 2 minuty). Nadawanie idzie przez konfigurację APRS kanału (na jej częstotliwość QSY, jeśli jest ustawiona); bez niej radio pokaże `SOS: no APRS config`. Wyłączenie: znowu dwa razy `SK1 + 9`.
+
+### Zrzuty ekranu
+
+Z radiem włączonym i podłączonym przez USB: `python3 MDUV380_firmware/tools/opengd77_screenshot.py -o ekran.png` (wymaga `pip install pyserial`).
+
+---
+
 ## 1. Szybkie klawisze (Quickkeys)
 
 ### Przypisanie akcji do klawisza

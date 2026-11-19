@@ -1,37 +1,69 @@
-# opengd77-rt3s-experiments — SP7TQ fork
+# RT3S EMCOM firmware — OpenGD77, SP7TQ fork
 
-**Independent fork** of the [OpenGD77](https://www.opengd77.com/) firmware
-for the **Retevis RT3S** (GPS) and the rest of the MDUV380 / DM1701 family
-(TYT MD-UV380, Baofeng DM-1701, Retevis RT-84, MD-380UV).
+[![Release](https://img.shields.io/github/v/release/sptq/opengd77-rt3s-experiments?include_prereleases&label=release)](https://github.com/sptq/opengd77-rt3s-experiments/releases)
+![Radio](https://img.shields.io/badge/radio-Retevis%20RT3S%20%2F%20MD--UV380-2b6b3f)
+![License](https://img.shields.io/badge/license-non--commercial-b2441f)
 
-Maintainer: **Marcin SP7TQ** — <https://github.com/sptq/opengd77-rt3s-experiments>
+**Open firmware that turns an inexpensive Retevis RT3S into a field radio for
+emergency communications (EMCOM):** a main screen modelled on professional
+and military radios, APRS receive, messaging and SOS beacons, SSTV, DTMF and
+CW decoders, fox and radiosonde hunting, GPS navigation. FM and DMR, built
+on [OpenGD77](https://www.opengd77.com/).
 
-This repository started as a fork of
+![RT3S EMCOM screens: standby, receive, transmit, night mode](docs/screens/hero.png)
+
+## Highlights
+
+| | |
+|---|---|
+| ![Standby](docs/screens/emcom_standby.png) | **EMCOM main screen.** Channel number first, fixed positions, state by colour *and* word (RX green, TX red, SCAN amber, SOS flashing), UTC clock, locator and GPS position, APRS stations and unread messages always in view. Red-only night mode. |
+| ![DMR call](docs/screens/emcom_dmr.png) | **DMR and FM.** Caller callsign, talker alias, talkgroup; live RX level in dBm and S units on FM; TX timer with the TOT. |
+| ![SOS](docs/screens/emcom_sos.png) | **SOS.** `SK1+9` twice: APRS position beacons with the emergency symbol, every minute then every two minutes, flashing banner. Same again to stop. |
+| ![SSTV](docs/screens/sstv_pd120.png) | **SSTV receive** (Robot, Martin, Scottie, PD — the ISS uses PD 120), picture drawn line by line. |
+
+And more, all decoded by the radio itself from the FM audio:
+
+* **APRS RX** — AFSK 1200 decoder, frames, raw TNC2/hex, stations with distance and
+  bearing, radar, background RX; **APRS messages** with automatic ACK and replies.
+* **DTMF and CW decoders** (CW: repeater IDs, speed and tone shown).
+* **Band scope / waterfall**, fox hunting with GPS max-hold, radiosonde hunting
+  (401–405 MHz presets, keypad waypoint), GPS waypoint page and trip computer.
+* **GPS track log to GPX**, **screenshots** over USB, quickkeys, Polish translation
+  and a Polish how-to ([`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md)).
+
+Screen pictures above are rendered from the firmware layout and fonts
+(`docs/screens/render_screens.py`, example data); `tools/opengd77_screenshot.py`
+takes real ones from a radio.
+
+## Quick start
+
+1. Download `OpenGD77_MDUV380_RT3S.bin` (or the 10 W / RT-84 variant) and
+   `OpenGD77_Languages.zip` from the
+   [latest release](https://github.com/sptq/opengd77-rt3s-experiments/releases).
+2. Back up your codeplug. Put the radio in firmware-update mode: switched
+   off, hold **PTT + the top side button** and switch it on.
+3. Flash with the OpenGD77 loader. DMR needs the original Retevis / TYT
+   firmware as the "donor" of the AMBE codec, as with any OpenGD77:
+   ```sh
+   python3 MDUV380_firmware/tools/opengd77_stm32_firmware_loader.py \
+       -m MD-UV380 -f OpenGD77_MDUV380_RT3S.bin -L Polish.gla
+   ```
+4. Read the [fork features](#fork-features-rt3s--mduv380) below, or the Polish
+   [how-to](PLANS/rt3s_instrukcja_pl.md).
+
+**Experimental firmware — flash at your own risk.** Testers welcome: open an
+issue with what works and what doesn't.
+
+## About this fork
+
+Maintainer: **Marcin SP7TQ**. This repository started as a fork of
 [mangelajo/opengd77-rt3s-experiments](https://github.com/mangelajo/opengd77-rt3s-experiments)
 by EA4IPW (OpenGD77 R20260131 source mirror, command-line build, VFO band
 scope / waterfall, release tooling). From R20260131-EA4IPW.3 on it is
-**developed independently**: new features are added here first, and they are
-not guaranteed to be merged back into that repository or into upstream
-OpenGD77. It is **not affiliated with the OpenGD77 project**.
-
-What this fork adds on the radio (details in
-[Fork features](#fork-features-rt3s--mduv380), history in
-[`CHANGELOG.md`](CHANGELOG.md)):
-
-* **APRS receive** — on-radio AFSK 1200 decoder: frame list, raw TNC2/hex
-  view, station list with distance and bearing, radar, background RX with
-  notifications.
-* **Band scope / waterfall** in VFO mode, peak hold, tune to peak, band presets.
-* **Fox hunting** on the RSSI screen (pitch beep, max-hold with GPS position).
-* **Radiosonde hunting** helpers (401–405 MHz presets, keypad waypoint).
-* **GPS** waypoint navigation page and trip computer.
-* **Quickkeys** menu and new quickkey actions.
-* Polish translation and a Polish how-to
-  ([`PLANS/rt3s_instrukcja_pl.md`](PLANS/rt3s_instrukcja_pl.md)).
-
-Testers are welcome: download a release, try it and open an issue.
-**Experimental firmware — flash at your own risk** and back up your codeplug
-first.
+**developed independently**: new features land here first and are not
+guaranteed to be merged back into that repository or into upstream
+OpenGD77. It is **not affiliated with the OpenGD77 project**. History:
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## What's here
 
@@ -161,6 +193,37 @@ delete the corresponding Release in the GitHub UI.
 
 The RT3S has PTT, SK1, SK2, the channel knob and the keypad. There is no
 top/orange button. Firmware "ORANGE" events are emulated with **SK1 + GREEN**.
+
+### EMCOM main screen — *default; Options → Display → Screen: EMCOM / Classic*
+
+The channel and VFO screens use a layout modelled on professional and
+military radios (`uiEmcom.c`). Everything has a fixed place and is left
+aligned:
+
+| Area | Content |
+|---|---|
+| Status bar | state field (mode when idle, `RX` green, `TX` red with the whole bar, `SCAN` amber), power, CTCSS/DCS or time slot, APRS beacon, GPS fix, volume, battery |
+| S-meter | 32 segments, S9 and above in amber; mic level while transmitting |
+| Channel | zone and `CH n/m`, channel number (16x32), name, frequency (`TX`, `REV`, `TA` marks); VFO: the frequency in 16x32 |
+| Panel | FM: offset, RX/TX tone, squelch, bandwidth, TOT; DMR: TG/PC, CC, TS, contact. Receiving FM: level in dBm and S units. DMR call: callsign, TG, rest of the alias. Transmitting: timer in 16x32 |
+| EMCOM rows | APRS stations heard, unread APRS messages, Maidenhead locator, position (GPS, else the fixed location), last heard (DMR station, or the last APRS station with distance) |
+| Footer | UTC time and date, key / PTT lock, scan, SOS |
+
+By day the screen is dark; at night (the existing day/night switch and
+auto-night) it uses a red-only palette that keeps night vision. VFO sweep,
+dual watch, frequency entry and the channel details view keep the classic
+screen.
+
+**SOS:** `SK1+9` twice within 3 s (or the *SOS* quickkey action) starts APRS
+position beacons with the emergency symbol and `EMERGENCY SOS` (3 at one
+minute, then every two minutes) through the channel APRS configuration
+(its QSY frequency when set), and a flashing banner; the same again stops it.
+
+### Screenshots over USB
+
+`MDUV380_firmware/tools/opengd77_screenshot.py -o screen.png` saves the radio
+screen as a PNG (radio on, USB connected; `--count` / `--interval` for a
+series, `--bgr` if red and blue are swapped).
 
 ### Quickkeys menu — *Options → Quickkeys*
 
