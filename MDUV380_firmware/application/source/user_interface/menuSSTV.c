@@ -25,6 +25,8 @@
 #if defined(HAS_SSTV_MENU) && defined(I2S_APRS_RX)
 
 #define SSTV_Y0          (DISPLAY_SIZE_Y - SSTV_RX_ROWS) // picture under a one line status bar
+// Screens of only 120 lines (DM-1701): the status line covers the top of the picture
+#define SSTV_STATUS_H    ((SSTV_Y0 >= FONT_SIZE_1_HEIGHT) ? SSTV_Y0 : FONT_SIZE_1_HEIGHT)
 #define SSTV_REDRAW_MS   250U
 #define SSTV_CHARS       26
 
@@ -102,8 +104,8 @@ static void updateScreen(void)
 		}
 	}
 
-	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_Y0, true);
-	displayPrintAt(0, ((SSTV_Y0 - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
+	displayFillRect(0, 0, DISPLAY_SIZE_X, SSTV_STATUS_H, true);
+	displayPrintAt(0, ((SSTV_STATUS_H - FONT_SIZE_1_HEIGHT) / 2), line, FONT_SIZE_1);
 	displayRender();
 }
 
