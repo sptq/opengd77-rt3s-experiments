@@ -336,6 +336,8 @@ const stringsTable_t germanLanguage =
 .position				= "Position", // MaxLen: 16 - Main menu entry: MGRS / UTM position
 .coverage				= "Coverage", // MaxLen: 16 - Main menu entry: coverage survey
 .radio_check			= "Radio check", // MaxLen: 16 - Main menu entry: signal report
+.aprs_comment			= "Comment", // MaxLen: 16 (with ':' + text) - APRS options: beacon comment
+.aprs_replies			= "Replies", // MaxLen: 16 (with ':' + 2 digits) - APRS options: canned message texts
 };
 /********************************************************************
  *

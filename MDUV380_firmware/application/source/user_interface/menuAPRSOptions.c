@@ -40,6 +40,10 @@
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiTextEdit.h"
+#include "functions/aprsText.h"
+#include "functions/fieldData.h"
+#include "functions/sound.h"
 
 extern uint16_t initialIntervalsInSecs[];
 
@@ -138,8 +142,242 @@ enum
 	OPTIONS_MENU_APRS_TURN_ANGLE,
 	OPTIONS_MENU_APRS_TURN_SLOPE,
 	OPTIONS_MENU_APRS_TURN_TIME,
+#if defined(HAS_FIELD_TOOLS)
+	OPTIONS_MENU_APRS_COMMENT,  // Fork: beacon comment, written to the codeplug
+	OPTIONS_MENU_APRS_REPLIES,  // Fork: canned message texts, in the SPI flash
+#endif
 	NUM_APRS_MENU_ITEMS
 };
+
+#if defined(HAS_FIELD_TOOLS)
+// Fork: editing the APRS texts on the radio. The state lives in the field tools CCM
+// scratch (RAM is full): this menu and the field tool screens are never open together.
+typedef enum
+{
+	TEXT_MODE_NONE = 0,
+	TEXT_MODE_COMMENT,      // editing the beacon comment
+	TEXT_MODE_REPLY_LIST,   // list of the canned replies
+	TEXT_MODE_REPLY_EDIT    // editing one of them
+} textMode_t;
+
+typedef struct
+{
+	char    text[APRS_TEXT_MSG_MAX + 1];
+	uint8_t mode;   // textMode_t
+	uint8_t slot;   // selected canned reply
+} aprsTextEditState_t;
+
+_Static_assert(sizeof(aprsTextEditState_t) <= FIELD_SCRATCH_SIZE, "APRS text edit state too big");
+static inline aprsTextEditState_t *textEditState(void)
+{
+	return (aprsTextEditState_t *)(void *)fieldToolsScratch;
+}
+#define textEdit (*textEditState())
+
+#define REPLY_ROW_H     10
+#define REPLY_LIST_Y    (MENU_HEADER_HEIGHT + 2)
+#define REPLY_FOOTER_H  10
+
+static void textModeDraw(void)
+{
+	if (textEdit.mode == TEXT_MODE_COMMENT)
+	{
+		uiTextEditDraw(currentLanguage->aprs_comment, NULL);
+		return;
+	}
+	else if (textEdit.mode == TEXT_MODE_REPLY_EDIT)
+	{
+		char label[SCREEN_LINE_BUFFER_SIZE];
+
+		snprintf(label, sizeof(label), "#%u", (unsigned)(textEdit.slot + 1));
+		uiTextEditDraw(currentLanguage->aprs_replies, label);
+		return;
+	}
+
+	// Reply list: number chip (green: edited, grey: default), text
+	char text[APRS_TEXT_MSG_MAX + 1];
+	char num[4];
+	int rows = ((DISPLAY_SIZE_Y - REPLY_LIST_Y - REPLY_FOOTER_H) / REPLY_ROW_H);
+	int first = ((textEdit.slot >= rows) ? (textEdit.slot - rows + 1) : 0);
+
+	displayClearBuf();
+	menuDisplayTitle(currentLanguage->aprs_replies);
+
+	for (int r = 0; r < rows; r++)
+	{
+		int i = (first + r);
+		int16_t y = (int16_t)(REPLY_LIST_Y + (r * REPLY_ROW_H));
+		bool edited;
+
+		if (i >= APRS_REPLY_SLOTS)
+		{
+			break;
+		}
+
+		edited = fieldAprsReplyGet(i, text);
+		text[(DISPLAY_SIZE_X - 22) / 6] = 0; // what fits
+
+		if (i == textEdit.slot)
+		{
+			displayThemeApply(THEME_ITEM_BG_MENU_ITEM_SELECTED, THEME_ITEM_BG);
+			displayFillRect(0, (y - 1), DISPLAY_SIZE_X, REPLY_ROW_H, false);
+		}
+
+		snprintf(num, sizeof(num), "%d", (i + 1));
+		displayThemeApply((edited ? THEME_ITEM_FG_RSSI_BAR : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
+		displayFillRect(2, y, 15, (FONT_SIZE_1_HEIGHT), false);
+		displayPrintCore((int16_t)(2 + ((15 - (strlen(num) * 6)) / 2)), y, num, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+
+		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
+		displayPrintCore(20, y, text, ((i == textEdit.slot) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, false);
+	}
+
+	int16_t fy = (DISPLAY_SIZE_Y - REPLY_FOOTER_H);
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, fy, DISPLAY_SIZE_X, REPLY_FOOTER_H, false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(3, (fy + 1), "GRN EDIT 0 DFLT RED BACK", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+	displayThemeResetToDefault();
+	displayRender();
+}
+
+static void textModeStartReplyEdit(void)
+{
+	fieldAprsReplyGet(textEdit.slot, textEdit.text);
+	textEdit.mode = TEXT_MODE_REPLY_EDIT;
+	uiTextEditStart(textEdit.text, APRS_TEXT_MSG_MAX, false);
+}
+
+// Opens the editor / list for the selected menu item. Returns false when it is not a text item.
+static bool textModeOpen(void)
+{
+	switch (menuDataGlobal.currentItemIndex)
+	{
+		case OPTIONS_MENU_APRS_COMMENT:
+			if (aprsChannelCommentGet(textEdit.text, (APRS_COMMENT_MAX_LEN + 1)) == false)
+			{
+				soundSetMelody(MELODY_ERROR_BEEP); // no APRS configuration on this channel
+				return true;
+			}
+			textEdit.mode = TEXT_MODE_COMMENT;
+			uiTextEditStart(textEdit.text, APRS_COMMENT_MAX_LEN, false);
+			break;
+
+		case OPTIONS_MENU_APRS_REPLIES:
+			textEdit.mode = TEXT_MODE_REPLY_LIST;
+			textEdit.slot = 0;
+			break;
+
+		default:
+			return false;
+	}
+
+	textModeDraw();
+	return true;
+}
+
+static void textModeHandleEvent(uiEvent_t *ev)
+{
+	if ((ev->events & FUNCTION_EVENT) && (ev->function == FUNC_REDRAW))
+	{
+		textModeDraw();
+		return;
+	}
+
+	if (textEdit.mode == TEXT_MODE_REPLY_LIST)
+	{
+		if ((ev->events & KEY_EVENT) == 0)
+		{
+			return;
+		}
+
+		if (KEYCHECK_PRESS(ev->keys, KEY_DOWN))
+		{
+			textEdit.slot = ((textEdit.slot + 1) % APRS_REPLY_SLOTS);
+		}
+		else if (KEYCHECK_PRESS(ev->keys, KEY_UP))
+		{
+			textEdit.slot = ((textEdit.slot + APRS_REPLY_SLOTS - 1) % APRS_REPLY_SLOTS);
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN) || KEYCHECK_PRESS(ev->keys, KEY_RIGHT)) // PRESS: the RIGHT release that opened the list is ignored
+		{
+			textModeStartReplyEdit();
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_0))
+		{
+			fieldAprsReplySet(textEdit.slot, NULL);
+			soundSetMelody(MELODY_ACK_BEEP);
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED) || KEYCHECK_PRESS(ev->keys, KEY_LEFT))
+		{
+			textEdit.mode = TEXT_MODE_NONE;
+			updateScreen(false);
+			return;
+		}
+		else
+		{
+			return;
+		}
+		textModeDraw();
+		return;
+	}
+
+	switch (uiTextEditHandleEvent(ev))
+	{
+		case TEXT_EDIT_CHANGED:
+			textModeDraw();
+			break;
+
+		case TEXT_EDIT_DONE:
+			{
+				bool ok;
+
+				if (textEdit.mode == TEXT_MODE_COMMENT)
+				{
+					ok = (((textEdit.text[0] == 0) || aprsTextIsValid(textEdit.text, APRS_COMMENT_MAX_LEN)) &&
+							aprsChannelCommentSet(textEdit.text));
+				}
+				else
+				{
+					// empty: back to the default text
+					ok = ((textEdit.text[0] == 0) || aprsTextIsValid(textEdit.text, APRS_TEXT_MSG_MAX));
+					if (ok)
+					{
+						fieldAprsReplySet(textEdit.slot, textEdit.text);
+					}
+				}
+
+				if (ok == false)
+				{
+					soundSetMelody(MELODY_ERROR_BEEP);
+					uiTextEditStart(textEdit.text, ((textEdit.mode == TEXT_MODE_COMMENT) ? APRS_COMMENT_MAX_LEN : APRS_TEXT_MSG_MAX), false);
+					textModeDraw();
+					break;
+				}
+
+				soundSetMelody(MELODY_ACK_BEEP);
+			}
+			// no break
+			/* FALLTHRU */
+		case TEXT_EDIT_CANCEL:
+			if (textEdit.mode == TEXT_MODE_REPLY_EDIT)
+			{
+				textEdit.mode = TEXT_MODE_REPLY_LIST;
+				textModeDraw();
+			}
+			else
+			{
+				textEdit.mode = TEXT_MODE_NONE;
+				updateScreen(false);
+			}
+			break;
+
+		default:
+			break;
+	}
+}
+#endif
 
 static uint8_t getIncValue(uiEvent_t *ev, uint8_t value, uint8_t mStep, uint8_t max)
 {
@@ -163,6 +401,9 @@ menuStatus_t menuAPRSOptions(uiEvent_t *ev, bool isFirstRun)
 		menuDataGlobal.menuOptionsTimeout = 0;
 		menuDataGlobal.newOptionSelected = true;
 		menuDataGlobal.numItems = NUM_APRS_MENU_ITEMS;
+#if defined(HAS_FIELD_TOOLS)
+		textEdit.mode = TEXT_MODE_NONE;
+#endif
 
 		if (*((uint32_t *)&aprsSettingsCopy.smart.slowRate) == 0xDEADBEEF)
 		{
@@ -202,6 +443,14 @@ static void updateScreen(bool isFirstRun)
 	char rightSideVar[SCREEN_LINE_BUFFER_SIZE];
 	voicePrompt_t rightSideUnitsPrompt;
 	const char *rightSideUnitsStr;
+
+#if defined(HAS_FIELD_TOOLS)
+	if (textEdit.mode != TEXT_MODE_NONE)
+	{
+		textModeDraw();
+		return;
+	}
+#endif
 
 	displayClearBuf();
 	bool settingOption = uiQuickKeysShowChoices(buf, SCREEN_LINE_BUFFER_SIZE, currentLanguage->aprs_options);
@@ -353,6 +602,21 @@ static void updateScreen(bool isFirstRun)
 					rightSideUnitsPrompt = PROMPT_SECONDS;
 					rightSideUnitsStr = "s";
 					break;
+
+#if defined(HAS_FIELD_TOOLS)
+				case OPTIONS_MENU_APRS_COMMENT:
+					leftSide = currentLanguage->aprs_comment;
+					if (aprsChannelCommentGet(rightSideVar, SCREEN_LINE_BUFFER_SIZE) == false)
+					{
+						rightSideConst = currentLanguage->n_a; // no APRS configuration on this channel
+					}
+					break;
+
+				case OPTIONS_MENU_APRS_REPLIES:
+					leftSide = currentLanguage->aprs_replies;
+					snprintf(rightSideVar, SCREEN_LINE_BUFFER_SIZE, "%d", APRS_REPLY_SLOTS);
+					break;
+#endif
 			}
 
 			snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "%s:%s", leftSide, (rightSideVar[0] ? rightSideVar : (rightSideConst ? rightSideConst : "")));
@@ -455,6 +719,14 @@ static void handleEvent(uiEvent_t *ev)
 {
 	bool isDirty = false;
 
+#if defined(HAS_FIELD_TOOLS)
+	if (textEdit.mode != TEXT_MODE_NONE)
+	{
+		textModeHandleEvent(ev);
+		return;
+	}
+#endif
+
 	if (ev->events & BUTTON_EVENT)
 	{
 		if (repeatVoicePromptOnSK1(ev))
@@ -514,6 +786,12 @@ static void handleEvent(uiEvent_t *ev)
 		}
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
 		{
+#if defined(HAS_FIELD_TOOLS)
+			if (textModeOpen()) // GREEN on a text item: edit it
+			{
+				return;
+			}
+#endif
 			applySettings();
 			menuSystemPopAllAndDisplayRootMenu();
 			return;
@@ -626,6 +904,16 @@ static void handleEvent(uiEvent_t *ev)
 				case OPTIONS_MENU_APRS_TURN_TIME:
 					aprsSettingsCopy.smart.turnTime = getIncValue(ev, aprsSettingsCopy.smart.turnTime, 10, APRS_SMART_BEACON_TURN_TIME_MAX);
 					break;
+
+#if defined(HAS_FIELD_TOOLS)
+				case OPTIONS_MENU_APRS_COMMENT:
+				case OPTIONS_MENU_APRS_REPLIES:
+					if ((menuDataGlobal.menuOptionsTimeout == 0) && KEYCHECK_PRESS(ev->keys, KEY_RIGHT) && textModeOpen())
+					{
+						return;
+					}
+					break;
+#endif
 			}
 		}
 		else if (KEYCHECK_PRESS(ev->keys, KEY_LEFT)

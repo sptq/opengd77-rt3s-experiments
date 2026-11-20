@@ -344,6 +344,8 @@ typedef struct
    const char position[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the MGRS / UTM position screen
    const char coverage[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the coverage survey
    const char radio_check[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the radio check (signal report)
+   const char aprs_comment[LANGUAGE_TEXTS_LENGTH];// Fork: APRS options entry: beacon comment edited on the radio
+   const char aprs_replies[LANGUAGE_TEXTS_LENGTH];// Fork: APRS options entry: canned message texts
 } stringsTable_t;
 
 #endif // _OPENGD77_UILANGUAGE_H_
