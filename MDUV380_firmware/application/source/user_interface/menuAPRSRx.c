@@ -18,6 +18,9 @@
 #include "functions/aprsRx.h"
 #include "functions/toneRxDecoders.h"
 #include "functions/ticks.h"
+#include "functions/aprsText.h"
+#include "functions/fieldData.h"
+#include "user_interface/uiTextEdit.h"
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
 #endif
@@ -28,7 +31,8 @@
 // '*' raw: full TNC2 text + hex dump), stations (distance / bearing / age),
 // radar (north up, own position in the centre), APRS messages, DTMF and CW
 // decoders (SSTV has its own menu entry, menuSSTV.c). '0' clears the current view. GREEN on a message / station:
-// reply / new message (canned texts); '*' on a station: GPS waypoint.
+// reply / new message (canned texts, editable in Options > APRS, or a text typed on the keypad);
+// '1': new message to a callsign typed on the keypad; '*' on a station: GPS waypoint.
 #define APRS_MON_REDRAW_MS      1000U
 #define APRS_MON_CHARS          26     // 160 px / 6 px font
 #define APRS_MON_STATUS_Y       (MENU_HEADER_HEIGHT + 2)
@@ -50,10 +54,17 @@ typedef enum
 #if defined(HAS_GPS) && (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701))
 #define APRS_MON_WAYPOINT
 #endif
-static const char *aprsMonReplies[] = { "QSL", "OK", "73", "Roger", "Thanks!", "Yes", "No", "Call me", "QRV?", "QRX 5 min", "On my way", "QRT" };
-#define APRS_MON_NUM_REPLIES    (sizeof(aprsMonReplies) / sizeof(aprsMonReplies[0]))
+#define APRS_MON_NUM_REPLIES    (APRS_REPLY_SLOTS + 1) // row 0: type a text, then the canned replies (fieldData.c)
+#define APRS_MON_SAVED_TO       (&aprsMonText[200])    // recipient before editing it (aprsMonText is free then)
+typedef enum
+{
+	APRS_MON_EDIT_NONE = 0,
+	APRS_MON_EDIT_TO,     // recipient, in aprsMonReplyTo
+	APRS_MON_EDIT_TEXT    // free text, in aprsMonText
+} aprsMonEdit_t;
 static uint32_t aprsMonMsgSelected = 0;
 static bool aprsMonReplyActive = false;
+static uint8_t aprsMonEditStage = APRS_MON_EDIT_NONE;
 static uint32_t aprsMonReplyIndex = 0;
 static char aprsMonReplyTo[APRS_RX_CALL_LEN];
 static uint32_t aprsMonToneSerial = 0;
@@ -84,6 +95,8 @@ static void aprsMonSetEnabled(bool enable)
 	aprsMonLastGen = aprsRxGetGeneration();
 	aprsMonMsgSelected = 0;
 	aprsMonReplyActive = false;
+	aprsMonEditStage = APRS_MON_EDIT_NONE;
+	uiTextEditStop();
 	aprsRxSetMonitor(enable);
 }
 
@@ -203,7 +216,7 @@ static void aprsMonDrawHint(const char *line1, const char *line2)
 	displayPrintCentered((APRS_MON_LIST_Y + 44), line2, FONT_SIZE_1);
 	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 	displayDrawFastHLine(20, (APRS_MON_LIST_Y + 60), (DISPLAY_SIZE_X - 40), true);
-	displayPrintCentered((APRS_MON_LIST_Y + 66), "# VIEW  0 CLEAR  9 EXIT", FONT_SIZE_1);
+	displayPrintCentered((APRS_MON_LIST_Y + 66), "# VIEW 1 MSG 0 CLR 9 EXIT", FONT_SIZE_1);
 	displayThemeResetToDefault();
 }
 
@@ -724,14 +737,15 @@ static void aprsMonDrawMessages(void)
 	}
 }
 
-// Reply / new message: canned texts
+// Reply / new message: a text typed on the keypad or a canned one
 static void aprsMonDrawReply(void)
 {
 	char line[APRS_MON_CHARS + 1];
+	char text[APRS_TEXT_MSG_MAX + 1];
 	uint32_t rows = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - APRS_MON_FOOTER_H - FONT_SIZE_1_HEIGHT - 2) / FONT_SIZE_1_HEIGHT);
 	uint32_t first = ((aprsMonReplyIndex >= rows) ? (aprsMonReplyIndex - rows + 1) : 0);
 
-	aprsMonKeyValue(4, APRS_MON_LIST_Y, "TO", aprsMonReplyTo, THEME_ITEM_FG_DEFAULT);
+	aprsMonKeyValue(4, APRS_MON_LIST_Y, "TO", (aprsMonReplyTo[0] ? aprsMonReplyTo : "? (* to type)"), THEME_ITEM_FG_DEFAULT);
 
 	for (uint32_t r = 0; r < rows; r++)
 	{
@@ -741,11 +755,96 @@ static void aprsMonDrawReply(void)
 		{
 			break;
 		}
-		snprintf(line, sizeof(line), "%s", aprsMonReplies[i]);
+
+		if (i == 0)
+		{
+			snprintf(line, sizeof(line), "%s", "> Type a message...");
+		}
+		else
+		{
+			fieldAprsReplyGet((int)(i - 1), text);
+			snprintf(line, sizeof(line), "%s", text);
+		}
 		aprsMonPrintRow((APRS_MON_LIST_Y + ((r + 1) * FONT_SIZE_1_HEIGHT) + 2), line, "", (i == aprsMonReplyIndex));
 	}
 
-	aprsMonFooter("GRN SEND  RED CANCEL", NULL, THEME_ITEM_FG_DEFAULT);
+	aprsMonFooter("GRN SEND  * TO  RED BACK", NULL, THEME_ITEM_FG_DEFAULT);
+}
+
+static void aprsMonEditStart(aprsMonEdit_t stage)
+{
+	aprsMonEditStage = stage;
+	if (stage == APRS_MON_EDIT_TO)
+	{
+		snprintf(APRS_MON_SAVED_TO, APRS_RX_CALL_LEN, "%s", aprsMonReplyTo);
+		uiTextEditStart(aprsMonReplyTo, APRS_TEXT_CALL_MAX, true);
+	}
+	else
+	{
+		aprsMonText[0] = 0;
+		uiTextEditStart(aprsMonText, APRS_TEXT_MSG_MAX, false);
+	}
+}
+
+static void aprsMonSend(const char *text)
+{
+	aprsRxSendMessage(aprsMonReplyTo, text);
+	aprsMonReplyActive = false;
+	aprsMonEditStage = APRS_MON_EDIT_NONE;
+	aprsMonView = APRS_MON_VIEW_MESSAGES;
+	aprsMonMsgSelected = 0;
+}
+
+// Recipient / text editor (modal, every key goes to it)
+static void aprsMonEditHandleEvent(uiEvent_t *ev)
+{
+	textEditResult_t res = uiTextEditHandleEvent(ev);
+
+	if (res == TEXT_EDIT_DONE)
+	{
+		if (aprsMonEditStage == APRS_MON_EDIT_TO)
+		{
+			if (aprsTextCallsignIsValid(aprsMonReplyTo))
+			{
+				aprsMonEditStage = APRS_MON_EDIT_NONE; // back to the texts
+			}
+			else
+			{
+				soundSetMelody(MELODY_ERROR_BEEP);
+				uiTextEditStart(aprsMonReplyTo, APRS_TEXT_CALL_MAX, true);
+			}
+		}
+		else
+		{
+			if (aprsTextIsValid(aprsMonText, APRS_TEXT_MSG_MAX))
+			{
+				aprsMonSend(aprsMonText);
+			}
+			else
+			{
+				soundSetMelody(MELODY_ERROR_BEEP);
+				uiTextEditStart(aprsMonText, APRS_TEXT_MSG_MAX, false);
+			}
+		}
+	}
+	else if (res == TEXT_EDIT_CANCEL)
+	{
+		if (aprsMonEditStage == APRS_MON_EDIT_TO)
+		{
+			snprintf(aprsMonReplyTo, sizeof(aprsMonReplyTo), "%s", APRS_MON_SAVED_TO);
+			if (aprsMonReplyTo[0] == 0)
+			{
+				aprsMonReplyActive = false; // new message given up
+			}
+		}
+		aprsMonEditStage = APRS_MON_EDIT_NONE;
+	}
+	else if (res == TEXT_EDIT_NONE)
+	{
+		return;
+	}
+
+	aprsMonDraw();
 }
 
 // --- DTMF / CW views -----------------------------------------------------------------
@@ -816,6 +915,20 @@ static void aprsMonDraw(void)
 	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages", "DTMF decoder", "CW decoder" };
 	char line[APRS_MON_CHARS + 1];
 	aprsRxStatus_t st;
+
+	if (aprsMonEditStage != APRS_MON_EDIT_NONE)
+	{
+		if (aprsMonEditStage == APRS_MON_EDIT_TO)
+		{
+			uiTextEditDraw("APRS message", "TO: callsign (-SSID)");
+		}
+		else
+		{
+			snprintf(line, sizeof(line), "TO %s", aprsMonReplyTo);
+			uiTextEditDraw("APRS message", line);
+		}
+		return;
+	}
 
 	aprsRxGetStatus(&st);
 
@@ -932,6 +1045,12 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 		return false;
 	}
 
+	if (aprsMonEditStage != APRS_MON_EDIT_NONE)
+	{
+		aprsMonEditHandleEvent(ev);
+		return true;
+	}
+
 	if (BUTTONCHECK_DOWN(ev, BUTTON_SK2))
 	{
 		return false; // SK2 + number: quickkeys
@@ -949,10 +1068,25 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 		}
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
 		{
-			aprsRxSendMessage(aprsMonReplyTo, aprsMonReplies[aprsMonReplyIndex]);
-			aprsMonReplyActive = false;
-			aprsMonView = APRS_MON_VIEW_MESSAGES;
-			aprsMonMsgSelected = 0;
+			if (aprsMonReplyTo[0] == 0)
+			{
+				aprsMonEditStart(APRS_MON_EDIT_TO);
+			}
+			else if (aprsMonReplyIndex == 0)
+			{
+				aprsMonEditStart(APRS_MON_EDIT_TEXT);
+			}
+			else
+			{
+				char text[APRS_TEXT_MSG_MAX + 1];
+
+				fieldAprsReplyGet((int)(aprsMonReplyIndex - 1), text);
+				aprsMonSend(text);
+			}
+		}
+		else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
+		{
+			aprsMonEditStart(APRS_MON_EDIT_TO);
 		}
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 		{
@@ -994,6 +1128,17 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 		snprintf(aprsMonReplyTo, sizeof(aprsMonReplyTo), "%s", to);
 		aprsMonReplyActive = true;
 		aprsMonReplyIndex = 0;
+		aprsMonDraw();
+		return true;
+	}
+
+	if (KEYCHECK_SHORTUP(ev->keys, KEY_1) && (aprsMonRawView == false))
+	{
+		// New message: recipient typed on the keypad, then a text
+		aprsMonReplyTo[0] = 0;
+		aprsMonReplyActive = true;
+		aprsMonReplyIndex = 0;
+		aprsMonEditStart(APRS_MON_EDIT_TO);
 		aprsMonDraw();
 		return true;
 	}
