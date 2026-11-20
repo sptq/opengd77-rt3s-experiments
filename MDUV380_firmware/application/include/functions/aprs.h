@@ -182,6 +182,9 @@ typedef enum
 	APRS_INFO_TX_NOT_ALLOWED    // TX inhibit, RX only, out of band, DMR without APRS QSY
 } aprsInfoTxResult_t;
 bool aprsGetOwnCallsign(char *buf, size_t size); // false when the channel has no APRS configuration
+#define APRS_COMMENT_MAX_LEN  23U // codeplug comment[24], NUL padded
+bool aprsChannelCommentGet(char *buf, size_t size); // false when the channel has no APRS configuration
+bool aprsChannelCommentSet(const char *text);       // written to the codeplug; false: no configuration / busy
 aprsInfoTxResult_t aprsSendInfoFrame(const char *info);
 bool aprsBeaconingForcedManualBeaconingTriggered(void);
 bool aprsBeaconingOnDifferentFrequency(void);

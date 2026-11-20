@@ -1760,6 +1760,66 @@ bool aprsGetOwnCallsign(char *buf, size_t size)
 	return ((call[0] != 0) && hasConfig);
 }
 
+// Fork: beacon comment of the APRS configuration used by the current channel / VFO,
+// edited on the radio (Options > APRS > Comment) and written back to the codeplug,
+// so the CPS reads the same text. The codeplug field holds 23 chars + NUL.
+bool aprsChannelCommentGet(char *buf, size_t size)
+{
+	CodeplugAPRSConfig_t cfg;
+	uint8_t index = currentChannelData->aprsConfigIndex;
+	size_t n = 0;
+
+	buf[0] = 0;
+	if ((index == 0) || (codeplugAPRSGetDataForIndex(index, &cfg) == false))
+	{
+		return false;
+	}
+
+	while ((n < APRS_COMMENT_MAX_LEN) && ((n + 1) < size) && (cfg.comment[n] != 0) && ((uint8_t)cfg.comment[n] != 0xFF))
+	{
+		buf[n] = cfg.comment[n];
+		n++;
+	}
+	buf[n] = 0;
+	return true;
+}
+
+bool aprsChannelCommentSet(const char *text)
+{
+	CodeplugAPRSConfig_t cfg;
+	uint8_t index = currentChannelData->aprsConfigIndex;
+	size_t n = strlen(text);
+
+	char current[APRS_COMMENT_MAX_LEN + 1];
+
+	if (aprsChannelCommentGet(current, sizeof(current)) == false)
+	{
+		return false; // no APRS configuration
+	}
+
+	if (strncmp(current, text, APRS_COMMENT_MAX_LEN) == 0)
+	{
+		return true; // unchanged: no codeplug write
+	}
+
+	if (aprsBeaconingIsTransmitting() || (codeplugAPRSGetDataForIndex(index, &cfg) == false))
+	{
+		return false;
+	}
+
+	memset(cfg.comment, 0, sizeof(cfg.comment));
+	memcpy(cfg.comment, text, ((n > APRS_COMMENT_MAX_LEN) ? APRS_COMMENT_MAX_LEN : n));
+
+	if (codeplugAPRSSetDataForIndex(index, &cfg) == false)
+	{
+		return false;
+	}
+
+	// The beacons and messages use this copy (the configuration of the current channel)
+	memcpy(&aprsBcnData.aprsConfig[APRS_CONFIG_CHANNEL], &cfg, sizeof(CodeplugAPRSConfig_t));
+	return true;
+}
+
 // Sends one UI frame with the given information field (e.g. ":SP5ABC   :hello{1"),
 // with the source, SSID and path of the channel APRS configuration, on the APRS
 // QSY frequency when one is configured. Blocks for the channel-busy wait, like

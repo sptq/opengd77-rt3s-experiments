@@ -35,7 +35,7 @@
 #else
 #define LANGUAGE_TAG_MAGIC_NUMBER { 'G', 'D', '7', '7' }, { 'L', 'A', 'N', 'G' } // Never change this tag.
 #endif
-#define LANGUAGE_TAG_VERSION      { 0x00, 0x00, 0x00, 0x07 } // Bump the version each time the language struct is changed
+#define LANGUAGE_TAG_VERSION      { 0x00, 0x00, 0x00, 0x08 } // Bump the version each time the language struct is changed
 
 typedef struct
 {
@@ -344,6 +344,8 @@ typedef struct
    const char position[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the MGRS / UTM position screen
    const char coverage[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the coverage survey
    const char radio_check[LANGUAGE_TEXTS_LENGTH];// Fork: main-menu label for the radio check (signal report)
+   const char aprs_comment[LANGUAGE_TEXTS_LENGTH];// Fork: APRS options entry: beacon comment edited on the radio
+   const char aprs_replies[LANGUAGE_TEXTS_LENGTH];// Fork: APRS options entry: canned message texts
 } stringsTable_t;
 
 #endif // _OPENGD77_UILANGUAGE_H_

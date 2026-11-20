@@ -201,7 +201,9 @@ Klawisz `#` przełącza widoki: **ramki → stacje → radar → wiadomości →
 
 * Wiadomość do Ciebie: powiadomienie `NADAWCA:treść` z dźwiękiem, radio samo odsyła ACK (ok. 2 s po odebraniu, gdy kanał jest wolny).
 * Twój znak to nazwa radia (callsign z ustawień) i SSID z konfiguracji APRS kanału/VFO. Bez konfiguracji APRS na kanale radio tylko odbiera, bez ACK (podpowiedź widać w pustym widoku wiadomości).
-* **Odpowiedź:** w widoku wiadomości wybierz wiadomość i naciśnij `GREEN`. **Nowa wiadomość:** to samo w widoku stacji lub radaru na wybranej stacji. Wybierz gotowy tekst (`QSL`, `OK`, `73`, `Roger`, `Thanks!`, `Yes`, `No`, `Call me`, `QRV?`, `QRX 5 min`, `On my way`, `QRT`) i `GREEN` wysyła, `RED` anuluje.
+* **Odpowiedź:** w widoku wiadomości wybierz wiadomość i naciśnij `GREEN`. **Nowa wiadomość:** to samo w widoku stacji lub radaru na wybranej stacji, albo **`1`** w dowolnym widoku: wpisujesz znak adresata z klawiatury (np. `SP5ABC-9`), `GREEN` zatwierdza.
+* Na liście (`APRS message`, u góry `TO znak`) pierwszy wiersz to **`> Type a message...`**: `GREEN` otwiera edytor, wpisujesz własny tekst (do 67 znaków) i `GREEN` wysyła. Niżej 12 gotowych tekstów (domyślnie `QSL`, `OK`, `73`, `Roger`, `Thanks!`, `Yes`, `No`, `Call me`, `QRV?`, `QRX 5 min`, `On my way`, `QRT`; można je zmienić w *Opcje → APRS → Odpowiedzi*): `GREEN` wysyła wybrany. `*` na liście zmienia adresata, `RED` wraca.
+* Wysłanie złej treści (pusty tekst, sam odstęp) albo złego znaku daje sygnał błędu i edytor zostaje otwarty.
 * Wysłana wiadomość jest powtarzana co 30 s, maksymalnie 3 razy, aż przyjdzie ACK. Nadawanie idzie na częstotliwość QSY z konfiguracji APRS, jeśli jest ustawiona, inaczej na bieżącym kanale (tylko FM).
 
 Pozycje są odczytywane z ramek zwykłych, skompresowanych, Mic-E (popularne w radiach mobilnych), obiektów i itemów. Twoja pozycja to fix GPS, a bez fixa lokalizacja z ustawień radia.
@@ -214,9 +216,32 @@ Klawisze w monitorze:
 | `▲` / `▼` | wybór ramki lub stacji (w widoku surowym: przewijanie) |
 | `*` | widok surowy wybranej ramki (w widoku ramek); w widoku stacji/radaru: ustaw stację jako waypoint GPS |
 | `GREEN` | odpowiedź na wiadomość / nowa wiadomość do wybranej stacji |
+| `1` | nowa wiadomość: znak adresata wpisany z klawiatury |
 | `0` | wyczyszczenie bieżącego widoku (ramki i stacje, wiadomości albo tekst DTMF/CW) |
 | `9` | wyjście z ekranu APRS RX |
 | `RED` / `GREEN` | wyjście z widoku surowego / wyboru odpowiedzi, potem z ekranu APRS RX |
+
+### Teksty APRS z radia: Opcje → APRS
+
+Na końcu listy *Opcje → APRS* są dwie pozycje, otwierane `GREEN` albo `►`:
+
+* **Komentarz** (`Komentarz:tekst`): komentarz wysyłany z każdym beaconem pozycji. To pole konfiguracji APRS przypisanej do bieżącego kanału/VFO w codeplugu (do 23 znaków); zapis z radia trafia do codeplugu, więc CPS po odczycie radia pokaże ten sam tekst. Zmiana dotyczy wszystkich kanałów z tą samą konfiguracją APRS. Pusty tekst = beacon bez komentarza. `N/A` oznacza kanał bez konfiguracji APRS (edycja niemożliwa, sygnał błędu).
+* **Odpowiedzi** (`Odpowiedzi:12`): 12 gotowych tekstów wiadomości dla ekranu APRS RX. `▲`/`▼` wybór, `GREEN` (albo `►`) edycja, `0` przywraca tekst domyślny, `RED` (albo `◄`) powrót. Numer na niebieskim polu = tekst zmieniony, na szarym = domyślny; w pasku tytułu pozycja (np. `3/12`). Zapisane w pamięci flash radia (przetrwają wyłączenie, nie są częścią codeplugu). Zapisanie pustego tekstu też przywraca domyślny.
+
+Komentarz i odpowiedzi zapisują się od razu po `GREEN` w edytorze — `RED` w *Opcje → APRS* tego nie cofa — a komentarz obowiązuje na wszystkich kanałach z tą samą konfiguracją APRS.
+
+**Edytor tekstu** (ten sam dla komentarza, odpowiedzi, nowej wiadomości i znaku adresata) używa wpisywania jak przy nazwie kontaktu: kolejne naciśnięcia klawisza cyfry przełączają znaki (`2` → `a b c 2 A B C`, `1` → `1 . ! , @ - : ? ( ) / [ ] # < > = * + $ % ' & _ ^ }`, `0` → `0` i spacja, `*` → `*`); wybrany znak jest podświetlony, przyjmuje się po chwili albo po naciśnięciu innego klawisza. Znaki `|`, `~` i `{` są pomijane (zarezerwowane w APRS). Wpisywanie wstawia znak w miejscu kursora.
+
+| Klawisz | Działanie w edytorze |
+|---|---|
+| `◄` / `►` | kursor w lewo / w prawo (przytrzymanie: początek / koniec) |
+| `▲` / `▼` | kursor o linię w górę / w dół |
+| `#` albo `SK2 + ◄` | usunięcie znaku przed kursorem |
+| `SK2 + ►` | wstawienie spacji |
+| `GREEN` | zatwierdzenie (zapis / wysłanie) |
+| `RED` | rezygnacja bez zmian |
+
+W pasku tytułu jest długość tekstu i limit (np. `12/67`, czerwone przy limicie). Znak adresata przyjmuje tylko `A–Z`, `0–9` i `-` (małe litery zamieniają się na wielkie), do 9 znaków, SSID po `-` najwyżej 2 znaki.
 
 ### Odbiór APRS w tle: `SK1 + 4`
 

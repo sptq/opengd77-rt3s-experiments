@@ -336,6 +336,8 @@ const stringsTable_t polishLanguage =
 .position				= "Pozycja", // MaxLen: 16 - Main menu entry: MGRS / UTM position
 .coverage				= "Zasi†g", // MaxLen: 16 - Main menu entry: coverage survey
 .radio_check			= "Radio check", // MaxLen: 16 - Main menu entry: signal report
+.aprs_comment			= "Komentarz", // MaxLen: 16 (with ':' + text) - APRS options: beacon comment
+.aprs_replies			= "Odpowiedzi", // MaxLen: 16 (with ':' + 2 digits) - APRS options: canned message texts
 };
 /********************************************************************
  *

@@ -1838,6 +1838,18 @@ bool codeplugAPRSGetDataForIndex(int index, CodeplugAPRSConfig_t *APRS_Buf)
 	return !((APRS_Buf->name[0] == 0xFF) || (APRS_Buf->magicVer != APRS_MAGIC_VERSION));
 }
 
+// Fork: write an APRS configuration back (same layout as read above), e.g. the beacon
+// comment edited on the radio. The CPS reads the same record.
+bool codeplugAPRSSetDataForIndex(int index, const CodeplugAPRSConfig_t *APRS_Buf)
+{
+	if ((index <= 0) || (index > codeplugAPRSCache.numOfConfigs))
+	{
+		return false;
+	}
+
+	return EEPROM_Write(CODEPLUG_ADDR_APRS_CONFIGS + ((index - 1) * CODEPLUG_APRS_CONFIG_DATA_STRUCT_SIZE), (uint8_t *)APRS_Buf, CODEPLUG_APRS_CONFIG_DATA_STRUCT_SIZE);
+}
+
 int codeplugAPRSGetIndexOfName(char *configName)
 {
 	uint8_t APRSConfigName[8];

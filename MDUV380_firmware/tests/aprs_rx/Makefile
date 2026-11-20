@@ -4,11 +4,12 @@ APP    := ../../application
 CFLAGS := -O2 -Wall -Wno-misleading-indentation -I$(APP)/include
 
 .PHONY: all clean
-all: test_decoder test_parse test_tones test_sstv
+all: test_decoder test_parse test_tones test_sstv test_text
 	./test_decoder
 	./test_parse
 	./test_tones
 	./test_sstv
+	./test_text
 
 test_decoder: test_decoder.c $(APP)/source/functions/aprsRxDecoder.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
@@ -22,5 +23,8 @@ test_tones: test_tones.c $(APP)/source/functions/toneRxDecoders.c
 test_sstv: test_sstv.c $(APP)/source/functions/sstvRx.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
+test_text: test_text.c $(APP)/source/functions/aprsText.c
+	$(CC) $(CFLAGS) -o $@ $^
+
 clean:
-	rm -f test_decoder test_parse test_tones test_sstv
+	rm -f test_decoder test_parse test_tones test_sstv test_text
