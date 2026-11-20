@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pl" data-lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP7TEAM EMCOM: firmware dla RT3S</title>
+<meta name="description" content="Otwarty firmware, który zmienia Retevis RT3S w radio polowe do łączności kryzysowej: ekran EMCOM, APRS, SOS, narzędzia terenowe. Wgrywanie z przeglądarki.">
+<meta name="theme-color" content="#1d211b">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="#" aria-label="SP7TEAM EMCOM">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4v24M10 10l6-6 6 6M8 14a11 11 0 0 1 16 0M5 10a15 15 0 0 1 22 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <span>SP7TEAM <b>EMCOM</b></span>
+  </a>
+  <nav>
+    <a href="#funkcje"><span data-l="pl">Funkcje</span><span data-l="en">Features</span></a>
+    <a href="#ekrany"><span data-l="pl">Ekrany</span><span data-l="en">Screens</span></a>
+    <a href="#wgraj" class="nav-flash"><span data-l="pl">Wgraj</span><span data-l="en">Flash</span></a>
+    <button class="lang" type="button" id="langToggle" aria-label="Language / język">EN</button>
+  </nav>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="hero-text">
+    <h1>
+      <span data-l="pl">Radio polowe z&nbsp;taniego RT3S</span>
+      <span data-l="en">A field radio made from a&nbsp;cheap RT3S</span>
+    </h1>
+    <p class="lead">
+      <span data-l="pl">Otwarty firmware do łączności kryzysowej (EMCOM) dla Retevis RT3S / TYT MD-UV380. Ekran wzorowany na radiach profesjonalnych i&nbsp;wojskowych, APRS, wiadomości i&nbsp;SOS, plan PACE, MGRS, pomiar zasięgu. FM i&nbsp;DMR, na bazie OpenGD77.</span>
+      <span data-l="en">Open firmware for emergency communications (EMCOM) on the Retevis RT3S / TYT MD-UV380. A main screen modelled on professional and military radios, APRS, messages and SOS, PACE plan, MGRS, coverage survey. FM and DMR, built on OpenGD77.</span>
+    </p>
+    <div class="actions">
+      <a class="btn primary" href="#wgraj"><span data-l="pl">Wgraj z przeglądarki</span><span data-l="en">Flash from the browser</span></a>
+      <a class="btn" href="#ekrany"><span data-l="pl">Zobacz ekrany</span><span data-l="en">See the screens</span></a>
+    </div>
+    <p class="release-line" id="releaseLine"></p>
+  </div>
+
+  <figure class="radio" aria-label="Ekran radia">
+    <div class="bezel">
+      <img class="lcd" id="heroScreen" src="img/emcom_standby.png" width="480" height="384" alt="">
+    </div>
+    <figcaption class="states" id="heroStates">
+      <button type="button" data-shot="emcom_standby" data-state="idle" aria-pressed="true"><span data-l="pl">Czuwanie</span><span data-l="en">Standby</span></button>
+      <button type="button" data-shot="emcom_rx" data-state="rx"><span data-l="pl">Odbiór</span><span data-l="en">Receive</span></button>
+      <button type="button" data-shot="emcom_tx" data-state="tx"><span data-l="pl">Nadawanie</span><span data-l="en">Transmit</span></button>
+      <button type="button" data-shot="emcom_scan" data-state="scan"><span data-l="pl">Skanowanie</span><span data-l="en">Scan</span></button>
+      <button type="button" data-shot="emcom_sos" data-state="tx">SOS</button>
+      <button type="button" data-shot="emcom_night" data-state="night"><span data-l="pl">Noc</span><span data-l="en">Night</span></button>
+    </figcaption>
+  </figure>
+</section>
+
+<section class="about" id="funkcje">
+  <div class="about-text">
+    <h2><span data-l="pl">Po co to jest</span><span data-l="en">What it is for</span></h2>
+    <p data-l="pl">Gdy sieć komórkowa nie działa, zostaje radio. Fabryczny firmware RT3S jest zrobiony do pogawędek na przemienniku. Ten jest zrobiony do pracy w&nbsp;terenie: stan radia widać z&nbsp;daleka po kolorze i&nbsp;słowie, numer kanału jest najważniejszy, zegar UTC, lokator i&nbsp;pozycja GPS są zawsze na ekranie, a&nbsp;narzędzia potrzebne w&nbsp;akcji są jednym klawiszem z&nbsp;menu.</p>
+    <p data-l="en">When the mobile network is down, the radio is what is left. The stock RT3S firmware is made for chatting on a repeater; this one is made for field work. The radio state can be read from a distance by colour and word, the channel number comes first, UTC, locator and GPS position are always on screen, and the tools needed on an operation are one key away in the menu.</p>
+    <p data-l="pl">Firmware rozwija Marcin SP7TQ dla grupy SP7TEAM, na bazie projektu OpenGD77 i&nbsp;forka EA4IPW. Jest eksperymentalny: każdą wersję testujemy w&nbsp;prawdziwym radiu, ale wgrywasz go na własne ryzyko.</p>
+    <p data-l="en">The firmware is developed by Marcin SP7TQ for the SP7TEAM group, based on the OpenGD77 project and the EA4IPW fork. It is experimental: every version is tested on a real radio, but you flash it at your own risk.</p>
+  </div>
+  <dl class="specs">
+    <div><dt><span data-l="pl">Radia</span><span data-l="en">Radios</span></dt><dd>Retevis RT3S, TYT MD-UV380, MD-UV380 10&nbsp;W; RT-84 / DM-1701 <span data-l="pl">(nietestowane)</span><span data-l="en">(untested)</span></dd></div>
+    <div><dt><span data-l="pl">Emisje</span><span data-l="en">Modes</span></dt><dd>FM, DMR (Tier&nbsp;I/II), APRS AFSK&nbsp;1200 RX</dd></div>
+    <div><dt><span data-l="pl">Dekodery</span><span data-l="en">Decoders</span></dt><dd>APRS, SSTV, DTMF, CW</dd></div>
+    <div><dt><span data-l="pl">Języki menu</span><span data-l="en">Menu languages</span></dt><dd><span data-l="pl">angielski + 18 do wyboru, w&nbsp;tym polski</span><span data-l="en">English + one of 18, Polish included</span></dd></div>
+    <div><dt><span data-l="pl">Licencja</span><span data-l="en">Licence</span></dt><dd><span data-l="pl">tylko do użytku niekomercyjnego</span><span data-l="en">non-commercial use only</span></dd></div>
+  </dl>
+</section>
+
+<section class="feature">
+  <img class="lcd" src="img/emcom_dmr.png" width="480" height="384" alt="">
+  <div>
+    <h2><span data-l="pl">Ekran główny EMCOM</span><span data-l="en">EMCOM main screen</span></h2>
+    <p data-l="pl">Pasek stanu z&nbsp;polem RX, TX, SCAN lub migającym SOS. Segmentowy S-metr, duży numer kanału z&nbsp;nazwą, panel z&nbsp;parametrami, poziomem odbioru w&nbsp;dBm, wywołującym DMR albo licznikiem nadawania. Niżej stacje APRS, nieprzeczytane wiadomości, lokator, pozycja i&nbsp;zegar UTC. W&nbsp;nocy cały ekran przechodzi na czerwień.</p>
+    <p data-l="en">A status bar with an RX, TX, SCAN or flashing SOS field. Segmented S-meter, a big channel number with its name, a panel with the parameters, the RX level in dBm, the DMR caller or the TX timer. Below: APRS stations, unread messages, locator, position and UTC. At night the whole screen turns red.</p>
+  </div>
+</section>
+
+<section class="tools">
+  <h2><span data-l="pl">Narzędzia terenowe</span><span data-l="en">Field tools</span></h2>
+  <p class="section-lead" data-l="pl">Osobne kafelki w&nbsp;menu głównym, dostępne też pod szybkim klawiszem.</p>
+  <p class="section-lead" data-l="en">Separate main-menu tiles, also available as quickkeys.</p>
+  <div class="tool-grid">
+    <article>
+      <img class="lcd" src="img/field_pace.png" width="480" height="384" alt="" loading="lazy">
+      <h3><span data-l="pl">Plan PACE</span><span data-l="en">PACE plan</span></h3>
+      <p data-l="pl">Cztery kanały planu łączności: podstawowy, alternatywny, awaryjny i&nbsp;ostateczny. Klawisz 1–4 przełącza radio od razu.</p>
+      <p data-l="en">Four channels of the communication plan: primary, alternate, contingency and emergency. Keys 1–4 switch the radio at once.</p>
+    </article>
+    <article>
+      <img class="lcd" src="img/field_position.png" width="480" height="384" alt="" loading="lazy">
+      <h3><span data-l="pl">Pozycja</span><span data-l="en">Position</span></h3>
+      <p data-l="pl">MGRS dużymi cyframi do podania przez radio, UTM, stopnie, lokator, wschód i&nbsp;zachód słońca, odległość i&nbsp;azymut do punktu.</p>
+      <p data-l="en">MGRS in big digits to read over the air, UTM, degrees, locator, sunrise and sunset, distance and bearing to a waypoint.</p>
+    </article>
+    <article>
+      <img class="lcd" src="img/field_coverage.png" width="480" height="384" alt="" loading="lazy">
+      <h3><span data-l="pl">Pomiar zasięgu</span><span data-l="en">Coverage survey</span></h3>
+      <p data-l="pl">Poziom sygnału przemiennika z&nbsp;pozycją GPS co 1–30&nbsp;s, do 3840 punktów. Na komputerze z&nbsp;tego powstaje kolorowa mapa KML.</p>
+      <p data-l="en">The repeater signal level with the GPS position every 1–30&nbsp;s, up to 3840 points. On the computer they become a colour-coded KML map.</p>
+    </article>
+    <article>
+      <img class="lcd" src="img/field_radio_check.png" width="480" height="384" alt="" loading="lazy">
+      <h3>Radio check</h3>
+      <p data-l="pl">Każda odebrana relacja jest mierzona i&nbsp;oceniana: „5 by 9”, gotowe do odczytania korespondentowi.</p>
+      <p data-l="en">Every received over is measured and rated: “5 by 9”, ready to read back to the other station.</p>
+    </article>
+  </div>
+</section>
+
+<section class="feature reverse">
+  <img class="lcd" src="img/aprs_radar.png" width="480" height="384" alt="" loading="lazy">
+  <div>
+    <h2><span data-l="pl">APRS, wiadomości i&nbsp;SOS</span><span data-l="en">APRS, messages and SOS</span></h2>
+    <p data-l="pl">Radio samo dekoduje APRS z&nbsp;dźwięku FM: ramki, stacje z&nbsp;odległością i&nbsp;azymutem, radar, odbiór w&nbsp;tle. Wiadomości do Ciebie są potwierdzane automatycznie, możesz odpowiedzieć gotowym tekstem. <kbd>SK1</kbd>+<kbd>9</kbd> dwa razy wysyła beacony z&nbsp;pozycją i&nbsp;symbolem alarmowym.</p>
+    <p data-l="en">The radio decodes APRS from the FM audio by itself: frames, stations with distance and bearing, a radar, background RX. Messages to you are acknowledged automatically, and you can reply with a canned text. <kbd>SK1</kbd>+<kbd>9</kbd> twice sends position beacons with the emergency symbol.</p>
+  </div>
+</section>
+
+<section class="feature">
+  <img class="lcd" src="img/eventlog.png" width="480" height="384" alt="" loading="lazy">
+  <div>
+    <h2><span data-l="pl">Dziennik zdarzeń</span><span data-l="en">Event log</span></h2>
+    <p data-l="pl">Każde nadawanie, odbiór FM, połączenie DMR, nowa stacja i&nbsp;wiadomość APRS, DTMF, SOS i&nbsp;obraz SSTV z&nbsp;czasem UTC. 2048 wpisów w&nbsp;pamięci flash, eksport do CSV po kablu.</p>
+    <p data-l="en">Every transmission, FM reception, DMR call, new APRS station and message, DTMF, SOS and SSTV picture with its UTC time. 2048 entries in flash, exported to CSV over the cable.</p>
+  </div>
+</section>
+
+<section class="gallery" id="ekrany">
+  <h2><span data-l="pl">Ekrany</span><span data-l="en">Screens</span></h2>
+  <p class="section-lead" data-l="pl">Obrazy wygenerowane z&nbsp;układu i&nbsp;czcionek firmware, z&nbsp;przykładowymi danymi.</p>
+  <p class="section-lead" data-l="en">Pictures rendered from the firmware layout and fonts, with example data.</p>
+  <div class="shots" id="shots"></div>
+</section>
+
+<section class="flash" id="wgraj">
+  <h2><span data-l="pl">Wgraj firmware</span><span data-l="en">Flash the firmware</span></h2>
+  <p class="section-lead" data-l="pl">Bez instalowania programów: strona sama przygotowuje plik i&nbsp;zapisuje go w&nbsp;radiu przez USB. Działa w&nbsp;Chrome, Edge i&nbsp;Brave na komputerze.</p>
+  <p class="section-lead" data-l="en">Nothing to install: the page prepares the file and writes it to the radio over USB. Works in desktop Chrome, Edge and Brave.</p>
+
+  <div class="notice" id="noUsb" hidden>
+    <p data-l="pl"><b>Ta przeglądarka nie obsługuje WebUSB.</b> Otwórz stronę w&nbsp;Chrome, Edge albo Brave na komputerze, przez https. Pliki możesz też pobrać niżej i&nbsp;wgrać skryptem.</p>
+    <p data-l="en"><b>This browser has no WebUSB.</b> Open the page in desktop Chrome, Edge or Brave, over https. You can also download the files below and flash them with the script.</p>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <h3><span data-l="pl">Przygotuj radio</span><span data-l="en">Prepare the radio</span></h3>
+      <ul>
+        <li data-l="pl">Zrób kopię codeplugu w&nbsp;CPS. Wgranie firmware jej nie kasuje, ale kopia nic nie kosztuje.</li>
+        <li data-l="en">Back up the codeplug with the CPS. Flashing does not erase it, but a backup costs nothing.</li>
+        <li data-l="pl">Naładuj akumulator. Przerwane wgrywanie da się powtórzyć, ale lepiej tego uniknąć.</li>
+        <li data-l="en">Charge the battery. An interrupted flash can be repeated, but better avoid it.</li>
+        <li data-l="pl">Wyłącz radio. Trzymając <b>PTT i&nbsp;boczny przycisk nad nim</b>, włącz je. Ekran zostaje pusty, dioda miga: radio jest w&nbsp;trybie aktualizacji. Podłącz kabel USB.</li>
+        <li data-l="en">Switch the radio off. Holding <b>PTT and the side button above it</b>, switch it on. The screen stays blank and the LED blinks: the radio is in update mode. Plug in the USB cable.</li>
+      </ul>
+    </li>
+    <li>
+      <h3><span data-l="pl">Wybierz wersję</span><span data-l="en">Choose the version</span></h3>
+      <div class="form">
+        <label for="model"><span data-l="pl">Radio</span><span data-l="en">Radio</span></label>
+        <select id="model"></select>
+
+        <label for="language"><span data-l="pl">Drugi język menu</span><span data-l="en">Second menu language</span></label>
+        <select id="language"></select>
+
+        <span class="label"><span data-l="pl">Kodek DMR</span><span data-l="en">DMR codec</span></span>
+        <div class="donor">
+          <p class="donor-state" id="donorState"></p>
+          <div class="row">
+            <label class="btn small file"><input type="file" id="donorFile" accept=".bin"><span data-l="pl">Wskaż plik dawcy…</span><span data-l="en">Choose donor file…</span></label>
+            <button class="btn small ghost" type="button" id="donorForget" hidden><span data-l="pl">Zapomnij</span><span data-l="en">Forget</span></button>
+          </div>
+          <details>
+            <summary><span data-l="pl">Co to jest plik dawcy?</span><span data-l="en">What is the donor file?</span></summary>
+            <p data-l="pl">Kodek głosu DMR (AMBE+2) jest objęty patentami i&nbsp;nie może być rozpowszechniany z&nbsp;OpenGD77. Strona wycina go z&nbsp;oryginalnego firmware <b>TYT MD-9600 w&nbsp;wersji 26.45</b> (plik <code>MD9600-CSV(2571V5)-V26.45.bin</code> z&nbsp;paczki producenta) i&nbsp;wkleja do firmware, tak samo jak oficjalny program OpenGD77. Plik zostaje tylko w&nbsp;tej przeglądarce, nigdzie nie jest wysyłany. Bez niego radio działa tylko na FM.</p>
+            <p data-l="en">The DMR voice codec (AMBE+2) is patented and cannot be distributed with OpenGD77. The page cuts it out of the original <b>TYT MD-9600 firmware version 26.45</b> (the file <code>MD9600-CSV(2571V5)-V26.45.bin</code> from the manufacturer's package) and pastes it into the firmware, exactly like the official OpenGD77 loader. The file stays in this browser and is never uploaded. Without it the radio works on FM only.</p>
+          </details>
+        </div>
+
+        <details class="advanced">
+          <summary><span data-l="pl">Własne pliki (testowe wersje)</span><span data-l="en">Own files (test builds)</span></summary>
+          <p data-l="pl">Zamiast wersji z&nbsp;wydania wgraj plik <code>.bin</code> z&nbsp;własnej kompilacji i&nbsp;pasującą paczkę <code>.gla</code>.</p>
+          <p data-l="en">Instead of the release, flash a <code>.bin</code> from your own build and a matching <code>.gla</code> pack.</p>
+          <div class="row">
+            <label class="btn small file"><input type="file" id="ownFirmware" accept=".bin"><span data-l="pl">Firmware .bin…</span><span data-l="en">Firmware .bin…</span></label>
+            <label class="btn small file"><input type="file" id="ownLanguage" accept=".gla"><span data-l="pl">Język .gla…</span><span data-l="en">Language .gla…</span></label>
+            <button class="btn small ghost" type="button" id="ownClear" hidden><span data-l="pl">Wróć do wydania</span><span data-l="en">Back to the release</span></button>
+          </div>
+          <p class="own-state" id="ownState"></p>
+        </details>
+      </div>
+    </li>
+    <li>
+      <h3><span data-l="pl">Wgraj</span><span data-l="en">Flash</span></h3>
+      <p class="summary" id="summary"></p>
+      <button class="btn primary big" type="button" id="flashButton"><span data-l="pl">Połącz z&nbsp;radiem i&nbsp;wgraj</span><span data-l="en">Connect to the radio and flash</span></button>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><div id="progressBar"></div></div>
+        <p id="progressText" aria-live="polite"></p>
+      </div>
+      <p class="result" id="result" role="status"></p>
+    </li>
+  </ol>
+
+  <details class="trouble">
+    <summary><span data-l="pl">Coś nie działa</span><span data-l="en">Something does not work</span></summary>
+    <dl>
+      <dt data-l="pl">Radia nie ma na liście urządzeń</dt><dt data-l="en">The radio is not in the device list</dt>
+      <dd data-l="pl">Radio musi być w&nbsp;trybie aktualizacji (PTT + górny przycisk przy włączaniu), a&nbsp;nie normalnie włączone. Sprawdź kabel: niektóre kable programujące mają tylko zasilanie.</dd>
+      <dd data-l="en">The radio has to be in update mode (PTT + top button while switching on), not switched on normally. Check the cable: some cables only carry power.</dd>
+      <dt data-l="pl">„Nie mogę przejąć radia”</dt><dt data-l="en">“Cannot claim the radio”</dt>
+      <dd data-l="pl">Radio jest zajęte przez inny program albo inną kartę: zamknij CPS, kartę z&nbsp;webowym CPS OpenGD77 i&nbsp;skrypt wgrywania, potem spróbuj ponownie.</dd>
+      <dd data-l="en">Another program or tab holds the radio: close the CPS, any tab with the OpenGD77 web CPS and the flashing script, then try again.</dd>
+      <dt>Windows</dt>
+      <dd data-l="pl">Przeglądarka potrzebuje sterownika WinUSB. Jeśli radio było wgrywane programem producenta, ma sterownik STM. Uruchom <a href="https://zadig.akeo.ie/">Zadig</a>, wybierz „Digital Radio in USB mode” i&nbsp;zainstaluj WinUSB. Na macOS i&nbsp;Linuksie nic nie trzeba (na Linuksie może być potrzebna reguła udev dla 0483:df11).</dd>
+      <dd data-l="en">The browser needs the WinUSB driver. If the radio was flashed with the manufacturer's tool, it uses the STM driver. Run <a href="https://zadig.akeo.ie/">Zadig</a>, pick “Digital Radio in USB mode” and install WinUSB. Nothing is needed on macOS and Linux (Linux may need a udev rule for 0483:df11).</dd>
+      <dt data-l="pl">Wgrywanie przerwało się w&nbsp;połowie</dt><dt data-l="en">Flashing stopped half way</dt>
+      <dd data-l="pl">Nic straconego: bootloader zostaje nienaruszony. Wyłącz radio, wejdź jeszcze raz w&nbsp;tryb aktualizacji i&nbsp;wgraj ponownie.</dd>
+      <dd data-l="en">Nothing is lost: the bootloader is untouched. Switch the radio off, enter update mode again and flash again.</dd>
+      <dt data-l="pl">Na DMR nie ma dźwięku</dt><dt data-l="en">No audio on DMR</dt>
+      <dd data-l="pl">Firmware został wgrany bez pliku dawcy. Wskaż plik MD-9600 V26.45 i&nbsp;wgraj jeszcze raz.</dd>
+      <dd data-l="en">The firmware was flashed without the donor file. Choose the MD-9600 V26.45 file and flash again.</dd>
+      <dt data-l="pl">Menu jest po angielsku</dt><dt data-l="en">The menu is in English</dt>
+      <dd data-l="pl">Drugi język wybiera się w&nbsp;radiu: Opcje → Język. Paczka musi pochodzić z&nbsp;tego samego wydania co firmware, strona to sprawdza.</dd>
+      <dd data-l="en">The second language is selected on the radio: Options → Language. The pack has to come from the same release as the firmware; the page checks that.</dd>
+    </dl>
+  </details>
+</section>
+
+<section class="downloads" id="pobierz">
+  <h2><span data-l="pl">Pliki</span><span data-l="en">Files</span></h2>
+  <p class="section-lead" data-l="pl">Do wgrania skryptem <code>opengd77_stm32_firmware_loader.py</code> z&nbsp;repozytorium albo do archiwum.</p>
+  <p class="section-lead" data-l="en">For flashing with the <code>opengd77_stm32_firmware_loader.py</code> script from the repository, or to keep.</p>
+  <ul class="files" id="files"></ul>
+  <pre class="cli"><code>python3 MDUV380_firmware/tools/opengd77_stm32_firmware_loader.py \
+    -m MD-UV380 -f OpenGD77_MDUV380_RT3S.bin -L Polish.gla</code></pre>
+</section>
+
+</main>
+
+<footer>
+  <p data-l="pl">SP7TEAM EMCOM firmware rozwija <b>Marcin SP7TQ</b>. Bazuje na <a href="https://www.opengd77.com/">OpenGD77</a> (Roger Clark VK3KYY, Daniel Caujolle-Bert F1RMB i&nbsp;współtwórcy) i&nbsp;forku <a href="https://github.com/mangelajo/opengd77-rt3s-experiments">EA4IPW</a>. Projekt nie jest powiązany z&nbsp;OpenGD77, Retevis ani TYT. Użycie komercyjne jest zabronione.</p>
+  <p data-l="en">SP7TEAM EMCOM firmware is developed by <b>Marcin SP7TQ</b>. It is based on <a href="https://www.opengd77.com/">OpenGD77</a> (Roger Clark VK3KYY, Daniel Caujolle-Bert F1RMB and contributors) and the <a href="https://github.com/mangelajo/opengd77-rt3s-experiments">EA4IPW</a> fork. Not affiliated with OpenGD77, Retevis or TYT. Commercial use is forbidden.</p>
+  <p><a href="https://github.com/sptq/opengd77-rt3s-experiments"><span data-l="pl">Kod źródłowy na GitHubie</span><span data-l="en">Source code on GitHub</span></a></p>
+</footer>
+
+</body>
+</html>
