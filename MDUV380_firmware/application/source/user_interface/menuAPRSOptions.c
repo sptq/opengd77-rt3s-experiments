@@ -194,14 +194,21 @@ static void textModeDraw(void)
 		return;
 	}
 
-	// Reply list: number chip (green: edited, grey: default), text
+	// Reply list: number chip (blue: edited, grey: default), text
 	char text[APRS_TEXT_MSG_MAX + 1];
 	char num[4];
 	int rows = ((DISPLAY_SIZE_Y - REPLY_LIST_Y - REPLY_FOOTER_H) / REPLY_ROW_H);
 	int first = ((textEdit.slot >= rows) ? (textEdit.slot - rows + 1) : 0);
 
+	int32_t savedNumItems = menuDataGlobal.numItems;
+	int32_t savedItem = menuDataGlobal.currentItemIndex;
+
 	displayClearBuf();
+	menuDataGlobal.numItems = APRS_REPLY_SLOTS; // "3/12" in the title bar
+	menuDataGlobal.currentItemIndex = textEdit.slot;
 	menuDisplayTitle(currentLanguage->aprs_replies);
+	menuDataGlobal.numItems = savedNumItems;
+	menuDataGlobal.currentItemIndex = savedItem;
 
 	for (int r = 0; r < rows; r++)
 	{
@@ -224,12 +231,12 @@ static void textModeDraw(void)
 		}
 
 		snprintf(num, sizeof(num), "%d", (i + 1));
-		displayThemeApply((edited ? THEME_ITEM_FG_RSSI_BAR : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
+		displayThemeApply((edited ? THEME_ITEM_FG_RX_FREQ : THEME_ITEM_FG_DECORATION), THEME_ITEM_BG);
 		displayFillRect(2, y, 15, (FONT_SIZE_1_HEIGHT), false);
 		displayPrintCore((int16_t)(2 + ((15 - (strlen(num) * 6)) / 2)), y, num, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
 
 		displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
-		displayPrintCore(20, y, text, ((i == textEdit.slot) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, false);
+		displayPrintCore(20, y, text, ((i == textEdit.slot) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, (i == textEdit.slot)); // selected: on the bar
 	}
 
 	int16_t fy = (DISPLAY_SIZE_Y - REPLY_FOOTER_H);
