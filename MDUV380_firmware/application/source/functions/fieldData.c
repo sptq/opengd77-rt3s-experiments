@@ -119,6 +119,22 @@ void fieldAprsReplySet(int slot, const char *text)
 		return;
 	}
 
+	// No-op saves do not rewrite sector 0 (it also holds the PACE store)
+	char current[APRS_TEXT_MSG_MAX + 1];
+	bool edited = fieldAprsReplyGet(slot, current);
+
+	if ((text == NULL) || (text[0] == 0))
+	{
+		if (edited == false)
+		{
+			return; // already the default
+		}
+	}
+	else if (strncmp(text, current, APRS_TEXT_MSG_MAX) == 0)
+	{
+		return; // unchanged (or the same as the default)
+	}
+
 	aprsReplyRecordEncode(text, &rec);
 	SPI_Flash_write((REPLIES_ADDRESS + (slot * sizeof(aprsReplyRecord_t))), (uint8_t *)&rec, sizeof(rec));
 }

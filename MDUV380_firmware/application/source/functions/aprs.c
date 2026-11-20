@@ -1790,7 +1790,19 @@ bool aprsChannelCommentSet(const char *text)
 	uint8_t index = currentChannelData->aprsConfigIndex;
 	size_t n = strlen(text);
 
-	if (aprsBeaconingIsTransmitting() || (index == 0) || (codeplugAPRSGetDataForIndex(index, &cfg) == false))
+	char current[APRS_COMMENT_MAX_LEN + 1];
+
+	if (aprsChannelCommentGet(current, sizeof(current)) == false)
+	{
+		return false; // no APRS configuration
+	}
+
+	if (strncmp(current, text, APRS_COMMENT_MAX_LEN) == 0)
+	{
+		return true; // unchanged: no codeplug write
+	}
+
+	if (aprsBeaconingIsTransmitting() || (codeplugAPRSGetDataForIndex(index, &cfg) == false))
 	{
 		return false;
 	}
