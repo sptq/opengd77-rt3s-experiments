@@ -5,6 +5,16 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
+## Unreleased
+
+`.gla` language packs changed (new strings `.aprs_comment`, `.aprs_replies`): flash the ones built from this version.
+
+* **APRS texts on the radio** *(untested)*:
+  * **Options → APRS → Comment**: the beacon comment (23 chars) of the APRS configuration of the current channel / VFO, edited on the radio and written to the codeplug (the CPS reads the same text).
+  * **Options → APRS → Replies**: the 12 canned message texts are editable (up to 67 chars), `0` restores the default; kept in the SPI flash (field data sector 0, offset 0x400).
+  * **APRS RX → compose**: the reply list starts with *Type a message...* (free text typed on the keypad), `*` there edits the recipient, `1` in any view starts a new message to a typed callsign. Sent with the existing retries / ack handling.
+  * Full screen text editor on the usual multi-tap keypad entry (insert mode, `#` or `SK2`+`◄` deletes, `SK2`+`►` space); `|`, `~` and `{` are skipped.
+
 ## R20260131-SP7TQ.3 — 2026-11-20
 
 `.gla` language packs changed (new field tool strings): flash the ones from this release.
