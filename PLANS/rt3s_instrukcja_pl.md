@@ -228,6 +228,8 @@ Na końcu listy *Opcje → APRS* są dwie pozycje, otwierane `GREEN` albo `►`:
 * **Komentarz** (`Komentarz:tekst`): komentarz wysyłany z każdym beaconem pozycji. To pole konfiguracji APRS przypisanej do bieżącego kanału/VFO w codeplugu (do 23 znaków); zapis z radia trafia do codeplugu, więc CPS po odczycie radia pokaże ten sam tekst. Zmiana dotyczy wszystkich kanałów z tą samą konfiguracją APRS. Pusty tekst = beacon bez komentarza. `N/A` oznacza kanał bez konfiguracji APRS (edycja niemożliwa, sygnał błędu).
 * **Odpowiedzi** (`Odpowiedzi:12`): 12 gotowych tekstów wiadomości dla ekranu APRS RX. `▲`/`▼` wybór, `GREEN` (albo `►`) edycja, `0` przywraca tekst domyślny, `RED` (albo `◄`) powrót. Numer na niebieskim polu = tekst zmieniony, na szarym = domyślny; w pasku tytułu pozycja (np. `3/12`). Zapisane w pamięci flash radia (przetrwają wyłączenie, nie są częścią codeplugu). Zapisanie pustego tekstu też przywraca domyślny.
 
+Komentarz i odpowiedzi zapisują się od razu po `GREEN` w edytorze — `RED` w *Opcje → APRS* tego nie cofa — a komentarz obowiązuje na wszystkich kanałach z tą samą konfiguracją APRS.
+
 **Edytor tekstu** (ten sam dla komentarza, odpowiedzi, nowej wiadomości i znaku adresata) używa wpisywania jak przy nazwie kontaktu: kolejne naciśnięcia klawisza cyfry przełączają znaki (`2` → `a b c 2 A B C`, `1` → `1 . ! , @ - : ? ( ) / [ ] # < > = * + $ % ' & _ ^ }`, `0` → `0` i spacja, `*` → `*`); wybrany znak jest podświetlony, przyjmuje się po chwili albo po naciśnięciu innego klawisza. Znaki `|`, `~` i `{` są pomijane (zarezerwowane w APRS). Wpisywanie wstawia znak w miejscu kursora.
 
 | Klawisz | Działanie w edytorze |

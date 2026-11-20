@@ -7,7 +7,7 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
-`.gla` language packs changed (new strings `.aprs_comment`, `.aprs_replies`): flash the ones built from this version.
+`.gla` language packs changed (new strings `.aprs_comment`, `.aprs_replies`, language version 8: older packs are not loaded): flash the ones built from this version.
 
 * **APRS texts on the radio** *(untested)*:
   * **Options → APRS → Comment**: the beacon comment (23 chars) of the APRS configuration of the current channel / VFO, edited on the radio and written to the codeplug (the CPS reads the same text).
