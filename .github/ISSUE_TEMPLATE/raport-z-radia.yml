@@ -1,0 +1,50 @@
+name: Raport z radia / Radio report
+description: Coś nie działa albo działa inaczej niż powinno / Something does not work
+labels: ["raport"]
+body:
+  - type: dropdown
+    id: model
+    attributes:
+      label: Radio
+      options:
+        - Retevis RT3S
+        - TYT MD-UV380
+        - TYT MD-UV380 10 W
+        - TYT MD-UV390
+        - TYT MD-UV390 Plus 10 W
+        - RT-84 / DM-1701
+        - Inne / other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Wersja firmware i plik / Firmware version and file
+      placeholder: "R20260131-SP7TQ.4, OpenGD77_MDUV380_RT3S.bin"
+    validations:
+      required: true
+  - type: dropdown
+    id: flasher
+    attributes:
+      label: Czym wgrane / Flashed with
+      options:
+        - sp7tq.pl/rt3s (przeglądarka / browser)
+        - opengd77_stm32_firmware_loader.py
+        - OpenGD77 CPS
+        - Inne / other
+  - type: dropdown
+    id: donor
+    attributes:
+      label: Kodek DMR (dawca) / DMR donor
+      options:
+        - Wbudowany / built-in
+        - Własny plik / own file
+        - Bez DMR / none
+        - Nie wiem / don't know
+  - type: textarea
+    id: what
+    attributes:
+      label: Co się dzieje / What happens
+      description: Co zrobiłeś, czego oczekiwałeś, co się stało. Zdjęcie ekranu bardzo pomaga. / Steps, expected, actual. A photo of the screen helps a lot.
+    validations:
+      required: true
