@@ -5,7 +5,9 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
-## Unreleased
+## R20260131-SP7TQ.3 — 2026-11-20
+
+`.gla` language packs changed (new field tool strings): flash the ones from this release.
 
 * **Field tools** (new main-menu tiles, also quickkey targets; data in the last 64 KB of the SPI flash, the GPS NMEA log is 64 KB shorter):
   * **PACE plan**: Primary / Alternate / Contingency / Emergency channels; `1`–`4` or GREEN switch the radio to that channel, `*` stores the current channel in the selected slot, `0` clears it.
