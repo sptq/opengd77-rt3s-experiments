@@ -410,6 +410,7 @@ menuStatus_t menuAPRSOptions(uiEvent_t *ev, bool isFirstRun)
 		menuDataGlobal.numItems = NUM_APRS_MENU_ITEMS;
 #if defined(HAS_FIELD_TOOLS)
 		textEdit.mode = TEXT_MODE_NONE;
+		uiTextEditStop(); // an edit left by PTT etc.
 #endif
 
 		if (*((uint32_t *)&aprsSettingsCopy.smart.slowRate) == 0xDEADBEEF)

@@ -23,6 +23,7 @@ static EDIT_CCMRAM uint8_t editMax;
 static EDIT_CCMRAM uint8_t editPos;
 static EDIT_CCMRAM bool    editCallsign;
 static EDIT_CCMRAM bool    editPreview;  // the char at editPos is a multi-tap preview
+static EDIT_CCMRAM bool    editActive;
 
 static void editInsert(char c)
 {
@@ -50,6 +51,7 @@ void uiTextEditStart(char *buf, uint8_t maxLen, bool callsign)
 	editPos = (uint8_t)strlen(buf);
 	editCallsign = callsign;
 	editPreview = false;
+	editActive = true;
 	keypadAlphaEnable = true;
 }
 
@@ -57,11 +59,26 @@ void uiTextEditStop(void)
 {
 	keypadAlphaEnable = false;
 	editPreview = false;
+	editActive = false;
+}
+
+// keyboardReset() (APRS transmissions: beacons, acks, message retries; SK2 + long digit, ...)
+// turns the multi-tap entry off: turn it on again (as menuContactDetails.c does on each
+// redraw); a char that was being cycled stays as it is.
+static void editKeepAlpha(void)
+{
+	if (editActive && (keypadAlphaEnable == false))
+	{
+		editPreview = false;
+		keypadAlphaEnable = true;
+	}
 }
 
 textEditResult_t uiTextEditHandleEvent(uiEvent_t *ev)
 {
 	uint8_t len;
+
+	editKeepAlpha();
 
 	if ((ev->events & KEY_EVENT) == 0)
 	{
@@ -176,6 +193,7 @@ void uiTextEditDraw(const char *title, const char *label)
 	uint32_t len = strlen(editBuf);
 	int16_t y = (MENU_HEADER_HEIGHT + 2);
 
+	editKeepAlpha();
 	displayClearBuf();
 
 	menuDataGlobal.numItems = 0; // no list position in the title bar: the length goes there
