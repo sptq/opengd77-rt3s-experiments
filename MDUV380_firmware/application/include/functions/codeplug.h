@@ -466,6 +466,7 @@ bool codeplugSaveLastUsedChannelInZone(void);
 
 int codeplugAPRSConfigGetCount(void);
 bool codeplugAPRSGetDataForIndex(int index, CodeplugAPRSConfig_t *APRS_Buf);
+bool codeplugAPRSSetDataForIndex(int index, const CodeplugAPRSConfig_t *APRS_Buf); // Fork
 int codeplugAPRSGetIndexOfName(char *configName);
 
 #endif
