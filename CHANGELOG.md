@@ -5,7 +5,7 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
-## Unreleased
+## R20260131-SP7TQ.4 — 2026-11-20
 
 `.gla` language packs changed (new strings `.aprs_comment`, `.aprs_replies`, language version 8: older packs are not loaded): flash the ones built from this version.
 
