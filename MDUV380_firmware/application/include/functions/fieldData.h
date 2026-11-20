@@ -2,7 +2,8 @@
  * Fork: field operations data in the SPI flash (SP7TEAM firmware, Marcin SP7TQ).
  *
  * 64 KB at the end of the 16 MB flash (taken from the end of the GPS NMEA log):
- *   sector 0     : PACE communication plan (Primary / Alternate / Contingency / Emergency)
+ *   sector 0     : 0x000 PACE communication plan (Primary / Alternate / Contingency / Emergency)
+ *                  0x400 APRS canned replies (12 x 72 bytes, functions/aprsText.h)
  *   sectors 1..15: coverage survey points (16 bytes each, filled linearly, 3840 points)
  *
  * Nothing is kept in RAM: every access reads the flash.
@@ -53,6 +54,12 @@ typedef struct
 #define COVERAGE_POINTS_MAX        ((FIELD_DATA_FLASH_SIZE - 4096U) / sizeof(coveragePoint_t))
 
 uint32_t fieldCoverageCount(void);
+
+// --- APRS canned replies (Options > APRS > Replies, sent from the APRS RX screen) ----------
+#define FIELD_APRS_REPLIES_OFFSET  0x400U
+// 'text': APRS_TEXT_MSG_MAX + 1 bytes. Returns true when the slot was edited (else the default).
+bool fieldAprsReplyGet(int slot, char *text);
+void fieldAprsReplySet(int slot, const char *text); // NULL / empty: back to the default
 
 // Scratch RAM (CCM) for the field tool screens: only one of them is open at a time
 #define FIELD_SCRATCH_SIZE         128U

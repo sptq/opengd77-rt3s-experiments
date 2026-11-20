@@ -6,6 +6,7 @@
  */
 #include <string.h>
 #include "functions/fieldData.h"
+#include "functions/aprsText.h"
 
 #if defined(HAS_FIELD_TOOLS)
 
@@ -17,6 +18,7 @@
 #define PACE_MAGIC       0x45434150UL // "PACE"
 #define COVERAGE_MAGIC   0x31564F43UL // "COV1": the coverage sectors were erased by this firmware
 #define COVERAGE_ADDRESS (FIELD_DATA_FLASH_ADDRESS + SECTOR_SIZE)
+#define REPLIES_ADDRESS  (FIELD_DATA_FLASH_ADDRESS + FIELD_APRS_REPLIES_OFFSET) // sector 0, after the PACE store
 
 typedef struct
 {
@@ -59,14 +61,14 @@ bool fieldPaceGet(int slot, paceSlot_t *data)
 	return ((data->zoneNumber >= 0) && (data->channelNumber > 0) && (data->channelNumber <= 1024));
 }
 
+_Static_assert(sizeof(paceStore_t) <= FIELD_APRS_REPLIES_OFFSET, "PACE store overlaps the APRS replies");
+_Static_assert((FIELD_APRS_REPLIES_OFFSET + (APRS_REPLY_SLOTS * sizeof(aprsReplyRecord_t))) <= SECTOR_SIZE, "APRS replies do not fit in sector 0");
+
+// Sector 0 is shared (PACE store + APRS replies): read-modify-write of the whole
+// sector through the SPI flash sector buffer, so the other records are kept.
 static void storeWrite(const paceStore_t *store)
 {
-	uint8_t page[PAGE_SIZE];
-
-	memset(page, 0xFF, sizeof(page));
-	memcpy(page, store, sizeof(paceStore_t));
-	SPI_Flash_eraseSector(PACE_ADDRESS);
-	SPI_Flash_writePage(PACE_ADDRESS, page);
+	SPI_Flash_write(PACE_ADDRESS, (uint8_t *)store, sizeof(paceStore_t));
 }
 
 void fieldPaceSet(int slot, const paceSlot_t *data)
@@ -91,6 +93,34 @@ void fieldPaceSet(int slot, const paceSlot_t *data)
 	}
 
 	storeWrite(store);
+}
+
+// --- APRS canned replies ------------------------------------------------------------------
+bool fieldAprsReplyGet(int slot, char *text)
+{
+	aprsReplyRecord_t rec;
+
+	if ((slot < 0) || (slot >= APRS_REPLY_SLOTS))
+	{
+		text[0] = 0;
+		return false;
+	}
+
+	SPI_Flash_read((REPLIES_ADDRESS + (slot * sizeof(aprsReplyRecord_t))), (uint8_t *)&rec, sizeof(rec));
+	return aprsReplyRecordDecode(slot, &rec, text);
+}
+
+void fieldAprsReplySet(int slot, const char *text)
+{
+	aprsReplyRecord_t rec;
+
+	if ((slot < 0) || (slot >= APRS_REPLY_SLOTS))
+	{
+		return;
+	}
+
+	aprsReplyRecordEncode(text, &rec);
+	SPI_Flash_write((REPLIES_ADDRESS + (slot * sizeof(aprsReplyRecord_t))), (uint8_t *)&rec, sizeof(rec));
 }
 
 // --- coverage survey -----------------------------------------------------------------------
