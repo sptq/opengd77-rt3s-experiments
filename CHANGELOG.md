@@ -7,6 +7,18 @@ marked *(untested)* build and pass host tests but still need on-air checking.
 
 ## Unreleased
 
+* **Field tools** (new main-menu tiles, also quickkey targets; data in the last 64 KB of the SPI flash, the GPS NMEA log is 64 KB shorter):
+  * **PACE plan**: Primary / Alternate / Contingency / Emergency channels; `1`–`4` or GREEN switch the radio to that channel, `*` stores the current channel in the selected slot, `0` clears it.
+  * **Position**: own position in MGRS (big) and UTM, decimal degrees, locator, altitude, GPS fix / satellites / HDOP, sunrise and sunset, distance and bearing to the waypoint; `*` marks the current position as the waypoint. MGRS checked against a reference library on 29 000 points.
+  * **Coverage survey**: signal level with GPS position every 1–30 s (3840 points), live graph, session min/max; `tools/opengd77_coverage.py` makes a coloured KML map, GPX or CSV.
+  * **Radio check**: each received over is measured (length, average and peak level) and rated readability / strength ("5 by 9"), with the last reports.
+* After updating, the radio starts once in VFO mode (the screen numbers changed): switch back to the channel mode.
+
+## R20260131-SP7TQ.2 — 2026-11-19
+
+`.gla` language packs changed (new "Event log" string): flash the ones from this release.
+
+* **Zones**: a zone shortened in the CPS no longer hangs the radio when selected (stale last-used channel position).
 * **Launcher menus**: main menu, Options and Contacts as 4x3 icon tiles (26 icons, `docs/icons/`), key numbers open a tile directly, name bar; option lists with right-aligned values.
 * **SP7TEAM look for the whole UI**: EMCOM colours as the default theme, flat boxes without shadows, menu title bars and full-width selection, soft key bars (GREEN / RED fields), restyled APRS RX (status strip, chips, radar panel), SSTV and boot screen (SP7TEAM emblem).
 * **Event log** (main menu → Event log): TX, FM RX, DMR calls, APRS stations and messages, DTMF, SOS, SSTV, power-on with UTC time, 2048 entries in flash; `tools/opengd77_event_log.py` exports CSV. The GPS NMEA log starts 64 KB later.

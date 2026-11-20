@@ -332,6 +332,10 @@ enum MENU_SCREENS
 	MENU_SSTV,// Fork: SSTV picture receive
 	MENU_APRS_RX,// Fork: APRS receive (frames, stations, radar, messages, DTMF, CW)
 	MENU_EVENT_LOG,// Fork: EMCOM event log
+	MENU_PACE,// Fork: PACE communication plan
+	MENU_POSITION,// Fork: MGRS / UTM position
+	MENU_COVERAGE,// Fork: coverage survey
+	MENU_RADIO_CHECK,// Fork: radio check (signal report)
 #endif
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
 	UI_MESSAGE_BOX,
@@ -493,6 +497,10 @@ menuStatus_t menuRSSIScreen(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuSSTV(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuAPRSRx(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuEventLog(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuPACE(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuPosition(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuCoverage(uiEvent_t *event, bool isFirstRun);
+menuStatus_t menuRadioCheck(uiEvent_t *event, bool isFirstRun);
 #endif
 menuStatus_t menuLastHeard(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuGeneralOptions(uiEvent_t *event, bool isFirstRun);

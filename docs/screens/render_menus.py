@@ -40,9 +40,10 @@ def launcher(title, items, sel, P=R.DARK):
     return s
 
 
-MAIN = [('ZONE', 'Zone'), ('CONTACTS', 'Contacts'), ('CHANNEL', 'Channel details'), ('RSSI', 'RSSI'), ('INFO', 'Firmware info'),
-        ('OPTIONS', 'Options'), ('LASTHEARD', 'Last heard'), ('RADIOINFO', 'Radio infos'), ('SATELLITE', 'Satellite'), ('GPS', 'GPS'),
-        ('APRS', 'APRS RX'), ('LOG', 'Event log'), ('SSTV', 'SSTV')]
+MAIN = [('ZONE', 'Zone'), ('CONTACTS', 'Contacts'), ('CHANNEL', 'Channel details'), ('RSSI', 'RSSI'), ('OPTIONS', 'Options'),
+        ('LASTHEARD', 'Last heard'), ('PACE', 'PACE plan'), ('POSITION', 'Position'), ('COVERAGE', 'Coverage'),
+        ('RADIOCHECK', 'Radio check'), ('APRS', 'APRS RX'), ('GPS', 'GPS'), ('SSTV', 'SSTV'), ('LOG', 'Event log'),
+        ('RADIOINFO', 'Radio infos'), ('SATELLITE', 'Satellite'), ('INFO', 'Firmware info')]
 OPTS = [('GENERAL', 'General'), ('RADIO', 'Radio'), ('DISPLAY', 'Display'), ('SOUND', 'Sound'), ('LANGUAGE', 'Language'),
         ('CALIBRATION', 'Calibration'), ('THEME', 'Theme'), ('APRSCFG', 'APRS'), ('RESET', 'Reset config'), ('QUICKKEYS', 'Quickkeys')]
 

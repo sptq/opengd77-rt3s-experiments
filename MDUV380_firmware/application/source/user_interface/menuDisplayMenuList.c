@@ -117,6 +117,10 @@ static uiIcon_t menuIcon(int menuNum)
 		case MENU_SSTV:               return UI_ICON_SSTV;
 		case MENU_APRS_RX:            return UI_ICON_APRS;
 		case MENU_EVENT_LOG:          return UI_ICON_LOG;
+		case MENU_PACE:               return UI_ICON_PACE;
+		case MENU_POSITION:           return UI_ICON_POSITION;
+		case MENU_COVERAGE:           return UI_ICON_COVERAGE;
+		case MENU_RADIO_CHECK:        return UI_ICON_RADIOCHECK;
 #endif
 		case MENU_CONTACT_LIST:       return UI_ICON_CONTACTLIST;
 		case MENU_DTMF_CONTACT_LIST:  return UI_ICON_DTMF;
