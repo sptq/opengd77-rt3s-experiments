@@ -33,3 +33,5 @@ MDUV380_firmware/tests/aprs_rx/test_sstv
 MDUV380_firmware/tests/aprs_rx/test_sstv_store
 MDUV380_firmware/tests/aprs_rx/test_net
 MDUV380_firmware/tests/aprs_rx/test_batt
+MD9600_firmware/build/
+MD9600_firmware/application/source/linkerdata/codec_bin_section_1.bin
