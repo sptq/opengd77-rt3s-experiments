@@ -148,7 +148,6 @@ class LCD:
 
     def png(self, path, scale=4, night=False):
         bg, fg = ((196, 206, 190), (28, 34, 30)) if not night else ((10, 18, 14), (150, 232, 170))
-        mid = tuple((a * 2 + b) // 3 for a, b in zip(fg, bg))
         img = Image.new('RGB', (W * scale + 2 * scale, H * scale + 2 * scale), bg)
         p = img.load()
         for y in range(H):
@@ -156,6 +155,5 @@ class LCD:
                 if self.px[y][x]:
                     for dy in range(scale):
                         for dx in range(scale):
-                            edge = dx == scale - 1 or dy == scale - 1
-                            p[(x + 1) * scale + dx, (y + 1) * scale + dy] = mid if edge else fg
+                            p[(x + 1) * scale + dx, (y + 1) * scale + dy] = fg
         img.save(path)

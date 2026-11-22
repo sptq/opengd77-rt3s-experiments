@@ -358,15 +358,15 @@ def net_control(d):
     d.header('NET', 'RUN 0:42 Q10')
     rows = [('SP7ABC', '14:02', '1m', 'IN', True), ('SP7XYZ-9', '14:03', '12m', 'QUIET', False),
             ('2601234', '14:05', '40s', 'IN', True), ('FM#1', '14:06', '3m', 'IN', True), ('SP5ABC', '14:08', '16m', 'QUIET', False)]
-    for i, (c, t, age, st, solid) in enumerate(rows):
-        y = 10 + i * 9
+    for i, (c, t, age, st, solid) in enumerate(rows[:4]):
+        y = 11 + i * 11
         d.text(0, y + 1, c, F1B if i == 1 else F1)
         d.text(56, y + 1, age.rjust(3), F1)
         w = len(st) * 6 + 3
         if solid:
-            d.fill(W - w, y + 1, w, 8); d.text(W - w + 2, y + 1, st, F1, inv=True)
+            d.fill(W - w, y, w, 9); d.text(W - w + 2, y + 1, st, F1, inv=True)
         else:
-            d.rect(W - w, y + 1, w, 8); d.text(W - w + 2, y + 1, st, F1)
+            d.rect(W - w, y, w, 9); d.text(W - w + 2, y + 1, st, F1)
     d.rect(0, 19, 52, 9) if False else None
     d.keybar('GRN QSO *FM #Q 0END')
 
