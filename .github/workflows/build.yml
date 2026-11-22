@@ -89,6 +89,41 @@ jobs:
           path: MDUV380_firmware/build/${{ steps.name.outputs.out }}.bin
           if-no-files-found: error
 
+  build-md9600:
+    name: MD-9600 / RT90 (HW V5)
+    runs-on: ubuntu-latest
+
+    env:
+      IMG_TAG: opengd77-mduv380-builder:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (cached) container image
+        uses: docker/build-push-action@v6
+        with:
+          context: MD9600_firmware
+          file: MD9600_firmware/Containerfile
+          tags: ${{ env.IMG_TAG }}
+          load: true
+          cache-from: type=gha,scope=builder-image
+          cache-to: type=gha,scope=builder-image,mode=max
+
+      - name: Build firmware (MD-9600 HW V5)
+        working-directory: MD9600_firmware
+        run: make build CONTAINER_ENGINE=docker HW=5
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenGD77_MD9600_HW_V5
+          path: MD9600_firmware/build/OpenGD77_MD9600_HW_V5.bin
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
     needs: [host-tests, build]
