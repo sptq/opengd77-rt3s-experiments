@@ -35,3 +35,4 @@ MDUV380_firmware/tests/aprs_rx/test_net
 MDUV380_firmware/tests/aprs_rx/test_batt
 MD9600_firmware/build/
 MD9600_firmware/application/source/linkerdata/codec_bin_section_1.bin
+MD9600_firmware/tools/mockups/out/
