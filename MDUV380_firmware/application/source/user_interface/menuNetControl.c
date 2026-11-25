@@ -26,6 +26,11 @@
 #define CL_ROW_H      10
 #define CL_LIST_Y     (MENU_HEADER_HEIGHT + 14)
 #define FOOTER_H      11
+#if defined(EMCOM_UI_MONO)
+#define MONO_LIST_Y   10   // 128 x 64: 5 rows of 9 px, y 10..54
+#define MONO_ROW_H    9
+#define MONO_ROWS     5
+#endif
 
 typedef struct
 {
@@ -69,7 +74,11 @@ static int visibleRows(void)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		return MONO_ROWS;
+#else
 		return ((EMCOM_UI_KEYBAR_Y - 1 - EMCOM_UI_BODY_Y) / ROW_H);
+#endif
 	}
 #endif
 	return ((DISPLAY_SIZE_Y - FOOTER_H - CL_LIST_Y) / CL_ROW_H);
@@ -119,6 +128,153 @@ static const char *keysText(void)
 }
 
 #if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+// 128 x 64 mono (MD-9600). Title: running time and quiet limit, n/count. Rows of 9 px:
+// station (bold), check-in time UTC, age, IN / QT (quiet: an inverse tag); the selected row
+// as a dark bar with light text. No net / listening: a state chip with the channel and the hints.
+#define MONO_TIME_X   58
+#define MONO_AGE_R    109
+#define MONO_TAG_X    112
+
+static const char *keysTextMono(void)
+{
+	if (netIsRunning() == false)
+	{
+		return "GRN START  RED EXIT";
+	}
+	if (netGetRoster()->count == 0U)
+	{
+		return "* FM  # QUIET  0 END";
+	}
+	return (selectedIsFm() ? "GRN HRD *FM #Q 0 END" : "GRN QSO *FM #Q 0 END");
+}
+
+// IN: plain bold text; QUIET: "QT" on a block in the opposite shade of the row
+static void monoStatus(int16_t rowY, bool quiet, bool sel)
+{
+	if (quiet)
+	{
+		displayFillRect(MONO_TAG_X, rowY, (DISPLAY_SIZE_X - MONO_TAG_X), MONO_ROW_H, sel); // light on the bar, else dark
+		displayPrintCore((MONO_TAG_X + 2), (rowY + 1), "QT", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, (sel == false));
+	}
+	else
+	{
+		displayPrintCore((MONO_TAG_X + 2), (rowY + 1), "IN", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+	}
+}
+
+static void updateScreenMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+	char name[20];
+	char t[8];
+	const netRoster_t *r = netGetRoster();
+	bool running = netIsRunning();
+	uint16_t nowS = netNowS();
+	uint16_t limitS = netQuietLimitS();
+
+	displayClearBuf();
+	if (running)
+	{
+		runningTime(t, sizeof(t));
+		snprintf(name, sizeof(name), "NET %s Q%u", t, (unsigned)(limitS / 60U));
+		if (r->count > 0U)
+		{
+			snprintf(buf, sizeof(buf), "%d/%u", (ui.sel + 1), (unsigned)r->count);
+		}
+		else
+		{
+			snprintf(buf, sizeof(buf), "0");
+		}
+		emcomUiTitle(name, buf);
+	}
+	else
+	{
+		emcomUiTitle("NET CONTROL", NULL);
+	}
+
+	if ((running == false) || (r->count == 0U))
+	{
+		// state row: OFF / RUN chip, the state word, the channel on the right
+		int16_t x = (int16_t)(emcomUiChip(0, 11, (running ? "RUN" : "OFF"), THEME_ITEM_FG_DEFAULT,
+				(running ? EMCOM_CHIP_SOLID : EMCOM_CHIP_OUTLINE), false) + 3);
+
+		x += (int16_t)(emcomUiText(x, 11, (running ? "LISTENING" : "NO NET"), FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false) + 6);
+		netChannelName(name, sizeof(name));
+		int maxChars = ((DISPLAY_SIZE_X - x) / 6);
+		if (maxChars > 0)
+		{
+			if ((int)strlen(name) > maxChars)
+			{
+				name[maxChars] = 0;
+			}
+			emcomUiText(DISPLAY_SIZE_X, 11, name, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, true);
+		}
+		emcomUiDivider(19);
+
+		if (running == false)
+		{
+			emcomUiText(0, 21, "GRN starts a net:", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			emcomUiText(0, 30, "DMR / APRS stations", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			emcomUiText(0, 39, "heard check in.", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			if (r->count > 0U)
+			{
+				snprintf(buf, sizeof(buf), "Last net: %u stations", (unsigned)r->count);
+				emcomUiText(0, 47, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+			}
+		}
+		else
+		{
+			emcomUiText(0, 21, "Stations heard on DMR", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			emcomUiText(0, 30, "or APRS check in.", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			emcomUiText(0, 44, "* adds an FM station.", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+		}
+	}
+	else
+	{
+		int rows = visibleRows();
+
+		for (int i = 0; i < rows; i++)
+		{
+			int idx = (ui.top + i);
+			char call[NET_CALL_BUF];
+			char age[8];
+			const netEntry_t *e;
+			bool sel;
+			int16_t y = (int16_t)(MONO_LIST_Y + (i * MONO_ROW_H));
+
+			if (idx >= (int)r->count)
+			{
+				break;
+			}
+			e = &r->e[idx];
+			sel = (idx == ui.sel);
+
+			if (sel)
+			{
+				displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+			}
+			netEntryCall(e, call);
+			displayPrintCore(1, (y + 1), call, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+			utcTime(e->inS, t, sizeof(t));
+			displayPrintCore(MONO_TIME_X, (y + 1), t, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+			netAgeText(age, sizeof(age), (uint16_t)((nowS >= e->lastS) ? (nowS - e->lastS) : 0U));
+			displayPrintCore((int16_t)(MONO_AGE_R - ((int16_t)strlen(age) * 6)), (y + 1), age, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+			monoStatus(y, netEntryIsQuiet(e, nowS, limitS), sel);
+		}
+	}
+
+	if (ui.confirmEnd)
+	{
+		emcomUiConfirmBar("END?");
+	}
+	else
+	{
+		emcomUiKeyBar(keysTextMono());
+	}
+	displayRender();
+}
+#else
 // Status chip at the right of a row, 3 px from the edge: IN solid (bold text on a block),
 // QUIET outlined (frame + regular text): told apart by shape as well as colour (mono / contr)
 #define CHIP_RIGHT  (DISPLAY_SIZE_X - 3)
@@ -259,6 +415,7 @@ static void updateScreenEmcom(void)
 	}
 	displayRender();
 }
+#endif // EMCOM_UI_MONO
 #endif
 
 static void text(int16_t x, int16_t y, const char *s, ucFont_t font, themeItem_t fg)
@@ -282,7 +439,11 @@ static void updateScreen(void)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		updateScreenMono();
+#else
 		updateScreenEmcom();
+#endif
 		return;
 	}
 #endif

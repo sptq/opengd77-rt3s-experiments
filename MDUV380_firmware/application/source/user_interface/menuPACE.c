@@ -91,6 +91,129 @@ static bool skedText(char *buf, size_t size)
 }
 
 #if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+// 128 x 64 mono: title with the next sked (or the slots set), one 9 px row per slot, the selected
+// slot as an 18 px inverse row with the frequency, mode and slot name, the key bar or the confirmation
+#define MONO_ROW_H     9
+#define MONO_SEL_H     18
+#define MONO_TEXT_X    12
+
+static void updateScreenMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+	int16_t y = 10;
+	int set = 0;
+
+	displayClearBuf();
+
+	for (int i = 0; i < PACE_SLOTS; i++)
+	{
+		paceSlot_t slot;
+		bool sel = (i == selectedSlot);
+		bool used = fieldPaceGet(i, &slot);
+		bool exists = (used && codeplugAllChannelsIndexIsInUse(slot.channelNumber));
+		const char *state = NULL; // the chip on the right: ON / DELETED / EMPTY
+		char name[17];
+		CodeplugChannel_t ch;
+		int16_t chipW = 0;
+		size_t maxChars;
+
+		set += (used ? 1 : 0);
+
+		if (exists)
+		{
+			codeplugChannelGetDataForIndex(slot.channelNumber, &ch);
+			codeplugUtilConvertBufToString(ch.name, name, 16);
+			if (slotIsCurrent(&slot))
+			{
+				state = "ON";
+			}
+		}
+		else
+		{
+			snprintf(name, sizeof(name), "%s", paceNames[i]);
+			state = (used ? "DELETED" : "EMPTY");
+		}
+
+		if (state != NULL)
+		{
+			chipW = (int16_t)((strlen(state) * 6) + 3);
+		}
+		maxChars = (size_t)((DISPLAY_SIZE_X - 1 - chipW - 3 - MONO_TEXT_X) / 6);
+		if (strlen(name) > maxChars)
+		{
+			name[maxChars] = 0;
+		}
+
+		if (sel)
+		{
+			displayFillRect(0, y, DISPLAY_SIZE_X, MONO_SEL_H, false);
+			buf[0] = paceLetters[i];
+			buf[1] = 0;
+			displayPrintCore(1, (y + 1), buf, FONT_SIZE_3, TEXT_ALIGN_LEFT, true);
+			displayPrintCore(MONO_TEXT_X, (y + 1), name, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+			if (state != NULL)
+			{
+				// light chip on the inverse row
+				int16_t cx = (int16_t)(DISPLAY_SIZE_X - 1 - chipW);
+
+				displayFillRect(cx, y, chipW, 9, true);
+				displayPrintCore((cx + 2), (y + 1), state, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+			}
+
+			if (exists)
+			{
+				formatFreq(ch.rxFreq, buf, sizeof(buf));
+				strcat(buf, ((ch.chMode == RADIO_MODE_DIGITAL) ? " DMR" : " FM"));
+				displayPrintCore(MONO_TEXT_X, (y + 9), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, true);
+				if ((MONO_TEXT_X + (int16_t)((strlen(buf) + 1 + strlen(paceNames[i])) * 6)) <= (DISPLAY_SIZE_X - 1))
+				{
+					displayPrintCore((int16_t)(DISPLAY_SIZE_X - 1 - (strlen(paceNames[i]) * 6)), (y + 9), paceNames[i], FONT_SIZE_1, TEXT_ALIGN_LEFT, true);
+				}
+			}
+			else
+			{
+				displayPrintCore(MONO_TEXT_X, (y + 9), (used ? "channel deleted" : "* stores channel"), FONT_SIZE_1, TEXT_ALIGN_LEFT, true);
+			}
+			y += MONO_SEL_H;
+		}
+		else
+		{
+			displayFillRect(0, (y + 1), 9, 8, false);
+			buf[0] = paceLetters[i];
+			buf[1] = 0;
+			displayPrintCore(2, (y + 1), buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+			emcomUiText(MONO_TEXT_X, (y + 1), name, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+			if (state != NULL)
+			{
+				emcomUiChip((DISPLAY_SIZE_X - 1), (y + 1), state, THEME_ITEM_FG_DEFAULT, (exists ? EMCOM_CHIP_SOLID : EMCOM_CHIP_OUTLINE), true);
+			}
+			y += MONO_ROW_H;
+		}
+	}
+
+	// title: the next sked count-down when one is set, else the slots set
+	char sked[16];
+
+	if (skedText(sked, sizeof(sked)) == false)
+	{
+		snprintf(sked, sizeof(sked), "%d/%d SET", set, PACE_SLOTS);
+	}
+	emcomUiTitle("PACE PLAN", sked);
+
+	if (confirmClear)
+	{
+		snprintf(buf, sizeof(buf), "CLR %c?", paceLetters[selectedSlot]);
+		emcomUiConfirmBar(buf);
+	}
+	else
+	{
+		emcomUiKeyBar(onChannelScreen() ? "1-4GO *STO 0CLR #SKED" : "1-4 GO  # SKED  (VFO)");
+	}
+	paceDrawnSecs = uiDataGlobal.dateTimeSecs;
+	displayRender();
+}
+#else
 // EMCOM style: status strip (the slot the radio is on), one two-line row per slot with its state
 // (ON / EMPTY / DELETED), the key bar or the clear confirmation
 #define EM_ROW_H    ((EMCOM_UI_KEYBAR_Y - EMCOM_UI_BODY_Y + 1) / PACE_SLOTS)
@@ -212,6 +335,7 @@ static void updateScreenEmcom(void)
 	paceDrawnSecs = uiDataGlobal.dateTimeSecs;
 	displayRender();
 }
+#endif // EMCOM_UI_MONO
 #endif
 
 static void updateScreen(void)
@@ -221,7 +345,11 @@ static void updateScreen(void)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		updateScreenMono();
+#else
 		updateScreenEmcom();
+#endif
 		return;
 	}
 #endif

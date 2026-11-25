@@ -147,6 +147,7 @@ static bool waypointLine(double lat, double lon, char *buf, size_t size, bool co
 // EMCOM style: the source and fix on the status strip, MGRS big (in the contrast style as large
 // as fits: zone / square 8x16, easting and northing 16x32, one per line), then UTM, lat / lon,
 // locator, sun and waypoint
+#if !defined(EMCOM_UI_MONO)
 static void updateScreenEmcom(void)
 {
 	char buf[SCREEN_LINE_BUFFER_SIZE + 12];
@@ -314,6 +315,172 @@ static void updateScreenEmcom(void)
 	emcomUiKeyBar("* MARK WAYPOINT  RED EXIT");
 	displayRender();
 }
+#endif // !EMCOM_UI_MONO
+
+#if defined(EMCOM_UI_MONO)
+static uint8_t monoPage = 0U; // UP / DOWN: 0 MGRS big, degrees, locator ; 1 MGRS, UTM, sun, waypoint
+
+// 128 x 64: title with the page and the UTC time, the source / fix row, then
+//   page 1: MGRS zone + square and "MGRS" on the left, easting / northing 8x16, degrees, locator + altitude
+//   page 2: MGRS, UTM, sunrise / sunset, waypoint (one 6x8 row each)
+static void updateScreenMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 12];
+	char counter[12];
+	double lat = 0.0, lon = 0.0;
+	posSource_t src = getPosition(&lat, &lon);
+	char loc[12] = { 0 };
+	unsigned page = (unsigned)(monoPage + 1U);
+	int16_t x;
+
+	displayClearBuf();
+	if (uiDataGlobal.dateTimeSecs > 86400U)
+	{
+		time_t_custom now = uiDataGlobal.dateTimeSecs;
+		struct tm t;
+
+		gmtime_r_Custom(&now, &t);
+		if (src == SRC_NONE)
+		{
+			snprintf(counter, sizeof(counter), "%02d:%02dZ", t.tm_hour, t.tm_min);
+		}
+		else
+		{
+			snprintf(counter, sizeof(counter), "%u/2 %02d:%02dZ", page, t.tm_hour, t.tm_min);
+		}
+	}
+	else if (src == SRC_NONE)
+	{
+		counter[0] = 0;
+	}
+	else
+	{
+		snprintf(counter, sizeof(counter), "%u/2", page);
+	}
+	emcomUiTitle("POSITION", (counter[0] ? counter : NULL));
+
+	// source / fix row (9..17)
+	{
+		const char *word = ((src == SRC_GPS) ? "GPS" : ((src == SRC_MANUAL) ? "MANUAL" : "NO POS"));
+
+		x = (int16_t)(emcomUiChip(0, 10, word, THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, false) + 3);
+#if defined(HAS_GPS)
+		if (src == SRC_GPS)
+		{
+			snprintf(buf, sizeof(buf), "%s S%u", ((gpsData.Status & GPS_STATUS_3D_FIX) ? "3D" : "2D"), (unsigned)(gpsData.SatsInViewGP + gpsData.SatsInViewBD));
+			emcomUiText(x, 10, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+			if (gpsData.Status & GPS_STATUS_HAS_HDOP)
+			{
+				snprintf(buf, sizeof(buf), "%u.%u", (unsigned)(gpsData.AccuracyInCm / 100U), (unsigned)((gpsData.AccuracyInCm % 100U) / 10U));
+				int16_t w = emcomUiText((DISPLAY_SIZE_X - 1), 10, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, true);
+				emcomUiText((DISPLAY_SIZE_X - 1 - w - 3), 10, "HDOP", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+			}
+		}
+		else
+#endif
+		{
+			emcomUiText(x, 10, ((src == SRC_MANUAL) ? "settings" : "no GPS fix"), FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+	}
+
+	if (src == SRC_NONE)
+	{
+		emcomUiText(0, 20, "No position", FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiText(0, 37, "Turn GPS on or set", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiText(0, 46, "location in Options", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiKeyBar("RED EXIT");
+		displayRender();
+		return;
+	}
+
+	coordsToMaidenhead((uint8_t *)loc, lat, lon);
+	loc[6] = 0;
+
+	if (monoPage == 0U)
+	{
+		// MGRS "34U EC 00833 86586": "34U EC" / "MGRS" on the left, "00833 86586" 8x16 on the right (19..34)
+		if (fieldNavToMgrs(lat, lon, buf, sizeof(buf)))
+		{
+			char *digits = strchr(strchr(buf, ' ') + 1, ' ');
+
+			*digits++ = 0;
+			emcomUiText(0, 19, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+			emcomUiText(0, 27, "MGRS", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+			emcomUiText((DISPLAY_SIZE_X - 1), 19, digits, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, true);
+		}
+		else
+		{
+			emcomUiText(0, 19, "polar (UPS)", FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+		}
+
+		// decimal degrees "52.12345N 21.12345E" (20 chars max)
+		uint32_t la = (uint32_t)((fabs(lat) * 100000.0) + 0.5);
+		uint32_t lo = (uint32_t)((fabs(lon) * 100000.0) + 0.5);
+		snprintf(buf, sizeof(buf), "%u.%05u%c %u.%05u%c", (unsigned)(la / 100000U), (unsigned)(la % 100000U), ((lat >= 0.0) ? 'N' : 'S'),
+				(unsigned)(lo / 100000U), (unsigned)(lo % 100000U), ((lon >= 0.0) ? 'E' : 'W'));
+		emcomUiText(0, 37, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+
+		// locator, altitude
+		emcomUiKeyValue(0, 46, "LOC", loc, THEME_ITEM_FG_DEFAULT);
+#if defined(HAS_GPS)
+		if ((src == SRC_GPS) && (gpsData.Status & GPS_STATUS_HAS_HEIGHT))
+		{
+			snprintf(buf, sizeof(buf), "%dm", (int)gpsData.HeightInM);
+			int16_t w = emcomUiText((DISPLAY_SIZE_X - 1), 46, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, true);
+			emcomUiText((DISPLAY_SIZE_X - 1 - w - 3), 46, "ALT", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+		}
+#endif
+	}
+	else
+	{
+		fieldUtm_t utm;
+
+		// MGRS on one line (18 chars)
+		if (fieldNavToMgrs(lat, lon, buf, sizeof(buf)))
+		{
+			emcomUiText(0, 19, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+		}
+		else
+		{
+			emcomUiText(0, 19, "MGRS polar (UPS)", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+
+		// UTM "34U 500833E 5786586N" (20 chars max)
+		if (fieldNavToUtm(lat, lon, &utm))
+		{
+			snprintf(buf, sizeof(buf), "%d%c %06uE %07uN", utm.zone, utm.band, (unsigned)utm.easting, (unsigned)utm.northing);
+			emcomUiText(0, 28, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+		else
+		{
+			emcomUiText(0, 28, "UTM -", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+
+		// sun: "SUN  04:12 - 19:55 UTC" without the double space (21 chars)
+		sunLine(lat, lon, buf, sizeof(buf));
+		if ((buf[3] == ' ') && (buf[4] == ' '))
+		{
+			memmove(&buf[3], &buf[4], (strlen(&buf[4]) + 1));
+		}
+		buf[21] = 0;
+		emcomUiText(0, 37, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+
+		// waypoint
+		if (waypointLine(lat, lon, buf, sizeof(buf), false))
+		{
+			buf[21] = 0;
+			emcomUiText(0, 46, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+		}
+		else
+		{
+			emcomUiText(0, 46, "WPT none (* marks)", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+	}
+
+	emcomUiKeyBar("* WPT UP/DN RED EXIT");
+	displayRender();
+}
+#endif
 #endif
 
 static void updateScreen(void)
@@ -323,7 +490,11 @@ static void updateScreen(void)
 	posSource_t src = getPosition(&lat, &lon);
 	int16_t y;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+	// 128 x 64: neither the EMCOM nor the classic layout (160 x 128) fits, whatever the style setting
+	updateScreenMono();
+	return;
+#elif defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
 		updateScreenEmcom();
@@ -479,6 +650,9 @@ menuStatus_t menuPosition(uiEvent_t *ev, bool isFirstRun)
 	{
 		menuDataGlobal.numItems = 0;
 		lastDraw = ticksGetMillis();
+#if defined(EMCOM_UI_MONO)
+		monoPage = 0U;
+#endif
 		updateScreen();
 		return MENU_STATUS_SUCCESS;
 	}
@@ -517,6 +691,13 @@ menuStatus_t menuPosition(uiEvent_t *ev, bool isFirstRun)
 				}
 				updateScreen();
 			}
+#if defined(EMCOM_UI_MONO)
+			else if (KEYCHECK_PRESS(ev->keys, KEY_DOWN) || KEYCHECK_PRESS(ev->keys, KEY_UP))
+			{
+				monoPage = (uint8_t)(monoPage ^ 1U);
+				updateScreen();
+			}
+#endif
 		}
 	}
 

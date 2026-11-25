@@ -54,6 +54,7 @@ static float _angleOffset = DEFAULT_ANGLE_OFFSET;
 extern bool headerRowIsDirty;
 
 
+#define SCREEN_BUF_BYTES ((DISPLAY_SIZE_X * DISPLAY_SIZE_Y) / 8) // Fork: the buffer size in bytes
 static __attribute__((section(".data.$RAM2"))) uint8_t screenBufData[((DISPLAY_SIZE_X * DISPLAY_SIZE_Y) >> 3)];
 uint8_t *screenBuf = screenBufData;
 
@@ -184,6 +185,12 @@ int displayPrintCore(int16_t x, int16_t y, const char *szMsg, ucFont_t fontSize,
 
 	sLen = strlen(szMsg);
 
+	// Fork: nothing outside the screen buffer (layouts made for taller screens used to write past it)
+	if ((y < 0) || (y >= DISPLAY_SIZE_Y) || (x < 0) || (x >= DISPLAY_SIZE_X))
+	{
+		return -1;
+	}
+
 	switch(fontSize)
 	{
 #if defined(PLATFORM_RD5R)
@@ -287,7 +294,7 @@ int displayPrintCore(int16_t x, int16_t y, const char *szMsg, ucFont_t fontSize,
 			if ((y & 0x07) == 0)
 			{
 				// y position is aligned to a row
-				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < (DISPLAY_SIZE_X * DISPLAY_SIZE_Y)); p++)
+				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < SCREEN_BUF_BYTES); p++)
 				{
 					if (isInverted)
 					{
@@ -310,7 +317,7 @@ int displayPrintCore(int16_t x, int16_t y, const char *szMsg, ucFont_t fontSize,
 				int16_t shiftNum = y & 0x07;
 				// y position is NOT aligned to a row
 
-				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < (DISPLAY_SIZE_X * DISPLAY_SIZE_Y)); p++)
+				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < SCREEN_BUF_BYTES); p++)
 				{
 					if (isInverted)
 					{
@@ -331,7 +338,7 @@ int displayPrintCore(int16_t x, int16_t y, const char *szMsg, ucFont_t fontSize,
 				readPos = (currentCharData + row * charWidthPixels);
 				writePos = (screenBuf + x + (i * charWidthPixels) + ((y >> 3) + row + 1) * DISPLAY_SIZE_X) ;
 
-				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < (DISPLAY_SIZE_X * DISPLAY_SIZE_Y)); p++)
+				for(int16_t p = 0; (p < charWidthPixels) && ((writePos - screenBuf) < SCREEN_BUF_BYTES); p++)
 				{
 					if (isInverted)
 					{
@@ -1061,6 +1068,30 @@ void displayDrawRect(int16_t x, int16_t y, int16_t w, int16_t h, bool isInverted
  */
 void displayFillRect(int16_t x, int16_t y, int16_t width, int16_t height, bool isInverted)
 {
+	// Fork: clip to the screen (the code below writes the buffer without any check)
+	if (x < 0)
+	{
+		width += x;
+		x = 0;
+	}
+	if (y < 0)
+	{
+		height += y;
+		y = 0;
+	}
+	if ((x + width) > DISPLAY_SIZE_X)
+	{
+		width = (DISPLAY_SIZE_X - x);
+	}
+	if ((y + height) > DISPLAY_SIZE_Y)
+	{
+		height = (DISPLAY_SIZE_Y - y);
+	}
+	if ((width <= 0) || (height <= 0))
+	{
+		return;
+	}
+
 	uint8_t *addPtr;
 	int16_t endStripe 	= x + width;
 	int16_t startRow 	= y >> 3;
@@ -1087,7 +1118,7 @@ void displayFillRect(int16_t x, int16_t y, int16_t width, int16_t height, bool i
 	}
 	else
 	{
-		for(int16_t row = startRow; row <= endRow; row++)
+		for(int16_t row = startRow; ((row <= endRow) && (row < DISPLAY_NUMBER_OF_ROWS)); row++)
 		{
 			if (row == startRow)
 			{

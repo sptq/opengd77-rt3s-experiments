@@ -275,12 +275,218 @@ static void drawEditor(int16_t y0, bool emcom)
 	emcomUiText(4, (int16_t)(y0 + (SK_FIELD_COUNT * EDIT_ROW_H) + (emcom ? 1 : 0)), buf, FONT_SIZE_1, THEME_ITEM_FG_RSSI_BAR_S9P, false);
 }
 
+#if defined(EMCOM_UI_MONO)
+// --- 128 x 64 mono (MD-9600) -------------------------------------------------------------------
+// List: title "SKED" with the next sked / NOW and its count-down (or NO SKED / NO CLOCK), 4 slot
+// rows of 9 px (slot, period and start, count-down, NOW / ON / OFF / EMPTY tag), a divider and the
+// selected slot's length and tune with the UTC clock. Editor: the 5 fields as rows of 9 px.
+#define MONO_LIST_Y    10
+#define MONO_ROW_H     9
+#define MONO_WHEN_X    16
+#define MONO_CD_R      104
+#define MONO_DETAIL_Y  47
+#define MONO_VALUE_X   52
+
+// skedFormatWhen() in at most 9 characters: "DAY 06:00", "1H :00", "30M :15", "12H 01:30"
+static void whenShort(const skedTime_t *t, char *buf, size_t size)
+{
+	unsigned h = (unsigned)(t->offsetMin / 60U), m = (unsigned)(t->offsetMin % 60U);
+
+	if (t->periodMin >= SKED_DAY_MIN)
+	{
+		snprintf(buf, size, "DAY %02u:%02u", h, m);
+	}
+	else if (t->periodMin == 60U)
+	{
+		snprintf(buf, size, "1H :%02u", m);
+	}
+	else if (t->periodMin < 60U)
+	{
+		snprintf(buf, size, "%uM :%02u", (unsigned)t->periodMin, m);
+	}
+	else
+	{
+		snprintf(buf, size, "%uH %02u:%02u", (unsigned)(t->periodMin / 60U), h, m);
+	}
+}
+
+// State tag ending at xr: solid (inverse block, bold) or outlined; the shades swap on the selected bar
+static void monoTag(int16_t xr, int16_t y, const char *str, bool solid, bool sel)
+{
+	int16_t w = (int16_t)((strlen(str) * 6) + 3);
+	int16_t x = (int16_t)(xr - w);
+
+	if (solid)
+	{
+		displayFillRect(x, y, w, MONO_ROW_H, sel);
+		displayPrintCore((x + 2), (y + 1), str, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, (sel == false));
+	}
+	else
+	{
+		displayDrawRect(x, y, w, MONO_ROW_H, (sel == false));
+		displayPrintCore((x + 2), (y + 1), str, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+	}
+}
+
+static void drawListRowMono(int i, int16_t y)
+{
+	fieldSked_t s;
+	char buf[16];
+	char cd[12];
+	bool sel = (i == selected());
+	bool used = fieldSkedGet(i, &s);
+	bool clock = skedClockValid();
+	bool on = (used && s.time.enabled && clock && skedIsOn(uiDataGlobal.dateTimeSecs, &s.time));
+
+	if (sel)
+	{
+		displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+	}
+	snprintf(buf, sizeof(buf), "S%d", (i + 1));
+	displayPrintCore(1, (y + 1), buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+
+	if (used == false)
+	{
+		displayPrintCore(MONO_WHEN_X, (y + 1), "NO SKED", FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+		monoTag(DISPLAY_SIZE_X, y, "EMPTY", false, sel);
+		return;
+	}
+
+	whenShort(&s.time, buf, sizeof(buf));
+	displayPrintCore(MONO_WHEN_X, (y + 1), buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+	monoTag(DISPLAY_SIZE_X, y, (on ? "NOW" : (s.time.enabled ? "ON" : "OFF")), on, sel);
+	if (s.time.enabled && clock)
+	{
+		skedFormatCountdown((on ? skedSecondsSinceStart(uiDataGlobal.dateTimeSecs, &s.time) : skedSecondsToStart(uiDataGlobal.dateTimeSecs, &s.time)), cd, sizeof(cd));
+		displayPrintCore((int16_t)(MONO_CD_R - ((int16_t)strlen(cd) * 6)), (y + 1), cd, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+	}
+}
+
+// Selected slot: length and tune (or how to set one), the UTC clock on the right
+static void drawDetailMono(void)
+{
+	fieldSked_t s;
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+	char tune[24];
+	int16_t rw = 0;
+
+	emcomUiDivider(MONO_DETAIL_Y - 1);
+	if (skedClockValid())
+	{
+		uint32_t daySecs = (uiDataGlobal.dateTimeSecs % 86400U);
+
+		snprintf(buf, sizeof(buf), "%02u:%02uZ", (unsigned)(daySecs / 3600U), (unsigned)((daySecs / 60U) % 60U));
+		rw = (int16_t)(emcomUiText(DISPLAY_SIZE_X, MONO_DETAIL_Y, buf, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, true) + 6);
+	}
+
+	if (fieldSkedGet(selected(), &s))
+	{
+		tuneText(&s, tune, sizeof(tune));
+		snprintf(buf, sizeof(buf), "%uM %s", (unsigned)s.time.durationMin, tune);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "GRN sets one");
+	}
+	buf[(DISPLAY_SIZE_X - rw) / 6] = 0;
+	emcomUiText(0, MONO_DETAIL_Y, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+}
+
+static void drawEditorMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+
+	for (int f = 0; f < SK_FIELD_COUNT; f++)
+	{
+		int16_t y = (int16_t)(MONO_LIST_Y + (f * MONO_ROW_H));
+		bool sel = (f == ui.field);
+
+		if (sel)
+		{
+			displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+		}
+		displayPrintCore(2, (y + 1), fieldNames[f], FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+		fieldValue((skField_t)f, buf, sizeof(buf));
+		buf[(DISPLAY_SIZE_X - MONO_VALUE_X - 8) / 6] = 0;
+		displayPrintCore(MONO_VALUE_X, (y + 1), buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+		if (sel)
+		{
+			// < > : LEFT / RIGHT change it
+			displayPrintCore((MONO_VALUE_X - 8), (y + 1), "<", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+			displayPrintCore((DISPLAY_SIZE_X - 6), (y + 1), ">", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+		}
+	}
+}
+
+static void updateScreenMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+
+	displayClearBuf();
+
+	if (ui.mode == SK_MODE_EDIT)
+	{
+		snprintf(buf, sizeof(buf), "S%d", (selected() + 1));
+		emcomUiTitle("EDIT SKED", buf);
+		drawEditorMono();
+		emcomUiKeyBar("UP/DN <> SET GRN SAVE");
+	}
+	else
+	{
+		skedNext_t next;
+		char cd[12];
+
+		// the next sked (or the one on now) with its count-down, in the title bar
+		skedNextGet(&next);
+		if (skedClockValid() == false)
+		{
+			snprintf(buf, sizeof(buf), "NO CLOCK");
+		}
+		else if (next.slot < 0)
+		{
+			snprintf(buf, sizeof(buf), "NO SKED");
+		}
+		else
+		{
+			skedFormatCountdown(next.secs, cd, sizeof(cd));
+			snprintf(buf, sizeof(buf), (next.on ? "S%d NOW %s" : "NEXT S%d %s"), (next.slot + 1), cd);
+		}
+		emcomUiTitle("SKED", buf);
+
+		for (int i = 0; i < FIELD_SKED_SLOTS; i++)
+		{
+			drawListRowMono(i, (int16_t)(MONO_LIST_Y + (i * MONO_ROW_H)));
+		}
+		drawDetailMono();
+
+		if (ui.mode == SK_MODE_CONFIRM_DELETE)
+		{
+			snprintf(buf, sizeof(buf), "DEL S%d", (selected() + 1));
+			emcomUiConfirmBar(buf);
+		}
+		else
+		{
+			emcomUiKeyBar("GRN EDIT 0 DEL RED BK");
+		}
+	}
+
+	displayRender();
+}
+#endif
+
 static void updateScreen(void)
 {
 	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
 	bool emcom = emcomStyleEnabled();
 
 	ui.drawnSecs = uiDataGlobal.dateTimeSecs;
+#if defined(EMCOM_UI_MONO)
+	if (emcom)
+	{
+		updateScreenMono();
+		return;
+	}
+#endif
 	displayClearBuf();
 
 	if (emcom)

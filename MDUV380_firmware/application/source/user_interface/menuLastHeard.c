@@ -235,6 +235,16 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 
 	displayThemeApply(THEME_ITEM_FG_CHANNEL_CONTACT_INFO, THEME_ITEM_BG);
 
+#if defined(EMCOM_UI_MONO)
+	// Fork: say why the list is empty
+	if (uiDataGlobal.lastHeardCount == 0)
+	{
+		displayPrintCentered(22, "Nothing heard yet", FONT_SIZE_1);
+		displayPrintCentered(34, "DMR stations heard", FONT_SIZE_1);
+		displayPrintCentered(43, "on air appear here", FONT_SIZE_1);
+	}
+#endif
+
 	// skip over the first menuDataGlobal.currentItemIndex in the listing
 	for(int i = 0; i < firstDisplayed; i++)
 	{

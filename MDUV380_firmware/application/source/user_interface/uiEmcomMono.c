@@ -662,6 +662,12 @@ static void drawBottomRow(emcomState_t st)
 			r -= txt(r, FOOT_Y, loc, (gpsHasFix() ? FONT_SIZE_1_BOLD : FONT_SIZE_1), false, AL_R) + 4;
 		}
 	}
+#if defined(HAS_GPS)
+	else if ((SETTINGS_GPS_MODE_GET(nonVolatileSettings) >= GPS_MODE_ON) && ((r - (6 * 6)) > (leftEnd + 3)))
+	{
+		r -= txt(r, FOOT_Y, "NO FIX", FONT_SIZE_1, false, AL_R) + 4;
+	}
+#endif
 	UNUSED_PARAMETER(buf);
 }
 
@@ -672,12 +678,20 @@ static void drawZoneRow(const emcomMainInfo_t *info)
 
 	if (info->isVFO)
 	{
-		snprintf(buf, sizeof(buf), "VFO %c  %s", info->vfoLetter, (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"));
+		char chip[8];
+
+		snprintf(chip, sizeof(chip), "VFO %c", info->vfoLetter);
+		box(0, (ZONE_Y - 1), (int16_t)((strlen(chip) * 6) + 3), 9, true);
+		int16_t x = (int16_t)(txt(2, ZONE_Y, chip, FONT_SIZE_1_BOLD, true, AL_L) + 6);
 		if (info->freqEntry)
 		{
-			snprintf(buf, sizeof(buf), "VFO %c  ENTER %s", info->vfoLetter, (info->entryTx ? "TX" : "RX"));
+			snprintf(buf, sizeof(buf), "ENTER %s", (info->entryTx ? "TX" : "RX"));
 		}
-		txt(0, ZONE_Y, buf, FONT_SIZE_1, false, AL_L);
+		else
+		{
+			snprintf(buf, sizeof(buf), "%s", (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"));
+		}
+		txt(x, ZONE_Y, buf, FONT_SIZE_1, false, AL_L);
 
 		if (trxGetMode() == RADIO_MODE_ANALOG)
 		{
@@ -693,13 +707,15 @@ static void drawZoneRow(const emcomMainInfo_t *info)
 	snprintf(zone, sizeof(zone), "%s", (info->zoneName ? info->zoneName : ""));
 	if (info->channelCount > 0)
 	{
-		snprintf(buf, sizeof(buf), "%d/%d", info->channelNumber, info->channelCount);
+		snprintf(buf, sizeof(buf), "CH%d/%d", info->channelNumber, info->channelCount);
 	}
 	else
 	{
-		snprintf(buf, sizeof(buf), "%d", info->channelNumber);
+		snprintf(buf, sizeof(buf), "CH%d", info->channelNumber);
 	}
-	int16_t rw = txt((W - 1), ZONE_Y, buf, FONT_SIZE_1, false, AL_R);
+	int16_t rw = (int16_t)((strlen(buf) * 6) + 3);
+	box((W - rw), (ZONE_Y - 1), rw, 9, true);
+	txt((W - 2), ZONE_Y, buf, FONT_SIZE_1_BOLD, true, AL_R);
 	size_t maxChars = (size_t)((W - rw - 6) / 6);
 	if (strlen(zone) > maxChars)
 	{
@@ -780,18 +796,10 @@ static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
 		formatFreq((info->entryTx ? rxFreq : txFreq), ofs, sizeof(ofs));
 		snprintf(buf, sizeof(buf), "%s %s", (info->entryTx ? "RX" : "TX"), ofs);
 		txt(0, FREQ_Y, buf, FONT_SIZE_1, false, AL_L);
+		offsetString(buf, sizeof(buf));
 		if (digital)
 		{
-			snprintf(buf, sizeof(buf), "CC%u", (unsigned)trxGetDMRColourCode());
-		}
-		else if (currentChannelData->tot != 0)
-		{
-			uint32_t secs = (currentChannelData->tot * 15U);
-			snprintf(buf, sizeof(buf), "TOT %u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
-		}
-		else
-		{
-			buf[0] = 0;
+			snprintf(buf, sizeof(buf), "CC%u TS%d", (unsigned)trxGetDMRColourCode(), (trxGetDMRTimeSlot() + 1));
 		}
 		txt((W - 1), FREQ_Y, buf, FONT_SIZE_1, false, AL_R);
 		return;
@@ -899,7 +907,7 @@ static void drawDetails(void)
 }
 
 // Lower row in standby: DMR last heard, else the tones and squelch
-static void drawInfoRow(void)
+static void drawInfoRow(bool isVFO)
 {
 	char buf[28];
 
@@ -928,14 +936,41 @@ static void drawInfoRow(void)
 
 	char rx[10];
 	char tx[10];
-	uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
+	uint16_t rxT = currentChannelData->rxTone;
+	uint16_t txT = currentChannelData->txTone;
 
-	toneString(currentChannelData->rxTone, rx, sizeof(rx));
-	toneString(currentChannelData->txTone, tx, sizeof(tx));
-	snprintf(buf, sizeof(buf), "RXT %s TXT %s", rx, tx);
+	toneString(rxT, rx, sizeof(rx));
+	toneString(txT, tx, sizeof(tx));
+	if ((rxT == CODEPLUG_CSS_TONE_NONE) && (txT == CODEPLUG_CSS_TONE_NONE))
+	{
+		snprintf(buf, sizeof(buf), "No tones");
+	}
+	else if (rxT == txT)
+	{
+		snprintf(buf, sizeof(buf), "%s %s", ((codeplugGetCSSType(txT) & CSS_TYPE_DCS) ? "DCS" : "CTCSS"), tx);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "RX %s TX %s", rx, tx);
+	}
 	txt(0, ROW_Y, buf, FONT_SIZE_1, false, AL_L);
-	snprintf(buf, sizeof(buf), "SQ%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
-	txt((W - 1), ROW_Y, buf, FONT_SIZE_1, false, AL_R);
+
+	if (isVFO)
+	{
+		if (currentChannelData->tot != 0)
+		{
+			uint32_t secs = (currentChannelData->tot * 15U);
+			snprintf(buf, sizeof(buf), "TOT %u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
+			txt((W - 1), ROW_Y, buf, FONT_SIZE_1, false, AL_R);
+		}
+	}
+	else
+	{
+		uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
+
+		snprintf(buf, sizeof(buf), "SQL%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
+		txt((W - 1), ROW_Y, buf, FONT_SIZE_1, false, AL_R);
+	}
 }
 
 // FM reception: S-meter, the time on the channel and dBm under the frequency
@@ -1163,7 +1198,7 @@ void emcomRenderMain(const emcomMainInfo_t *info)
 				}
 				else
 				{
-					drawInfoRow();
+					drawInfoRow(info->isVFO);
 					drawBottomRow(st);
 				}
 			}

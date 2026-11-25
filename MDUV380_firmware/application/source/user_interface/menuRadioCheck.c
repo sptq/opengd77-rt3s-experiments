@@ -118,6 +118,112 @@ static const char *ratingWord(int rd, themeItem_t *colour)
 	return ((rd >= 4) ? "OK" : ((rd == 3) ? "WEAK" : "POOR"));
 }
 
+#if defined(EMCOM_UI_MONO)
+// 128 x 64 mono: title, live level row, the last report ("5 BY 9" 8x16 with its rating, length,
+// mode, average / peak dBm), the two older reports as 9 px rows, the key bar or the confirmation
+#define MONO_LINE_CHARS  21
+
+static void updateScreenMono(void)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
+	size_t lineSize = SAFE_MIN(sizeof(buf), (size_t)(MONO_LINE_CHARS + 1));
+	int dBm = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
+	bool rx = carrier();
+	themeItem_t colour;
+	const char *word;
+	int16_t x;
+	int16_t rightX;
+
+	displayClearBuf();
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)rc.count, (unsigned)REPORTS);
+	emcomUiTitle("RADIO CHECK", buf);
+
+	// live level row (y 10): carrier, S level, dBm ; length of the over being received, or the mode
+	if (rc.active)
+	{
+		uint32_t ds = ((ticksGetMillis() - rc.start) / 100U);
+
+		snprintf(buf, lineSize, "%u.%us", (unsigned)(ds / 10U), (unsigned)(ds % 10U));
+	}
+	else
+	{
+		snprintf(buf, lineSize, "%s", ((trxGetMode() == RADIO_MODE_DIGITAL) ? "DMR" : "FM"));
+	}
+	rightX = (int16_t)(DISPLAY_SIZE_X - 1 - (strlen(buf) * 6));
+	emcomUiText((DISPLAY_SIZE_X - 1), 10, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+
+	x = (int16_t)(emcomUiChip(0, 10, (rx ? "RX" : "IDLE"), THEME_ITEM_FG_DEFAULT, (rx ? EMCOM_CHIP_SOLID : EMCOM_CHIP_OUTLINE), false) + 3);
+	sText(dBm, buf, lineSize);
+	x = (int16_t)(x + emcomUiText(x, 10, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false) + 4);
+	snprintf(buf, lineSize, "%ddBm", dBm);
+	if ((x + (int16_t)(strlen(buf) * 6)) > (rightX - 3))
+	{
+		buf[strlen(buf) - 3] = 0; // no room for the unit
+	}
+	if ((x + (int16_t)(strlen(buf) * 6)) <= (rightX - 3))
+	{
+		emcomUiText(x, 10, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	}
+
+	if (rc.count == 0U)
+	{
+		displayPrintCentered(20, "LISTENING", FONT_SIZE_3);
+		emcomUiText(0, 37, "Each received over is", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+		emcomUiText(0, 46, "rated R1-5 / S1-9.", FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+	}
+	else
+	{
+		const rcReport_t *r = &rc.reports[0];
+		int rd = readability(r->avg, r->dmr);
+		int st = strength(r->avg);
+
+		// last report (y 19..35): "5 BY 9" ; rating chip + length, mode + average / peak dBm
+		snprintf(buf, lineSize, "%d BY %d", rd, st);
+		emcomUiText(0, 19, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+		word = ratingWord(rd, &colour);
+		x = (int16_t)(52 + emcomUiChip(52, 20, word, colour, EMCOM_CHIP_SOLID, false) + 3);
+		snprintf(buf, lineSize, "%u.%us", (unsigned)(r->lenDs / 10U), (unsigned)(r->lenDs % 10U));
+		if ((x + (int16_t)(strlen(buf) * 6)) <= DISPLAY_SIZE_X)
+		{
+			emcomUiText(x, 20, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+		snprintf(buf, lineSize, "%s %d/%d", (r->dmr ? "DMR" : "FM"), r->avg, r->peak);
+		if ((52 + (int16_t)(strlen(buf) * 6)) > DISPLAY_SIZE_X)
+		{
+			snprintf(buf, lineSize, "%d/%d", r->avg, r->peak); // no room for the mode
+		}
+		emcomUiText(52, 28, buf, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+
+		// older reports (y 37, 46): time, "4 BY 9", average dBm, rating chip
+		int16_t y = 37;
+
+		for (int i = 1; (i < rc.count) && (y <= 46); i++, y += 9)
+		{
+			const rcReport_t *o = &rc.reports[i];
+			int ord = readability(o->avg, o->dmr);
+
+			reportTime(o, buf, lineSize);
+			emcomUiText(0, y, buf, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			snprintf(buf, lineSize, "%d BY %d", ord, strength(o->avg));
+			emcomUiText(33, y, buf, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+			snprintf(buf, lineSize, "%d", o->avg);
+			emcomUiText(72, y, buf, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+			word = ratingWord(ord, &colour);
+			emcomUiChip((DISPLAY_SIZE_X - 1), y, word, colour, EMCOM_CHIP_SOLID, true);
+		}
+	}
+
+	if (rc.confirmClear)
+	{
+		emcomUiConfirmBar("CLEAR?");
+	}
+	else
+	{
+		emcomUiKeyBar((rc.count > 0U) ? "0 CLEAR  RED EXIT" : "RED EXIT");
+	}
+	displayRender();
+}
+#else
 static void updateScreenEmcom(void)
 {
 	char buf[SCREEN_LINE_BUFFER_SIZE + 8];
@@ -210,6 +316,7 @@ static void updateScreenEmcom(void)
 	}
 	displayRender();
 }
+#endif // EMCOM_UI_MONO
 #endif
 
 static void updateScreen(void)
@@ -223,7 +330,11 @@ static void updateScreen(void)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		updateScreenMono();
+#else
 		updateScreenEmcom();
+#endif
 		return;
 	}
 #endif

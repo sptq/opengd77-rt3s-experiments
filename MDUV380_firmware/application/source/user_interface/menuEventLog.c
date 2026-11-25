@@ -74,6 +74,107 @@ static void timeString(uint32_t t, char *buf, size_t size, bool withDate)
 }
 
 #if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+// 128 x 64 mono (MD-9600): title with n/count, rows of 9 px (UTC time, type tag, text), the
+// selected one as a dark bar with light text; under a divider the selected entry's date and
+// its full text (20 characters fit)
+#define MONO_LIST_Y   10
+#define MONO_ROW_H    9
+#define MONO_ROWS     3U
+#define MONO_TAG_X    33
+#define MONO_TAG_W    21
+#define MONO_TEXT_X   57
+#define MONO_DATE_Y   38
+#define MONO_FULL_Y   47
+
+// Type tag: a solid block, or a light outline on the selected bar
+static void typeTagMono(int16_t y, uint8_t type, bool sel)
+{
+	if (sel)
+	{
+		displayDrawRect(MONO_TAG_X, y, MONO_TAG_W, MONO_ROW_H, false);
+	}
+	else
+	{
+		displayFillRect(MONO_TAG_X, y, MONO_TAG_W, MONO_ROW_H, false);
+	}
+	displayPrintCore((MONO_TAG_X + 2), (y + 1), eventLogTypeName(type), FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+}
+
+static void updateScreenMono(void)
+{
+	char buf[32];
+	eventLogRecord_t rec;
+	uint32_t count = eventLogCount();
+
+	displayClearBuf();
+	if (count == 0U)
+	{
+		emcomUiTitle(currentLanguage->event_log, "0");
+		emcomUiChip(0, 11, "EMPTY", THEME_ITEM_FG_DECORATION, EMCOM_CHIP_OUTLINE, false);
+		displayPrintCentered(21, "Log empty", FONT_SIZE_3);
+		displayPrintCentered(38, "TX RX DMR APRS MSG", FONT_SIZE_1);
+		displayPrintCentered(47, "DTMF SOS SSTV events", FONT_SIZE_1);
+		emcomUiKeyBar("RED EXIT");
+		displayRender();
+		return;
+	}
+
+	if (selected >= count)
+	{
+		selected = (count - 1U);
+	}
+
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)(selected + 1U), (unsigned)count);
+	emcomUiTitle(currentLanguage->event_log, buf);
+
+	uint32_t first = ((selected >= MONO_ROWS) ? (selected - MONO_ROWS + 1U) : 0U);
+
+	for (uint32_t r = 0; r < MONO_ROWS; r++)
+	{
+		uint32_t idx = (first + r);
+		int16_t y = (int16_t)(MONO_LIST_Y + (r * MONO_ROW_H));
+		bool sel = (idx == selected);
+
+		if ((idx >= count) || (eventLogGet(idx, &rec) == false))
+		{
+			break;
+		}
+
+		if (sel)
+		{
+			displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+		}
+		timeString(rec.time, buf, sizeof(buf), false);
+		displayPrintCore(1, (y + 1), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+		typeTagMono(y, rec.type, sel);
+		snprintf(buf, sizeof(buf), "%.11s", rec.text); // 11 characters fit
+		displayPrintCore(MONO_TEXT_X, (y + 1), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+	}
+
+	// the selected entry: date and time, the full text
+	if (eventLogGet(selected, &rec))
+	{
+		char full[EVENT_LOG_TEXT_LEN + 1];
+
+		emcomUiDivider(MONO_DATE_Y - 1);
+		timeString(rec.time, buf, sizeof(buf), true);
+		emcomUiText(0, MONO_DATE_Y, buf, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+		snprintf(full, sizeof(full), "%.*s", (int)EVENT_LOG_TEXT_LEN, rec.text); // not terminated when full
+		emcomUiText(0, MONO_FULL_Y, full, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+	}
+
+	if (confirmClear)
+	{
+		emcomUiConfirmBar("CLEAR?");
+	}
+	else
+	{
+		emcomUiKeyBar("UP/DN 0 CLR RED EXIT");
+	}
+	displayRender();
+}
+#else
 // EMCOM style: the date of the selected entry on the status strip, rows of time / type chip /
 // text, the selected entry in full above the key bar (8x16 in the contrast style when it fits)
 #define EM_ROW_H     11
@@ -189,6 +290,7 @@ static void updateScreenEmcom(void)
 	}
 	displayRender();
 }
+#endif // EMCOM_UI_MONO
 #endif
 
 static void updateScreen(void)
@@ -200,7 +302,11 @@ static void updateScreen(void)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		updateScreenMono();
+#else
 		updateScreenEmcom();
+#endif
 		return;
 	}
 #endif
