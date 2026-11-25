@@ -78,6 +78,21 @@ static char dtmfRing[APRS_RX_TONE_TEXT_LEN];
 static volatile uint32_t dtmfHead;
 static char cwRing[APRS_RX_TONE_TEXT_LEN];
 static volatile uint32_t cwHead;
+// STQC: groups from the IRQ (one address + one command in flight), calls kept for display
+#define STQC_GROUP_QUEUE   2U
+#define STQC_PAIR_MS       1500U       // a command this soon after an address belongs to it
+typedef struct
+{
+	uint8_t len;
+	uint8_t symbols[STQC_MAX_SYMBOLS];
+} stqcGroup_t;
+static stqcGroup_t stqcQueue[STQC_GROUP_QUEUE];
+static volatile uint8_t stqcQueueHead;
+static volatile uint8_t stqcQueueTail;
+static aprsRxStqcCall_t stqcCalls[APRS_RX_STQC_CALLS];
+static uint8_t stqcCallCount;
+static uint8_t stqcSerial;
+static bool stqcAddrPending;       // stqcCalls[0] holds an address still waiting for its command
 static uint32_t dtmfSeen;          // main loop: chars already looked at (background notification)
 static char dtmfSequence[17];
 static uint32_t dtmfSequenceLen;
@@ -138,6 +153,7 @@ void aprsRxProcessI2SBuffer(const int16_t *interleaved, uint32_t frames)
 	aprsRxDecoderProcess(interleaved, frames, 2U);
 	dtmfRxProcess(interleaved, frames, 2U);
 	cwRxProcess(interleaved, frames, 2U);
+	stqcRxProcess(interleaved, frames, 2U);
 }
 
 void aprsRxSetSstv(bool on, sstvRxPixelCallback_t pixelCallback)
@@ -188,6 +204,139 @@ static void cwCharReceived(char c)
 	cwRing[cwHead % APRS_RX_TONE_TEXT_LEN] = c;
 	__DMB();
 	cwHead++;
+}
+
+// IRQ context
+static void stqcGroupReceived(const uint8_t *symbols, uint8_t len)
+{
+	uint8_t next = (uint8_t)((stqcQueueHead + 1U) % STQC_GROUP_QUEUE);
+
+	if (next == stqcQueueTail)
+	{
+		return; // main loop too slow, drop
+	}
+	memcpy(stqcQueue[stqcQueueHead].symbols, symbols, len);
+	stqcQueue[stqcQueueHead].len = len;
+	__DMB(); // data before index
+	stqcQueueHead = next;
+}
+
+uint32_t aprsRxStqcCount(void)
+{
+	return stqcCallCount;
+}
+
+const aprsRxStqcCall_t *aprsRxStqcGet(uint32_t index)
+{
+	return ((index < stqcCallCount) ? &stqcCalls[index] : NULL);
+}
+
+uint32_t aprsRxStqcSerial(void)
+{
+	return stqcSerial;
+}
+
+void aprsRxStqcClear(void)
+{
+	stqcCallCount = 0U;
+	stqcAddrPending = false;
+	stqcSerial++;
+}
+
+void aprsRxStqcFormat(const aprsRxStqcCall_t *call, char *buf, uint32_t size)
+{
+	if (call->addrLen && call->cmdLen)
+	{
+		snprintf(buf, size, "A%u C%u", (unsigned)call->addr, (unsigned)call->cmd);
+	}
+	else if (call->addrLen)
+	{
+		snprintf(buf, size, "A%u", (unsigned)call->addr);
+	}
+	else
+	{
+		snprintf(buf, size, "C%u", (unsigned)call->cmd);
+	}
+}
+
+// A finished call: event log and, in the background on the main screens, a notification
+static void stqcCallDone(const aprsRxStqcCall_t *call)
+{
+	char buf[SCREEN_LINE_BUFFER_SIZE];
+	char text[16];
+	int menu = menuSystemGetCurrentMenuNumber();
+
+	aprsRxStqcFormat(call, text, sizeof(text));
+#if defined(HAS_EVENT_LOG)
+	eventLogAdd(EVENT_LOG_DTMF, "STQC %s", text);
+#endif
+	if (backgroundOn && (monitorOn == false) && ((menu == UI_VFO_MODE) || (menu == UI_CHANNEL_MODE)))
+	{
+		snprintf(buf, sizeof(buf), "STQC %s", text);
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, NOTIFICATION_MS, buf, false);
+	}
+}
+
+static void stqcNewCall(uint32_t now)
+{
+	if (stqcCallCount < APRS_RX_STQC_CALLS)
+	{
+		stqcCallCount++;
+	}
+	memmove(&stqcCalls[1], &stqcCalls[0], ((stqcCallCount - 1U) * sizeof(stqcCalls[0])));
+	memset(&stqcCalls[0], 0, sizeof(stqcCalls[0]));
+	stqcCalls[0].ms = now;
+}
+
+// Main loop: pair the address (7 symbols) with the command (8 symbols) that follows it
+static void stqcTick(uint32_t now)
+{
+	while (stqcQueueTail != stqcQueueHead)
+	{
+		const stqcGroup_t *g = &stqcQueue[stqcQueueTail];
+		uint16_t value = stqcSymbolsToValue(g->symbols, g->len);
+		uint8_t len = g->len;
+
+		__DMB();
+		stqcQueueTail = (uint8_t)((stqcQueueTail + 1U) % STQC_GROUP_QUEUE);
+
+		if (stqcAddrPending && (len != 7U))
+		{
+			// the command of the pending address (usually 8 symbols, any other length is kept as the command too)
+			stqcAddrPending = false;
+			stqcCalls[0].cmd = value;
+			stqcCalls[0].cmdLen = len;
+			stqcCallDone(&stqcCalls[0]);
+		}
+		else
+		{
+			if (stqcAddrPending)
+			{
+				stqcAddrPending = false;
+				stqcCallDone(&stqcCalls[0]); // two addresses in a row: the first had no command
+			}
+			stqcNewCall(now);
+			if (len == 7U)
+			{
+				stqcCalls[0].addr = value;
+				stqcCalls[0].addrLen = len;
+				stqcAddrPending = true;
+			}
+			else
+			{
+				stqcCalls[0].cmd = value;
+				stqcCalls[0].cmdLen = len;
+				stqcCallDone(&stqcCalls[0]);
+			}
+		}
+		stqcSerial++;
+	}
+
+	if (stqcAddrPending && ((now - stqcCalls[0].ms) > STQC_PAIR_MS))
+	{
+		stqcAddrPending = false;
+		stqcCallDone(&stqcCalls[0]); // address only
+	}
 }
 
 uint32_t aprsRxToneText(bool cw, char *out, uint32_t size, uint32_t *serial)
@@ -245,6 +394,8 @@ static void updateEnabled(void)
 		aprsRxDecoderInit(frameReceived);
 		dtmfRxInit(dtmfCharReceived);
 		cwRxInit(cwCharReceived);
+		stqcRxInit(stqcGroupReceived);
+		stqcQueueHead = stqcQueueTail = 0U;
 		queueHead = queueTail = 0U;
 		peakLevel = 0U;
 		levelPercent = 0U;
@@ -899,6 +1050,7 @@ void aprsRxTick(void)
 	}
 
 	dtmfBackgroundTick();
+	stqcTick(now);
 
 	messagesTxTick(now);
 }

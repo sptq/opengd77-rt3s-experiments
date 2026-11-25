@@ -143,6 +143,17 @@ bool settingsLoadSettings(bool reset)
 		return true;
 	}
 
+	// AGC Off remains stored as 0. Enabled settings retain their persisted
+	// numeric values 1..8, but now select the new -9 dB through +12 dB target
+	// curve, so their old gain behavior is not numerically equivalent. Legacy
+	// platform builds could store 9..16; clamp those values to 8 and let the
+	// user recalibrate the preferred setting after upgrading.
+	if (nonVolatileSettings.dmrRxAGC > DMR_RX_AGC_SETTING_COUNT)
+	{
+		nonVolatileSettings.dmrRxAGC = DMR_RX_AGC_SETTING_COUNT;
+		settingsDirty = true;
+	}
+
 	// Force Hotspot mode to off for existing RD-5R users.
 #if defined(PLATFORM_RD5R)
 	nonVolatileSettings.hotspotType = HOTSPOT_TYPE_OFF;

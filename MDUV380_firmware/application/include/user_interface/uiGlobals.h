@@ -413,6 +413,7 @@ typedef struct LinkItem
     uint8_t				receivedTS;
     uint8_t				dmrMode;
     uint16_t			rxAGCGain;
+    uint32_t			agcStationToken;
     struct LinkItem 	*next;
 } LinkItem_t;
 

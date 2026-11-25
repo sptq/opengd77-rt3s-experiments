@@ -6,7 +6,8 @@
  * word (RX green, TX red, SCAN amber, SOS flashing red), UTC clock and
  * position always visible. The classic OpenGD77 screen stays available
  * (Options > Display > Screen style) and is still used for the special
- * modes (VFO sweep, dual watch, frequency entry, channel details).
+ * modes (VFO sweep, dual watch and frequency entry); channel details remains
+ * in the compact EMCOM layout.
  *
  * Use of this source code or binary releases for commercial purposes is
  * strictly forbidden (see license.txt).
@@ -62,7 +63,7 @@ void emcomSetVfoAllowed(bool allowed); // VFO mode: false in sweep / dual watch 
 void emcomSetChannelAllowed(bool allowed); // channel mode: false for the channel details / direct channel entry
 
 void emcomRenderMain(const emcomMainInfo_t *info); // whole screen, rendered
-void emcomRenderStatusBar(void);                   // rows 0..10 (no render)
+void emcomRenderStatusBar(bool forceBatteryDisplay); // rows 0..10 (no render)
 void emcomDrawBar(int barWidth, bool isTx);        // S-meter / mic level, y 12..14 (no render)
 void emcomDrawRssi(int dBm);                       // S-meter from dBm (no render)
 bool emcomNeedsFullRedraw(uint32_t now);           // state, clock, messages... changed
@@ -103,7 +104,7 @@ typedef enum
 bool emcomUiLarge(void);   // contrast style: bold small text, bigger values
 // Text at (x, y) (x: the right edge when alignRight); the contrast style draws FONT_SIZE_1 bold. Returns the width.
 int16_t emcomUiText(int16_t x, int16_t y, const char *str, ucFont_t font, themeItem_t colour, bool alignRight);
-// Small chip around a FONT_SIZE_1 text row at y (9 px high, y - 1 .. y + 7). Returns the width.
+// Small chip around a FONT_SIZE_1 text row at y (10 px high, y - 1 .. y + 8). Returns the width.
 int16_t emcomUiChip(int16_t x, int16_t y, const char *str, themeItem_t colour, emcomChip_t style, bool alignRight);
 int16_t emcomUiKeyValue(int16_t x, int16_t y, const char *key, const char *value, themeItem_t colour); // "KEY value"
 void emcomUiTitle(const char *title, const char *counter); // counter: "3/16", NULL = none

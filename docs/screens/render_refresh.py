@@ -60,12 +60,12 @@ def tx_screen(P, elapsed=12, total=180, digital=False, pwr='5W'):
         R.zone_row(s, P); R.hero(s, P, freq='144.9000 MHz TX', tx=True)
     s.fill(0, R.DIV1_Y, W, 1, P['line'])
     # panel: elapsed time, power
-    s.text(1, 46, mmss(elapsed), 4 if elapsed < 3600 else 3, P['tx'])
+    s.text(1, R.TX_TIMER_Y, mmss(elapsed), 4 if elapsed < 3600 else 3, P['tx'])
     s.text(W - 2, R.PANEL_Y1 - 1, 'PWR', f1(P), P['mut'], True)
     s.text(W - 2, R.PANEL_Y1 + 6, pwr, 3, P['fg'], True)
-    s.fill(0, R.DIV2_Y, W, 1, P['line'])
+    s.fill(0, R.EXPANDED_DIV2_Y, W, 1, P['line'])
     # TOT bar
-    y1, y2, y3 = R.EMCOM_Y1, R.EMCOM_Y2, R.EMCOM_Y3
+    y1, y2, y3 = R.EXPANDED_ROW_Y1, R.EXPANDED_ROW_Y2, R.EXPANDED_ROW_Y3
     s.text(2, y1, 'TOT', f1(P), P['mut'])
     bx, bw = 26, 86
     bh = 9 if P.get('large') else 7
@@ -73,8 +73,8 @@ def tx_screen(P, elapsed=12, total=180, digital=False, pwr='5W'):
     if remaining is None:
         s.text(bx, y1, 'off', f1(P), P['mut'])
     else:
-        last = remaining <= 10
-        span = min(10, total) if last else total  # last seconds: a countdown of these only
+        last = remaining <= R.TX_WARN_SECS
+        span = min(R.TX_WARN_SECS, total) if last else total  # last seconds: a countdown of these only
         fw = (bw - 4) * max(0, min(remaining, span)) // span
         s.rect(bx, by, bw, bh, warn(P) if last else P['mut'])
         if last:
@@ -104,9 +104,9 @@ def tx_screen(P, elapsed=12, total=180, digital=False, pwr='5W'):
 
 def aprs_tx_banner(P):
     s = tx_screen(P)
-    s.fill(0, R.DIV1_Y + 1, W, R.DIV2_Y - R.DIV1_Y - 1, P['tx'])
+    s.fill(0, R.DIV1_Y + 1, W, R.EXPANDED_DIV2_Y - R.DIV1_Y - 1, P['tx'])
     t = 'APRS Tx'
-    s.text((W - len(t) * 16) // 2, 46, t, 4, P['txFg'])
+    s.text((W - len(t) * 16) // 2, R.TX_TIMER_Y, t, 4, P['txFg'])
     return s
 
 
@@ -144,14 +144,28 @@ def glyph(s, P, x, y, kind, c):
         s.fill(x + 6, y + 3, 3, 2, bg); s.fill(x + 6, y + 6, 3, 6, bg)
 
 
-MAIN_ROWS = (12, 17, R.DIV1_Y, R.DIV2_Y, R.EMCOM_Y2 - 1, R.EMCOM_Y3 - 1, R.EMCOM_Y3 + 9, R.FOOTER_Y)
+MAIN_ROWS = (12, 17, R.DIV1_Y, R.COMPACT_DIV2_Y, R.COMPACT_ROW_Y2 - 1,
+             R.COMPACT_ROW_Y3 - 1, R.COMPACT_ROW_Y3 + R.FONT_SIZE_1_HEIGHT + 1, R.FOOTER_Y)
+EXPANDED_ROWS = (12, 17, R.DIV1_Y, R.EXPANDED_DIV2_Y, R.EXPANDED_ROW_Y2 - 1,
+                 R.EXPANDED_ROW_Y3 - 1, R.EXPANDED_ROW_Y3 + R.FONT_SIZE_1_HEIGHT + 1, R.FOOTER_Y)
 
 
-def band(s, P, h):
+def assert_refresh_boundaries():
+    assert MAIN_ROWS == tuple(sorted(MAIN_ROWS))
+    assert EXPANDED_ROWS == tuple(sorted(EXPANDED_ROWS))
+    assert R.EXPANDED_ROW_Y1 + R.CHIP_TOP_OFFSET + R.CHIP_HEIGHT <= R.EXPANDED_ROW_Y2
+    assert R.EXPANDED_ROW_Y1 - 1 + 9 <= R.EXPANDED_ROW_Y2
+    assert R.EXPANDED_ROW_Y3 + R.FONT_SIZE_1_HEIGHT + 1 <= R.FOOTER_Y
+
+
+assert_refresh_boundaries()
+
+
+def band(s, P, h, rows=MAIN_ROWS):
     # uiEmcom.c alertBand(): clear whole text rows of the main screen around the card, centre the card
     y = (H - h) // 2
-    top = max([r for r in MAIN_ROWS if r <= y - 2] or [0])
-    bottom = min([r for r in MAIN_ROWS if r >= y + h + 2] or [H])
+    top = max([r for r in rows if r <= y - 2] or [0])
+    bottom = min([r for r in rows if r >= y + h + 2] or [H])
     s.fill(0, top, W, bottom - top, P['bg'])
     return top + ((bottom - top) - h) // 2
 
@@ -178,7 +192,7 @@ def wrap(msg):
     return lines[:4]
 
 
-def alert(P, kind, message, title=None, keys=None, full=False, under=None):
+def alert(P, kind, message, title=None, keys=None, full=False, under=None, rows=None):
     s = under if under is not None else R.Screen(P['bg'])
     lines = wrap(message)
     if full:
@@ -189,7 +203,7 @@ def alert(P, kind, message, title=None, keys=None, full=False, under=None):
             s.fill(0, bottom, W, 11, P['bar']); s.text(3, bottom + 2, keys, f1(P), P['barFg'])
     else:
         h = STRIP + max(1, len(lines)) * 16 + 6
-        y = band(s, P, h)
+        y = band(s, P, h, MAIN_ROWS if rows is None else rows)
     c = card(s, P, kind, title, y, h)
     by, bh = y + STRIP, h - STRIP - 2
     glyph(s, P, AX + 5, by + (bh - GLYPH) // 2, kind, c)
@@ -200,10 +214,10 @@ def alert(P, kind, message, title=None, keys=None, full=False, under=None):
     return s
 
 
-def level(P, title, value, percent, under):
+def level(P, title, value, percent, under, rows=None):
     s = under
     h = STRIP + 16 + 8
-    y = band(s, P, h)
+    y = band(s, P, h, MAIN_ROWS if rows is None else rows)
     ty = y + STRIP + 3
     card(s, P, 'info', title, y, h)
     if percent < 0:
@@ -217,6 +231,15 @@ def level(P, title, value, percent, under):
 
 def standby(P):
     return A.standby(P)
+
+
+def standby_compact(P):
+    # VFO RX remains a compact layout and is the compact notification underlay.
+    return R.screen_vfo(P)
+
+
+def standby_expanded(P):
+    return R.screen_standby(P, distance=True)
 
 
 # --- menu theme items (emcomThemePreset) for the APRS RX screen ------------------------------------
@@ -368,29 +391,39 @@ def aprs_read(T, idx=0, contrast=False):
 
 
 def main():
-    tx_panels, alert_panels, aprs_panels = [], [], []
+    tx_panels, alert_panels, aprs_panels, notification_panels = [], [], [], []
     for name, P in STYLES + (('mono night', R.MONO_NIGHT), ('contrast night', R.CONTRAST_NIGHT)):
         if name.endswith(' night'):
-            alert_panels += [alert(P, 'warning', 'APRS msg: no ACK', under=standby(P)), level(P, 'Squelch', '45%', 45, standby(P)),
+            alert_panels += [alert(P, 'warning', 'APRS msg: no ACK', under=standby(P), rows=EXPANDED_ROWS), level(P, 'Squelch', '45%', 45, standby(P), rows=EXPANDED_ROWS),
                              alert(P, 'error', 'Out of band', title='TX blocked', full=True),
-                             alert(P, 'info', 'SP7ABC-9:Punkt 2 gotowy, QRV 145.500', under=standby(P)), tx_screen(P, elapsed=172)]
+                             alert(P, 'info', 'SP7ABC-9:Punkt 2 gotowy, QRV 145.500', under=standby(P), rows=EXPANDED_ROWS), tx_screen(P, elapsed=172)]
             continue
         tx_panels += [tx_screen(P), tx_screen(P, elapsed=172), tx_screen(P, elapsed=754, total=None, digital=True)]
         alert_panels += [
             alert(P, 'question', 'Private call\nAccept call?\nSP5ABC Jan', keys='GRN YES     RED NO', full=True),
-            alert(P, 'warning', 'APRS msg: no ACK', under=standby(P)),
+            alert(P, 'warning', 'APRS msg: no ACK', under=standby(P), rows=EXPANDED_ROWS),
             alert(P, 'error', 'Out of band', title='TX blocked', full=True),
-            level(P, 'Squelch', '45%', 45, standby(P)),
-            alert(P, 'info', 'SP7ABC-9:Punkt 2 gotowy, QRV 145.500', under=standby(P)),
+            level(P, 'Squelch', '45%', 45, standby(P), rows=EXPANDED_ROWS),
+            alert(P, 'info', 'SP7ABC-9:Punkt 2 gotowy, QRV 145.500', under=standby(P), rows=EXPANDED_ROWS),
+        ]
+        notification_panels += [
+            alert(P, 'warning', 'APRS msg: no ACK', under=standby_compact(P), rows=MAIN_ROWS),
+            alert(P, 'warning', 'APRS msg: no ACK', under=standby_expanded(P), rows=EXPANDED_ROWS),
         ]
     for name, _ in STYLES:
         T = THEME[name]
         aprs_panels += [aprs_list(T), aprs_read(T, 0, name == 'contrast'), aprs_read(T, 2, name == 'contrast')]
     A.sheet(os.path.join(HERE, 'tx_styles.png'), tx_panels, cols=3)
     A.sheet(os.path.join(HERE, 'alerts_styles.png'), alert_panels, cols=5)
+    A.sheet(os.path.join(HERE, 'notifications_layouts.png'), notification_panels, cols=4)
     A.sheet(os.path.join(HERE, 'aprs_msg_styles.png'), aprs_panels, cols=3)
     aprs_read(THEME['day']).png(os.path.join(HERE, 'aprs_message_read.png'))
-    print('tx_styles.png alerts_styles.png aprs_msg_styles.png aprs_message_read.png')
+    tx_screen(R.DARK, elapsed=12, digital=False).png(os.path.join(HERE, 'emcom_tx_fm.png'))
+    tx_screen(R.DARK, elapsed=172, total=180, digital=False).png(os.path.join(HERE, 'emcom_tot_warning.png'))
+    tx_screen(R.DARK, elapsed=754, total=None, digital=True).png(os.path.join(HERE, 'emcom_tx_dmr.png'))
+    aprs_tx_banner(R.DARK).png(os.path.join(HERE, 'emcom_aprs_tx.png'))
+    print('tx_styles.png alerts_styles.png notifications_layouts.png aprs_msg_styles.png aprs_message_read.png '
+          'emcom_tx_fm.png emcom_tot_warning.png emcom_tx_dmr.png emcom_aprs_tx.png')
 
 
 if __name__ == '__main__':

@@ -283,7 +283,7 @@ menuStatus_t uiVFOMode(uiEvent_t *ev, bool isFirstRun)
 		if (screenOperationMode[nonVolatileSettings.currentVFONumber] == VFO_SCREEN_OPERATION_SCAN)
 		{
 			// Refresh on every step if scan boundaries is equal to one frequency step.
-			uiDataGlobal.Scan.refreshOnEveryStep = ((nonVolatileSettings.vfoScanHigh[nonVolatileSettings.currentVFONumber] - nonVolatileSettings.vfoScanLow[nonVolatileSettings.currentVFONumber]) <= VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)]);
+			uiDataGlobal.Scan.refreshOnEveryStep = ((nonVolatileSettings.vfoScanHigh[nonVolatileSettings.currentVFONumber] - nonVolatileSettings.vfoScanLow[nonVolatileSettings.currentVFONumber]) <= VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)]);
 		}
 
 		// Need to do this last, as other things in the screen init, need to know whether the main screen has just changed
@@ -2315,7 +2315,7 @@ static void handleEvent(uiEvent_t *ev)
 					}
 					else if (uiDataGlobal.FreqEnter.index == FREQ_ENTER_DIGITS_MAX)
 					{
-						int fStep = VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)];
+						int fStep = VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)];
 						int fLower = freqEnterRead(0, 6, false) * 100;
 						int fUpper = freqEnterRead(6, 12, false) * 100;
 
@@ -2385,7 +2385,7 @@ static void handleUpKey(uiEvent_t *ev)
 			}
 			else
 			{
-				stepFrequency(VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)] * uiDataGlobal.Scan.direction);
+				stepFrequency(VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)] * uiDataGlobal.Scan.direction);
 				uiDataGlobal.Scan.timer.timeout = 500;
 				uiDataGlobal.Scan.state = SCAN_STATE_SCANNING;
 				uiVFOModeUpdateScreen(0);
@@ -2393,7 +2393,7 @@ static void handleUpKey(uiEvent_t *ev)
 		}
 		else
 		{
-			stepFrequency(VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)]);
+			stepFrequency(VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)]);
 			uiVFOModeUpdateScreen(0);
 		}
 
@@ -2422,7 +2422,7 @@ static void handleDownKey(uiEvent_t *ev)
 		}
 		else
 		{
-			stepFrequency(VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)] * -1);
+			stepFrequency(VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)] * -1);
 		}
 
 		uiVFOModeUpdateScreen(0);
@@ -2967,7 +2967,7 @@ bool uiVFOModeSweepTuneToPeak(void)
 	}
 
 	int sweepRange = VFO_SWEEP_SCAN_RANGE_SAMPLE_STEP_TABLE[uiDataGlobal.Scan.sweepStepSizeIndex];
-	int vfoStep = VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)];
+	int vfoStep = VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)];
 	int oldFreq = (int)currentChannelData->rxFreq;
 	int targetFreq = oldFreq + ((sweepRange * (vfoSweepPeakIndex - (VFO_SWEEP_NUM_SAMPLES / 2))) / VFO_SWEEP_PIXELS_PER_STEP);
 
@@ -4311,7 +4311,7 @@ static void scanInit(void)
 	}
 
 	// Refresh on every step if scan boundaries is equal to one frequency step.
-	uiDataGlobal.Scan.refreshOnEveryStep = ((nonVolatileSettings.vfoScanHigh[nonVolatileSettings.currentVFONumber] - nonVolatileSettings.vfoScanLow[nonVolatileSettings.currentVFONumber]) <= VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)]);
+	uiDataGlobal.Scan.refreshOnEveryStep = ((nonVolatileSettings.vfoScanHigh[nonVolatileSettings.currentVFONumber] - nonVolatileSettings.vfoScanLow[nonVolatileSettings.currentVFONumber]) <= VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)]);
 
 	clearNuisance();
 
@@ -4551,7 +4551,7 @@ static void scanning(void)
 		else // Frequency scanning mode
 		{
 			uiEvent_t tmpEvent = { .buttons = 0, .keys = NO_KEYCODE, .rotary = 0, .function = 0, .events = NO_EVENT, .hasEvent = 0, .time = 0 };
-			int fStep = VFO_FREQ_STEP_TABLE[(currentChannelData->VFOflag5 >> 4)];
+			int fStep = VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(currentChannelData->VFOflag5)];
 
 			if (uiDataGlobal.Scan.direction == 1)
 			{

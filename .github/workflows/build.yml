@@ -6,6 +6,16 @@ on:
     tags: ['R*-EA4IPW*', 'R*-SP7TQ*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Matrix target to build'
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'MDUV380 (RT3S / MD-UV380)'
+          - 'MDUV380 +10W variant'
+          - 'RT84 / DM-1701'
 
 permissions:
   contents: write  # release job needs to create releases on tag pushes
@@ -17,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Plain host gcc + libm (preinstalled on the runner), no hardware or container
       - name: Run host tests
@@ -30,16 +40,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: MDUV380 (RT3S / MD-UV380)
-            platform: MDUV380
-            variant: ""
-          - name: MDUV380 +10W variant
-            platform: MDUV380
-            variant: UV380_PLUS_10W
-          - name: RT84 / DM-1701
-            platform: RT84_DM1701
-            variant: DM1701
+        include: >-
+          ${{ (inputs.target == 'MDUV380 (RT3S / MD-UV380)' && fromJson('[{"name": "MDUV380 (RT3S / MD-UV380)", "platform": "MDUV380", "variant": ""}]'))
+            || (inputs.target == 'MDUV380 +10W variant' && fromJson('[{"name": "MDUV380 +10W variant", "platform": "MDUV380", "variant": "UV380_PLUS_10W"}]'))
+            || (inputs.target == 'RT84 / DM-1701' && fromJson('[{"name": "RT84 / DM-1701", "platform": "RT84_DM1701", "variant": "DM1701"}]'))
+            || fromJson('[
+              {"name": "MDUV380 (RT3S / MD-UV380)", "platform": "MDUV380", "variant": ""},
+              {"name": "MDUV380 +10W variant", "platform": "MDUV380", "variant": "UV380_PLUS_10W"},
+              {"name": "RT84 / DM-1701", "platform": "RT84_DM1701", "variant": "DM1701"}
+            ]') }}
 
     env:
       IMG_TAG: opengd77-mduv380-builder:latest
@@ -51,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

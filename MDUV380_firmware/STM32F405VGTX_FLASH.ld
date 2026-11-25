@@ -87,8 +87,8 @@ SECTIONS
     . = ALIGN(4);
     /* Fork: the field tool screens go after the codec (.upper_text below), as the code
        before the fixed codec address is full. Keep this list the same as in .rodata and .upper_text. */
-    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o) .text)
-    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o) .text*)
+    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o *menuDmrSms.o *menuDecoders.o) .text)
+    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o *menuDmrSms.o *menuDecoders.o) .text*)
     *(.glue_7)         /* glue arm to thumb code */
     *(.glue_7t)        /* glue thumb to arm code */
     *(.eh_frame)
@@ -104,8 +104,8 @@ SECTIONS
   .rodata :
   {
     . = ALIGN(4);
-    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o) .rodata)
-    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o) .rodata*)
+    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o *menuDmrSms.o *menuDecoders.o) .rodata)
+    *(EXCLUDE_FILE(*menuSked.o *menuWaypoints.o *sked.o *skedMath.o *menuNetControl.o *netControl.o *netRoster.o *menuPACE.o *menuCoverage.o *menuRadioCheck.o *menuPosition.o *menuEventLog.o *menuDmrSms.o *menuDecoders.o) .rodata*)
     . = ALIGN(4);
   } >FLASH
 
@@ -177,6 +177,8 @@ SECTIONS
     *menuRadioCheck.o(.text .text* .rodata .rodata*)
     *menuPosition.o(.text .text* .rodata .rodata*)
     *menuEventLog.o(.text .text* .rodata .rodata*)
+    *menuDmrSms.o(.text .text* .rodata .rodata*)
+    *menuDecoders.o(.text .text* .rodata .rodata*)
     *(.upper_text)
     . = ALIGN(4);
   } >FLASH

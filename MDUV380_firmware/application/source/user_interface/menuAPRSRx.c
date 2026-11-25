@@ -1,8 +1,8 @@
 /*
  * Fork: APRS RX screen (main menu > APRS RX), by Marcin SP7TQ. APRS frames,
- * stations, radar and messages, plus the DTMF and CW decoders, all fed by the
- * FM RX audio (functions/aprsRx.c). Moved out of the RSSI screen, where '9'
- * still opens it.
+ * stations, radar and messages, fed by the FM RX audio (functions/aprsRx.c).
+ * The DTMF / CW / STQC decoders have their own screen (menuDecoders.c).
+ * Moved out of the RSSI screen, where '9' still opens it.
  *
  * Use of this source code or binary releases for commercial purposes is
  * strictly forbidden (see license.txt).
@@ -16,7 +16,6 @@
 #include "functions/sound.h"
 #include "interfaces/i2s.h"
 #include "functions/aprsRx.h"
-#include "functions/toneRxDecoders.h"
 #include "functions/ticks.h"
 #include "functions/aprsText.h"
 #include "functions/fieldData.h"
@@ -30,8 +29,8 @@
 // Fork: APRS RX monitor (main menu > APRS RX, or '9' on the RSSI screen):
 // status line + one of the views, cycled with '#': received frames (UP/DOWN select,
 // '*' raw: full TNC2 text + hex dump), stations (distance / bearing / age),
-// radar (north up, own position in the centre), APRS messages, DTMF and CW
-// decoders (SSTV has its own menu entry, menuSSTV.c). '0' clears the current view. GREEN on a message / station:
+// radar (north up, own position in the centre) and APRS messages (the DTMF / CW / STQC
+// decoders: menuDecoders.c, SSTV: menuSSTV.c). '0' clears the current view. GREEN on a message / station:
 // reply / new message (canned texts, editable in Options > APRS, or a text typed on the keypad);
 // '1': new message to a callsign typed on the keypad; '*' on a station: GPS waypoint, long '*': also
 // saved in the waypoint list (fieldData.h) under the callsign.
@@ -40,8 +39,9 @@
 #define APRS_MON_STATUS_Y       (MENU_HEADER_HEIGHT + 2)
 #define APRS_MON_LIST_Y         (APRS_MON_STATUS_Y + FONT_SIZE_1_HEIGHT + 3)
 #define APRS_MON_BLOCK_H        ((3 * FONT_SIZE_1_HEIGHT) + 1)
-#define APRS_MON_BLOCKS         ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y) / APRS_MON_BLOCK_H)
-#define APRS_MON_RAW_LINES      ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y) / FONT_SIZE_1_HEIGHT)
+#define APRS_MON_FOOTER_H       10     // key bar at the bottom of every view
+#define APRS_MON_BLOCKS         ((DISPLAY_SIZE_Y - APRS_MON_FOOTER_H - APRS_MON_LIST_Y) / APRS_MON_BLOCK_H)
+#define APRS_MON_RAW_LINES      ((DISPLAY_SIZE_Y - APRS_MON_FOOTER_H - APRS_MON_LIST_Y) / FONT_SIZE_1_HEIGHT)
 #define APRS_MON_HEX_PER_LINE   8U
 typedef enum
 {
@@ -49,8 +49,6 @@ typedef enum
 	APRS_MON_VIEW_STATIONS,
 	APRS_MON_VIEW_RADAR,
 	APRS_MON_VIEW_MESSAGES,
-	APRS_MON_VIEW_DTMF,
-	APRS_MON_VIEW_CW,
 	APRS_MON_VIEW_MAX
 } aprsMonView_t;
 #if defined(HAS_GPS) && (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701))
@@ -69,7 +67,6 @@ static bool aprsMonReplyActive = false;
 static uint8_t aprsMonEditStage = APRS_MON_EDIT_NONE;
 static uint32_t aprsMonReplyIndex = 0;
 static char aprsMonReplyTo[APRS_RX_CALL_LEN];
-static uint32_t aprsMonToneSerial = 0;
 #if defined(HAS_EMCOM_UI)
 // Fork: EMCOM styles: '*' on a message opens it on its own screen (whole text, wrapped)
 #define APRS_MON_READ_VIEW
@@ -90,6 +87,7 @@ static APRS_RX_CCMRAM char aprsMonText[300]; // TNC2 text of the frame shown in 
 static void aprsMonSetEnabled(bool enable);
 static void aprsMonUpdate(uint32_t now);
 static void aprsMonDraw(void);
+static void aprsMonFooter(const char *text, const char *chip, themeItem_t chipColour);
 static bool aprsMonHandleEvent(uiEvent_t *ev);
 
 static void aprsMonSetEnabled(bool enable)
@@ -129,19 +127,6 @@ static void aprsMonUpdate(uint32_t now)
 		}
 		aprsMonLastGen = gen;
 		aprsMonLastDraw = 0; // redraw now
-	}
-
-	if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW))
-	{
-		char tmp[2];
-		uint32_t serial;
-
-		aprsRxToneText((aprsMonView == APRS_MON_VIEW_CW), tmp, sizeof(tmp), &serial);
-		if (serial != aprsMonToneSerial)
-		{
-			aprsMonToneSerial = serial;
-			aprsMonLastDraw = 0;
-		}
 	}
 
 	if ((aprsMonLastDraw == 0) || ((now - aprsMonLastDraw) >= APRS_MON_REDRAW_MS))
@@ -226,10 +211,8 @@ static void aprsMonDrawHint(const char *line1, const char *line2)
 	displayPrintCentered((APRS_MON_LIST_Y + 22), line1, FONT_SIZE_3);
 	displayThemeApply(THEME_ITEM_FG_RX_FREQ, THEME_ITEM_BG);
 	displayPrintCentered((APRS_MON_LIST_Y + 44), line2, FONT_SIZE_1);
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
-	displayDrawFastHLine(20, (APRS_MON_LIST_Y + 60), (DISPLAY_SIZE_X - 40), true);
-	displayPrintCentered((APRS_MON_LIST_Y + 66), "# VIEW 1 MSG 0 CLR 9 EXIT", FONT_SIZE_1);
 	displayThemeResetToDefault();
+	aprsMonFooter("# VIEW  1 MSG  RED EXIT", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 // Small filled field with the text in the background colour ("chip")
@@ -245,7 +228,6 @@ static int16_t aprsMonChip(int16_t x, int16_t y, const char *text, themeItem_t c
 }
 
 // Bottom bar (as the EMCOM footer): text on the left, optional chip on the right
-#define APRS_MON_FOOTER_H   10
 static void aprsMonFooter(const char *text, const char *chip, themeItem_t chipColour)
 {
 	int16_t y = (DISPLAY_SIZE_Y - APRS_MON_FOOTER_H);
@@ -335,6 +317,8 @@ static void aprsMonDrawFrames(void)
 		displayDrawFastHLine(0, (y + APRS_MON_BLOCK_H - 1), DISPLAY_SIZE_X, true);
 		displayThemeResetToDefault();
 	}
+
+	aprsMonFooter("* RAW # VIEW 0 CLR RED EXIT", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 // Raw view: TNC2 text lines, a separator, then the hex dump
@@ -395,6 +379,8 @@ static void aprsMonDrawRaw(void)
 			displayPrintAt(0, y, line, FONT_SIZE_1);
 		}
 	}
+
+	aprsMonFooter("UP/DN SCROLL  * RED BACK", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 // --- Stations / radar helpers -------------------------------------------------------
@@ -503,7 +489,7 @@ static void aprsMonDrawStations(void)
 }
 
 // --- Radar view (north up, own position in the centre) --------------------------------
-#define RADAR_R    44
+#define RADAR_R    39 // bottom of the ring stays above the key bar
 #define RADAR_CX   (RADAR_R + 3)
 #define RADAR_CY   (APRS_MON_LIST_Y + 9 + RADAR_R)
 #define RADAR_TX   (RADAR_CX + RADAR_R + 6)
@@ -667,7 +653,8 @@ static void aprsMonDrawRadar(void)
 
 	char rng[12];
 	aprsRxFormatDistance(range, rng, sizeof(rng));
-	aprsMonKeyValue(RADAR_TX, (DISPLAY_SIZE_Y - FONT_SIZE_1_HEIGHT - 1), "R", rng, THEME_ITEM_FG_RX_FREQ);
+	aprsMonKeyValue(RADAR_TX, (DISPLAY_SIZE_Y - APRS_MON_FOOTER_H - FONT_SIZE_1_HEIGHT - 2), "R", rng, THEME_ITEM_FG_RX_FREQ);
+	aprsMonFooter("GRN MSG * WPT # VIEW 0 CLR", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 // --- Messages view ---------------------------------------------------------------------
@@ -747,6 +734,8 @@ static void aprsMonDrawMessages(void)
 		displayDrawFastHLine(0, (y + APRS_MON_BLOCK_H - 1), DISPLAY_SIZE_X, true);
 		displayThemeResetToDefault();
 	}
+
+	aprsMonFooter("GRN REPLY 1 NEW # VIEW", NULL, THEME_ITEM_FG_DEFAULT);
 }
 
 #if defined(APRS_MON_READ_VIEW)
@@ -1263,63 +1252,6 @@ static void aprsMonEditHandleEvent(uiEvent_t *ev)
 	aprsMonDraw();
 }
 
-// --- DTMF / CW views -----------------------------------------------------------------
-static void aprsMonDrawToneText(bool cw)
-{
-	char text[APRS_RX_TONE_TEXT_LEN + 1];
-	char line[24];
-	uint32_t perLine = (DISPLAY_SIZE_X / 8); // FONT_SIZE_3: 8 px wide
-	uint32_t lines = ((DISPLAY_SIZE_Y - APRS_MON_LIST_Y - APRS_MON_FOOTER_H - 2) / FONT_SIZE_3_HEIGHT);
-	uint32_t len = aprsRxToneText(cw, text, sizeof(text), NULL);
-
-	if (cw)
-	{
-		uint8_t wpm = cwRxGetWpm();
-
-		if (wpm)
-		{
-			snprintf(line, sizeof(line), "%u WPM  %u Hz", (unsigned)wpm, (unsigned)cwRxGetToneHz());
-		}
-		else
-		{
-			snprintf(line, sizeof(line), "waiting for CW");
-		}
-		aprsMonFooter(line, (cwRxIsKeyed() ? "KEY" : NULL), THEME_ITEM_FG_RSSI_BAR);
-	}
-	else
-	{
-		aprsMonFooter((len ? "0 CLEAR" : "waiting for DTMF"), NULL, THEME_ITEM_FG_DEFAULT);
-	}
-	displayThemeApply(THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
-
-	// Last 'lines' lines of text
-	uint32_t maxChars = (perLine * lines);
-	uint32_t start = ((len > maxChars) ? (len - maxChars) : 0);
-	if (start)
-	{
-		start += ((perLine - ((len - start) % perLine)) % perLine); // keep line alignment stable
-	}
-
-	for (uint32_t l = 0; l < lines; l++)
-	{
-		uint32_t off = (start + (l * perLine));
-		uint32_t n = 0;
-
-		if (off >= len)
-		{
-			break;
-		}
-		while ((n < perLine) && ((off + n) < len))
-		{
-			line[n] = text[off + n];
-			n++;
-		}
-		line[n] = 0;
-		displayPrintAt(0, (APRS_MON_LIST_Y + (l * FONT_SIZE_3_HEIGHT)), line, FONT_SIZE_3);
-	}
-	displayThemeResetToDefault();
-}
-
 static void aprsMonSetView(aprsMonView_t view)
 {
 	aprsMonRawView = false;
@@ -1331,7 +1263,7 @@ static void aprsMonSetView(aprsMonView_t view)
 
 static void aprsMonDraw(void)
 {
-	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages", "DTMF decoder", "CW decoder" };
+	static const char *titles[] = { "APRS frames", "APRS stations", "APRS radar", "APRS messages" };
 	char line[APRS_MON_CHARS + 1];
 	aprsRxStatus_t st;
 
@@ -1453,12 +1385,6 @@ static void aprsMonDraw(void)
 				}
 #endif
 				aprsMonDrawMessages();
-				break;
-			case APRS_MON_VIEW_DTMF:
-				aprsMonDrawToneText(false);
-				break;
-			case APRS_MON_VIEW_CW:
-				aprsMonDrawToneText(true);
 				break;
 			case APRS_MON_VIEW_STATIONS:
 				aprsMonDrawStations();
@@ -1706,10 +1632,6 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 				aprsRxMessagesClear();
 				aprsMonMsgSelected = 0;
 				break;
-			case APRS_MON_VIEW_DTMF:
-			case APRS_MON_VIEW_CW:
-				aprsRxToneTextClear();
-				break;
 
 			default:
 				aprsRxHistoryClear();
@@ -1747,10 +1669,6 @@ static bool aprsMonHandleEvent(uiEvent_t *ev)
 			{
 				aprsMonMsgSelected++;
 			}
-		}
-		else if ((aprsMonView == APRS_MON_VIEW_DTMF) || (aprsMonView == APRS_MON_VIEW_CW))
-		{
-			return false;
 		}
 		else if (aprsMonView == APRS_MON_VIEW_FRAMES)
 		{

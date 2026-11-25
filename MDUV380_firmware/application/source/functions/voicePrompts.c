@@ -131,9 +131,12 @@ bool voicePromptsCheckMagicAndVersion(uint32_t *bufferAddress)
 	return ((header->magic == VOICE_PROMPTS_DATA_MAGIC) && (header->version == VOICE_PROMPTS_DATA_VERSION));
 }
 
+// Fork: a prompt number is playable when both its TOC entry and the next one exist
+#define VOICE_PROMPT_IN_TOC(n) (((n) >= 0) && (((n) + 1) < VOICE_PROMPTS_TOC_SIZE))
+
 static void getAmbeData(int offset, int length)
 {
-	if (length <= AMBE_DATA_BUFFER_SIZE)
+	if ((length >= 0) && (length <= AMBE_DATA_BUFFER_SIZE))
 	{
 		SPI_Flash_read(voicePromptsFlashDataAddress + offset, (uint8_t *)&ambeData, length);
 	}
@@ -182,7 +185,7 @@ void voicePromptsTick(void)
 
 				int promptNumber = voicePromptsCurrentSequence.Buffer[voicePromptsCurrentSequence.Pos];
 
-				if ((tableOfContents[promptNumber + 1] == 0) || (tableOfContents[promptNumber] == 0))
+				if ((VOICE_PROMPT_IN_TOC(promptNumber) == false) || (tableOfContents[promptNumber + 1] == 0) || (tableOfContents[promptNumber] == 0))
 				{
 					promptNumber = PROMPT_SILENCE;
 				}
@@ -354,13 +357,24 @@ void voicePromptsAppendLanguageString(const char *languageStringAdd)
 		return;
 	}
 
-	voicePromptsAppendPrompt(NUM_VOICE_PROMPTS +
+	int prompt = (NUM_VOICE_PROMPTS +
 			((languageStringAdd - currentLanguage->LANGUAGE_NAME)
 #if ! defined(HAS_COLOURS)
 					- ((languageStringAdd >= currentLanguage->theme_chooser) ?
 							((currentLanguage->theme_colour_picker_blue - currentLanguage->theme_chooser) + LANGUAGE_TEXTS_LENGTH) : 0)
 #endif
 			) / LANGUAGE_TEXTS_LENGTH);
+
+	// Fork: strings added after the end of the voice pack table of contents (SSTV, APRS RX,
+	// Event log, PACE, ...) have no recorded prompt: spell them instead of reading past
+	// tableOfContents[], which played garbage lengths and froze the radio (issue #21).
+	if (VOICE_PROMPT_IN_TOC(prompt) == false)
+	{
+		voicePromptsAppendString(languageStringAdd);
+		return;
+	}
+
+	voicePromptsAppendPrompt((voicePrompt_t)prompt);
 }
 
 void voicePromptsPlay(void)
@@ -374,10 +388,6 @@ void voicePromptsPlay(void)
 	{
 		rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE);
 
-		if (nonVolatileSettings.dmrRxAGC != 0)
-		{
-			soundResetDMRRxAGCGain();
-		}
 
 		taskENTER_CRITICAL();
 
@@ -392,7 +402,7 @@ void voicePromptsPlay(void)
 
 		voicePromptsCurrentSequence.Pos = 0;
 
-		if ((tableOfContents[promptNumber + 1] == 0) || (tableOfContents[promptNumber] == 0))
+		if ((VOICE_PROMPT_IN_TOC(promptNumber) == false) || (tableOfContents[promptNumber + 1] == 0) || (tableOfContents[promptNumber] == 0))
 		{
 			promptNumber = PROMPT_SILENCE;
 		}

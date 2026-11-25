@@ -61,6 +61,7 @@ static menuStatus_t menuRSSIExitCode = MENU_STATUS_SUCCESS;
 //static calibrationRSSIMeter_t rssiCalibration; // UNUSED
 static void updateScreen(bool forceRedraw, bool firstRun);
 static void handleEvent(uiEvent_t *ev);
+static int currentSquelch(void);
 static void updateVoicePrompts(bool flushIt, bool spellIt);
 
 static int dBm[RADIO_DEVICE_MAX] =
@@ -265,6 +266,18 @@ static void emcomRssiScreen(void)
 			((trxGetMode() == RADIO_MODE_DIGITAL) ? "DMR" : (trxGetBandwidthIs25kHz() ? "FM" : "FMN")));
 	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
 	displayPrintCore(3, (MENU_HEADER_HEIGHT + 2), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	if (trxGetMode() == RADIO_MODE_ANALOG)
+	{
+		int16_t right = (DISPLAY_SIZE_X - 3);
+#if defined(FOX_HUNT_SUPPORTED)
+		if (foxHuntEnabled)
+		{
+			right = (DISPLAY_SIZE_X - 27);
+		}
+#endif
+		snprintf(buf, sizeof(buf), "SQL%d", currentSquelch());
+		displayPrintCore((int16_t)(right - (strlen(buf) * 6)), (MENU_HEADER_HEIGHT + 2), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	}
 #if defined(FOX_HUNT_SUPPORTED)
 	if (foxHuntEnabled)
 	{
@@ -379,9 +392,9 @@ static void emcomRssiScreen(void)
 	displayFillRect(0, (DISPLAY_SIZE_Y - 11), DISPLAY_SIZE_X, 11, false);
 	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
 #if defined(FOX_HUNT_SUPPORTED)
-	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), (foxHuntEnabled ? "* RAW  # FOX  0 RST  9 APRS" : "* RAW  # FOX  9 APRS"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), (foxHuntEnabled ? "* RAW  # FOX  0 RST  9 APRS" : "^v SQL * RAW # FOX 9 APRS"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 #else
-	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "* RAW", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayPrintCore(3, (DISPLAY_SIZE_Y - 9), "^v SQL  * RAW", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
 #endif
 
 	displayThemeResetToDefault();
@@ -595,6 +608,25 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 	}
 }
 
+// Fork: UP / DOWN set the FM squelch here, as in the channel / VFO screens (same notification bar)
+static int currentSquelch(void)
+{
+	return ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
+}
+
+static void adjustSquelch(int dir)
+{
+	if (trxGetMode() != RADIO_MODE_ANALOG)
+	{
+		return;
+	}
+
+	currentChannelData->sql = (uint8_t)CLAMP((currentSquelch() + dir), CODEPLUG_MIN_VARIABLE_SQUELCH, CODEPLUG_MAX_VARIABLE_SQUELCH);
+	announceItem(PROMPT_SQUENCE_SQUELCH, PROMPT_THRESHOLD_3);
+	uiNotificationShow(NOTIFICATION_TYPE_SQUELCH, NOTIFICATION_ID_SQUELCH, 1000, NULL, false);
+	updateScreen(true, false);
+}
+
 static void handleEvent(uiEvent_t *ev)
 {
 	if ((ev->events & FUNCTION_EVENT) && (ev->function == FUNC_REDRAW))
@@ -629,6 +661,14 @@ static void handleEvent(uiEvent_t *ev)
 	if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN) || KEYCHECK_SHORTUP(ev->keys, KEY_RED))
 	{
 		menuSystemPopPreviousMenu();
+	}
+	else if (KEYCHECK_PRESS(ev->keys, KEY_UP) || KEYCHECK_LONGDOWN_REPEAT(ev->keys, KEY_UP))
+	{
+		adjustSquelch(1);
+	}
+	else if (KEYCHECK_PRESS(ev->keys, KEY_DOWN) || KEYCHECK_LONGDOWN_REPEAT(ev->keys, KEY_DOWN))
+	{
+		adjustSquelch(-1);
 	}
 	else if (KEYCHECK_SHORTUP(ev->keys, KEY_STAR))
 	{

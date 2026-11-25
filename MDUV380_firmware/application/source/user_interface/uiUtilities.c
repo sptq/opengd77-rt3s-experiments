@@ -38,6 +38,7 @@
 #include "hardware/SPI_Flash.h"
 #include "functions/trx.h"
 #include "functions/rxPowerSaving.h"
+#include "functions/sound.h"
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 #include "interfaces/batteryAndPowerManagement.h"
 #include "hardware/radioHardwareInterface.h"
@@ -73,6 +74,7 @@ static uint32_t lastTG = 0;
 
 volatile uint32_t lastID = 0;// This needs to be volatile as lastHeardClearLastID() is called from an ISR
 LinkItem_t *LinkHead = callsList;
+static uint32_t lastHeardStationToken = 0U;
 
 DECLARE_SMETER_ARRAY(rssiMeterHeaderBar, DISPLAY_SIZE_X);
 
@@ -303,6 +305,12 @@ void getCallsignOnly(char *dest, const char *src)
 
 void lastHeardInitList(void)
 {
+	// Audio may still be draining a previous caller while the list is reset.
+	// Keep the I2S path on its bounded non-learning fallback until a new entry
+	// is fully initialized and explicitly published below.
+	soundDMRRxAGCInvalidateStation();
+
+	taskENTER_CRITICAL();
 	LinkHead = callsList;
 
 	for(int i = 0; i < NUM_LASTHEARD_STORED; i++)
@@ -318,6 +326,7 @@ void lastHeardInitList(void)
 		callsList[i].receivedTS = 0;
 		callsList[i].dmrMode = DMR_MODE_AUTO;
 		callsList[i].rxAGCGain = 0U;
+		callsList[i].agcStationToken = 0U;
 
 		if (i == 0)
 		{
@@ -339,6 +348,7 @@ void lastHeardInitList(void)
 	}
 
 	uiDataGlobal.lastHeardCount = 0;
+	taskEXIT_CRITICAL();
 }
 
 LinkItem_t *lastHeardFindInList(uint32_t id)
@@ -863,7 +873,6 @@ bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot)
 
 						item->time = ticksGetMillis();
 						lastTG = talkGroupOrPcId;
-						dmrRxAGCrxPeakAverage = (float)item->rxAGCGain;
 
 						if (item == LinkHead)
 						{
@@ -878,6 +887,7 @@ bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot)
 							LinkItem_t *next = item->next;
 							LinkItem_t *prev = item->prev;
 
+							taskENTER_CRITICAL();
 							// set the previous item to skip this item and link to 'items' next item.
 							prev->next = next;
 
@@ -893,6 +903,8 @@ bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot)
 
 							item->prev = NULL;// change the items prev to NULL now we are at teh top of the list
 							LinkHead = item;// Change the global for the head of the link to the item that is to be at the top of the list.
+							soundDMRRxAGCSetStationLevel(item, item->id, item->agcStationToken, item->rxAGCGain);
+							taskEXIT_CRITICAL();
 							if (item->talkGroupOrPcId != 0)
 							{
 								uiDataGlobal.displayQSOState = QSO_DISPLAY_CALLER_DATA;// flag that the display needs to update
@@ -917,6 +929,7 @@ bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot)
 						}
 						//item is now the last
 
+						taskENTER_CRITICAL();
 						(item->prev)->next = NULL;// make the previous item the last
 
 						LinkHead->prev = item;// set the current head item to back reference this item.
@@ -928,8 +941,15 @@ bool lastHeardListUpdate(uint8_t *dmrDataBuffer, bool forceOnHotspot)
 						item->time = ticksGetMillis();
 						item->receivedTS = (dmrMonitorCapturedTS != -1) ? dmrMonitorCapturedTS : trxGetDMRTimeSlot();
 						item->dmrMode = currentRadioDevice->trxDMRModeRx;
-						dmrRxAGCrxPeakAverage = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES;
-						item->rxAGCGain = (uint16_t)dmrRxAGCrxPeakAverage;
+						lastHeardStationToken++;
+						if (lastHeardStationToken == 0U)
+						{
+							lastHeardStationToken++;
+						}
+						item->agcStationToken = lastHeardStationToken;
+						item->rxAGCGain = 0U;
+						soundDMRRxAGCSetStationLevel(item, item->id, item->agcStationToken, item->rxAGCGain);
+						taskEXIT_CRITICAL();
 						lastTG = talkGroupOrPcId;
 
 						memset(item->contact, 0, sizeof(item->contact)); // Clear contact's datas
@@ -1912,7 +1932,7 @@ void uiUtilityRenderHeader(bool isVFODualWatchScanning, bool isVFOSweepScanning,
 #if defined(HAS_EMCOM_UI)
 	if (emcomScreenActive() && (isVFODualWatchScanning == false) && (isVFOSweepScanning == false))
 	{
-		emcomRenderStatusBar();
+		emcomRenderStatusBar(forceBatteryDisplay);
 		if (isTransmittingIgnoringAPRSBeaconing() == false)
 		{
 			emcomDrawRssi(trxGetRSSIdBm(RADIO_DEVICE_PRIMARY));

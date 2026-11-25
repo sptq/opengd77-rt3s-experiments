@@ -2292,7 +2292,7 @@ void hotspotStateMachine(void)
 				if ((nonVolatileSettings.hotspotType == HOTSPOT_TYPE_MMDVM) &&
 						((ticksGetMillis() - mmdvmHostLastActiveTime) > MMDVMHOST_TIMEOUT))
 				{
-					wavbuffer_count = 0;
+					soundResetBufferQueue();
 
 					hotspotExit();
 					break;
@@ -2301,9 +2301,7 @@ void hotspotStateMachine(void)
 			break;
 
 		case HOTSPOT_STATE_INITIALISE:
-			wavbuffer_read_idx = 0;
-			wavbuffer_write_idx = 0;
-			wavbuffer_count = 0;
+			soundResetBufferQueue();
 			rfFrameBufCount = 0;
 
 			overriddenLCAvailable = false;
@@ -2321,9 +2319,7 @@ void hotspotStateMachine(void)
 			}
 
 			rxLCFrameSent = false;
-			wavbuffer_read_idx = 0;
-			wavbuffer_write_idx = 0;
-			wavbuffer_count = 0;
+			soundResetBufferQueue();
 			rxFrameTime = ticksGetMillis();
 
 			hotspotState = HOTSPOT_STATE_RX_PROCESS;
@@ -2339,7 +2335,7 @@ void hotspotStateMachine(void)
 					hotspotMmdvmHostIsConnected = false;
 					hotspotState = HOTSPOT_STATE_NOT_CONNECTED;
 					rfFrameBufCount = 0;
-					wavbuffer_count = 0;
+					soundResetBufferQueue();
 
 					hotspotExit();
 					break;
@@ -2349,7 +2345,7 @@ void hotspotStateMachine(void)
 			{
 				hotspotState = HOTSPOT_STATE_NOT_CONNECTED;
 				rfFrameBufCount = 0;
-				wavbuffer_count = 0;
+				soundResetBufferQueue();
 
 				if (trxTransmissionEnabled)
 				{

@@ -116,24 +116,25 @@ static void emcomLockScreen(bool unlocked, const char *what)
 static void redrawScreen(bool update, bool state)
 {
 #if defined(HAS_EMCOM_UI)
-	if (emcomStyleEnabled())
-	{
-		return; // drawn by emcomLockScreen()
-	}
+	// Fork: the EMCOM lock screen clears and draws the whole screen in emcomLockScreen(); only the
+	// classic frame is skipped here. The rest of this function (text, voice prompts, render and
+	// lockDisplayed, which lets menuLockScreen() pop back) must still run.
+	if (emcomStyleEnabled() == false)
 #endif
-
-	displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_NOTIFICATION);
-
-	if (update)
 	{
-		// Clear inner rect only
-		displayFillRoundRect(5, 3, 118 + DISPLAY_H_EXTRA_PIXELS, DISPLAY_SIZE_Y - 8, 5, false);
-	}
-	else
-	{
-		// Clear whole screen
-		displayClearBuf();
-		displayDrawRoundRectWithDropShadow(4, 4, 120 + DISPLAY_H_EXTRA_PIXELS, DISPLAY_SIZE_Y - 6, 5, true);
+		displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG_NOTIFICATION);
+
+		if (update)
+		{
+			// Clear inner rect only
+			displayFillRoundRect(5, 3, 118 + DISPLAY_H_EXTRA_PIXELS, DISPLAY_SIZE_Y - 8, 5, false);
+		}
+		else
+		{
+			// Clear whole screen
+			displayClearBuf();
+			displayDrawRoundRectWithDropShadow(4, 4, 120 + DISPLAY_H_EXTRA_PIXELS, DISPLAY_SIZE_Y - 6, 5, true);
+		}
 	}
 
 	displayThemeApply((state ? THEME_ITEM_FG_ERROR_NOTIFICATION : THEME_ITEM_FG_WARNING_NOTIFICATION), THEME_ITEM_BG_NOTIFICATION);

@@ -17,7 +17,7 @@ on [OpenGD77](https://www.opengd77.com/).
 | | |
 |---|---|
 | ![Standby](docs/screens/emcom_standby.png) | **EMCOM main screen.** Channel number first, fixed positions, state by colour *and* word (RX green, TX red, SCAN amber, SOS flashing), UTC clock, locator and GPS position, APRS stations and unread messages always in view. Red-only night mode. |
-| ![DMR call](docs/screens/emcom_dmr.png) | **DMR and FM.** Caller callsign, talker alias, talkgroup; live RX level in dBm and S units on FM; TX timer with the TOT. |
+| ![DMR call](docs/screens/emcom_dmr.png) | **DMR and FM.** Caller callsign, talker alias, talkgroup and Last Heard age on DMR; live RX level in dBm and S units plus a stable repeater-distance row on FM; TX timer with the TOT. |
 | ![SOS](docs/screens/emcom_sos.png) | **SOS.** `SK1+9` twice: APRS position beacons with the emergency symbol, every minute then every two minutes, flashing banner. Same again to stop. |
 | ![Main menu](docs/screens/menu_main.png) | **Launcher menus.** Main menu, Options and Contacts are icon tiles with their key number: `1`…`9`, `0` open a tile at once, ▲▼ move, the full name is in the bottom bar. Option lists show the setting on the left and its value right aligned. |
 | ![Boot screen](docs/screens/boot_sp7team.png) | **One look across the whole radio.** Menus, lists, option boxes, notifications, soft key bars (GREEN / RED fields), APRS and SSTV screens and the SP7TEAM boot screen share the EMCOM style and colours; *Options → Display → Screen* switches everything back to classic. |
@@ -226,13 +226,32 @@ aligned:
 
 | Area | Content |
 |---|---|
-| Status bar | state field (mode when idle, `RX` green, `TX` red with the whole bar, `SCAN` amber), power, CTCSS/DCS or time slot, APRS beacon, GPS fix, volume, battery |
+| Status bar | mode / TX / SCAN field, power, CTCSS/DCS or time slot, APRS beacon, GPS fix, volume, battery; RX is shown in the footer |
 | S-meter | 32 segments, S9 and above in amber; mic level while transmitting |
 | Channel | zone and `CH n/m`, channel number (16x32), name, frequency (`TX`, `REV`, `TA` marks); VFO: the frequency in 16x32 |
-| Panel | FM: offset, RX/TX tone, squelch, bandwidth, TOT; DMR: TG/PC, CC, TS, contact. Receiving FM: level in dBm and S units. DMR call: callsign, TG, rest of the alias. Transmitting: elapsed time in 16x32 and the power level |
+| Panel | FM: offset, RX/TX tone, squelch, bandwidth, TOT; DMR: TG/PC, CC, TS, contact. Receiving FM: level in dBm and S units plus a stable reserved repeater-distance row. Channel scan uses the parameter panel and the same distance row. DMR call: callsign, TG and two-line caller ID. Transmitting: elapsed time in 16x32 and the power level |
 | EMCOM rows | APRS stations heard, unread APRS messages, Maidenhead locator, position (GPS, else the fixed location), last heard (DMR station, or the last APRS station with distance) |
 | EMCOM rows (TX) | time-out timer bar with the remaining time (the last 10 s hatched, the countdown in an inverse chip), TX tone / bandwidth or TG / CC / TS and contact, the keys usable while transmitting |
-| Footer | UTC time and date, key / PTT lock, scan, SOS, `TX OFF` when TX inhibit is on |
+| Footer | UTC time and date, `RX` / `TX` / `SCAN`, key / PTT lock, SOS, `TX OFF` when TX inhibit is on |
+
+The existing *Options → Display* header settings also apply to the EMCOM status
+bar: **Time in header** replaces the battery readout (unless a low-battery
+warning or forced battery display is active), and **Battery** selects percentage
+or voltage. **Visual volume** controls the EMCOM header volume indicator and the
+volume notification. The footer clock remains available in either case. When **UTC** is
+set to **No**, the footer shows local time first and Zulu time second using
+the trailing `Z` marker on the Zulu time; with **UTC = Yes**, it shows Zulu
+time only.
+
+The **Show dist** setting in *Options → Display* controls whether the repeater
+distance is calculated on channel-mode standby, during FM channel reception,
+and on the channel-scan parameter screen.
+The `DIST` row remains reserved in those layouts and is blank when the setting
+is off. With distance enabled, it shows `DIST --` when either location is
+unavailable or invalid. It is not shown during FM VFO reception or DMR
+reception; DMR reception keeps the extra middle row for the second line of
+caller information. The operator position is taken from a valid GPS fix first,
+with the configured location used as the fallback.
 
 The same style covers the whole UI: menu title bars (accent, capitals,
 list position), full-width selection, square boxes without shadows, soft
@@ -244,8 +263,8 @@ boot image is set).
 
 By day the screen is dark; at night (the existing day/night switch and
 auto-night) it uses a red-only palette that keeps night vision. VFO sweep,
-dual watch, frequency entry and the channel details view keep the classic
-screen.
+dual watch and frequency-entry special modes keep the classic screen; channel
+details remains in the EMCOM layout with its compact two-row detail panel.
 
 To give the menus the same colours: *Options → Theme → Day* (then *Night*),
 `*` loads the EMCOM colours (dark by day, red at night), `GREEN` applies,
@@ -260,8 +279,8 @@ palette, and both follow the day / night switch.
 
 * **EMCOM mono**, for colour-blind users: white and grey shades on black
   (night: the red shades of the night palette). No state is shown by hue
-  alone: idle is an outlined state chip, `RX` and `SCAN` a solid chip, `TX`
-  turns the whole status bar to inverse video (black text) with a black `TX`
+  alone: idle is an outlined mode chip, `SCAN` is a solid chip, `RX` is shown
+  in the green footer, and `TX` turns the whole status bar to inverse video (black text) with a black `TX`
   chip; S-meter segments above S9 are hollow (main and RSSI screens); a low
   battery shows `!` and the percentage in an inverse chip; no GPS fix draws
   `GPS` thin and grey; `SOS`, `TX OFF` and `TX` in the footer are inverse

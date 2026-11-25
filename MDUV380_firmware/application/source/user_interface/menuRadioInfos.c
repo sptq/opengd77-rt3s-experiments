@@ -84,6 +84,7 @@ enum
 };
 
 static int displayMode = RADIO_INFOS_BATTERY_LEVEL;
+static int pendingDisplayMode = -1; // Fork: page to open with (menuRadioInfosOpenPage())
 static bool pureBatteryLevel = false;
 static int graphStyle = GRAPH_FILL;
 static int battery_stack_iter = 0;
@@ -185,10 +186,20 @@ static uint32_t inputDigitsLatToFixed_10_5(void)
 	return fixedVal;
 }
 
+void menuRadioInfosOpenPage(int page)
+{
+	pendingDisplayMode = page;
+}
+
 menuStatus_t menuRadioInfos(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
 	{
+		if ((pendingDisplayMode >= 0) && (pendingDisplayMode < NUM_RADIO_INFOS_MENU_ITEMS))
+		{
+			displayMode = pendingDisplayMode;
+		}
+		pendingDisplayMode = -1;
 		keypadInputDigits[0] = 0;
 		keypadInputDigitsLength = 0;
 		menuDataGlobal.numItems = NUM_RADIO_INFOS_MENU_ITEMS;
@@ -231,6 +242,19 @@ menuStatus_t menuRadioInfos(uiEvent_t *ev, bool isFirstRun)
 }
 
 #if defined(HAS_EMCOM_UI)
+// Fork: EMCOM style key hints of the time / date pages: typing sets the clock (local time when the
+// clock is set to local in Options > Display, else UTC)
+static void timeKeyBar(bool date)
+{
+	int16_t y = (DISPLAY_SIZE_Y - 11);
+
+	displayThemeApply(THEME_ITEM_BG_HEADER_TEXT, THEME_ITEM_BG);
+	displayFillRect(0, y, DISPLAY_SIZE_X, (DISPLAY_SIZE_Y - y), false);
+	displayThemeApply(THEME_ITEM_FG_HEADER_TEXT, THEME_ITEM_BG_HEADER_TEXT);
+	displayPrintCore(2, (y + 2), ((keypadInputDigitsLength == 0) ? (date ? "0-9 YYYYMMDD  UP/DN PAGE" : "0-9 HHMMSS  UP/DN PAGE") :
+			"GREEN SAVE RED CLEAR < DEL"), FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+}
+
 // Fork: EMCOM style key hints of the location page, so that the entry can be found without the manual
 static void locationKeyBar(bool oneLine)
 {
@@ -487,6 +511,13 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 				displayPrintCenteredDoubleHeight((((DISPLAY_SIZE_Y >> 1) + MENU_HEADER_HEIGHT) - (dblHeight ? FONT_SIZE_4_HEIGHT : (FONT_SIZE_4_HEIGHT >> 1)) - DOUBLE_ARROW_HEIGHT), buffer, FONT_SIZE_4, dblHeight);
 				renderArrowOnly = false;
 
+#if defined(HAS_EMCOM_UI)
+				if (emcomStyleEnabled())
+				{
+					timeKeyBar(false);
+					break;
+				}
+#endif
 				displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 				// Up/Down blinking arrow
 				displayFillTriangle(63 + DISPLAY_H_OFFSET, (DISPLAY_SIZE_Y - 1), 59 + DISPLAY_H_OFFSET, (DISPLAY_SIZE_Y - 3), 67 + DISPLAY_H_OFFSET, (DISPLAY_SIZE_Y - 3), blink);
@@ -529,6 +560,14 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 
 			displayPrintCenteredDoubleHeight((((DISPLAY_SIZE_Y >> 1) + MENU_HEADER_HEIGHT) - (dblHeight ? FONT_SIZE_3_HEIGHT : (FONT_SIZE_3_HEIGHT >> 1)) - DOUBLE_ARROW_HEIGHT), buffer, FONT_SIZE_3, dblHeight);
 			renderArrowOnly = false;
+
+#if defined(HAS_EMCOM_UI)
+			if (emcomStyleEnabled())
+			{
+				timeKeyBar(true);
+				break;
+			}
+#endif
 
 			displayThemeApply(THEME_ITEM_FG_DECORATION, THEME_ITEM_BG);
 			// Up/Down blinking arrow

@@ -41,6 +41,7 @@
 #include "functions/rxPowerSaving.h"
 #include "functions/ticks.h"
 #include "interfaces/gps.h"
+#include "functions/dmrSms.h"
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 #include "hardware/radioHardwareInterface.h"
 #endif
@@ -319,6 +320,12 @@ static inline void hrc6000RxInterruptHandler(void);
 static void hrc6000TransitionToTx(void);
 static void hrc6000InitDigitalState(void);
 static void hrc6000TriggerPrivateCallQSODataDisplay(void);
+#if defined(HAS_DMR_SMS_ACK)
+static void hrc6000DataAckStart(const uint8_t *hdr12);
+#endif
+#if defined(HAS_DMR_SMS_TX)
+static void hrc6000DataTxStartBurst(void);
+#endif
 
 static HRC6000_Tone1Config_t savedTone1Config = { .Mode = 0, .Dev = 0, .D1 = 0 };
 
@@ -1013,6 +1020,9 @@ static inline void hrc6000SysReceivedDataInt(void)
 
 	if (hrc6000CrcIsValid() && (rxSyncClass == SYNC_CLASS_DATA) && (rxDataType == 2))        //Terminator with LC
 	{
+#if defined(HAS_DMR_SMS)
+		dmrSmsIsrCallEnd(); // Fork: keep an incomplete SMS PDU for a merge with its repeat
+#endif
 		if ((currentRadioDevice->trxDMRModeRx == DMR_MODE_DMO) && hrc6000CallAcceptFilter())
 		{
 			slotState = DMR_STATE_RX_END;
@@ -1034,6 +1044,59 @@ static inline void hrc6000SysReceivedDataInt(void)
 			}
 		}
 	}
+
+#if defined(HAS_DMR_SMS)
+	if (rxSyncClass == SYNC_CLASS_DATA)
+	{
+		dmrSmsDiag.dataInt++;
+		dmrSmsDiag.last51 = reg_0x51;
+		if (hrc6000CrcIsValid() == false)
+		{
+			dmrSmsDiag.crcBad++;
+		}
+		else if ((rxDataType < DMR_SMS_DT_DATA_HEADER) || (rxDataType > DMR_SMS_DT_RATE34_DATA))
+		{
+			dmrSmsDiag.other++;
+		}
+		else if (hrc.transmissionEnabled || (settingsUsbMode == USB_MODE_HOTSPOT))
+		{
+			dmrSmsDiag.skipped++;
+		}
+	}
+#endif
+#if defined(HAS_DMR_SMS)
+	// Fork: DMR SMS receive (ported from dondch/OpenGD77-AES256, cleartext only). The chip
+	// BPTC / trellis decodes and CRC checks each data sync burst and presents its info bytes at
+	// page 0x02 (as for the LC): 12 for a data header (6) or a rate 1/2 block (7), 18 for a
+	// rate 3/4 block (8). Reassembled in functions/dmrSmsPdu.c, decoded by dmrSmsTick() (main
+	// loop). Not our own transmission, not while relaying as a hotspot.
+	if ((hrc.transmissionEnabled == false) && (settingsUsbMode != USB_MODE_HOTSPOT) && (rxSyncClass == SYNC_CLASS_DATA) && hrc6000CrcIsValid() &&
+			((rxDataType == DMR_SMS_DT_DATA_HEADER) || (rxDataType == DMR_SMS_DT_RATE12_DATA) || (rxDataType == DMR_SMS_DT_RATE34_DATA)))
+	{
+		uint8_t dataBurst[18];
+
+		if (SPI0ReadPageRegByteArray(0x02, 0x00, dataBurst, ((rxDataType == DMR_SMS_DT_RATE34_DATA) ? 18 : LC_DATA_LENGTH)) == kStatus_Success)
+		{
+			dmrSmsIsrBurst(rxDataType, dataBurst);
+#if defined(HAS_DMR_SMS_ACK)
+			// A confirmed private SMS to us has just completed: the sender expects the Response
+			// in the very next timeslot (a stock receiver answers 0..1 ms after the last burst),
+			// or it repeats the whole PDU. Keyed from here, not from the main loop. Only in DMO
+			// (radio to radio, the case verified on the bench by the original), and only where a
+			// PTT press could transmit: not Rx only, not TX inhibited, inside the band limits.
+			uint8_t ackHdr[LC_DATA_LENGTH];
+
+			if (dmrSmsIsrAckTake(ackHdr) && (slotState < DMR_STATE_TX_START_1) && (currentRadioDevice->trxDMRModeRx == DMR_MODE_DMO) &&
+					(currentChannelData != NULL) && (codeplugChannelGetFlag(currentChannelData, CHANNEL_FLAG_RX_ONLY) == 0) &&
+					(settingsIsOptionBitSet(BIT_TX_INHIBIT) == false) &&
+					((nonVolatileSettings.txFreqLimited == BAND_LIMITS_NONE) || trxCheckFrequencyInAmateurBand(currentChannelData->txFreq)))
+			{
+				hrc6000DataAckStart(ackHdr);
+			}
+#endif
+		}
+	}
+#endif
 
 	if (hrc6000CrcIsValid() && (slotState != DMR_STATE_IDLE) && (hrc.skipCount > 0) && (rxSyncClass != SYNC_CLASS_DATA) && ((rxDataType & 0x07) == 0x01))
 	{
@@ -1231,6 +1294,10 @@ static inline void hrc6000SysReceivedDataInt(void)
 static inline void hrc6000SysReceivedInformationInt(void)
 {
 	SPI0ReadPageRegByte(0x04, 0x90, &reg_0x90);
+#if defined(HAS_DMR_SMS)
+	dmrSmsDiag.infoInt++;
+	dmrSmsDiag.last90 = reg_0x90;
+#endif
 
 	/*
 		In DMR mode, this interrupt has sub-status register 0x90, which has three types:
@@ -1712,9 +1779,19 @@ void hrc6000TimeslotInterruptHandler(void)
 
 		case DMR_STATE_TX_START_1: // Start TX (second step)
 			LedWrite(LED_RED, 1); // for repeater wakeup
-			hrc6000SendPcOrTgLCHeader();
-			SPI0WritePageRegByte(0x04, 0x41, 0x80);    // Transmit during next Timeslot
-			SPI0WritePageRegByte(0x04, 0x50, 0x10);    // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+#if defined(HAS_DMR_SMS_TX)
+			if (dmrSmsIsrTxActive())
+			{
+				SPI0WritePageRegByte(0x04, 0x41, 0x80);    // Transmit during next Timeslot
+				hrc6000DataTxStartBurst();                 // Fork: DMR SMS, CSBK led key-up (no Voice LC header)
+			}
+			else
+#endif
+			{
+				hrc6000SendPcOrTgLCHeader();
+				SPI0WritePageRegByte(0x04, 0x41, 0x80);    // Transmit during next Timeslot
+				SPI0WritePageRegByte(0x04, 0x50, 0x10);    // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+			}
 			trxIsTransmitting = true;
 			slotState = DMR_STATE_TX_START_2;
 			break;
@@ -1726,7 +1803,16 @@ void hrc6000TimeslotInterruptHandler(void)
 
 		case DMR_STATE_TX_START_3: // Start TX (fourth step)
 			SPI0WritePageRegByte(0x04, 0x41, 0x80);     // Transmit during Next Timeslot
-			SPI0WritePageRegByte(0x04, 0x50, 0x10);     // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+#if defined(HAS_DMR_SMS_TX)
+			if (dmrSmsIsrTxActive())
+			{
+				hrc6000DataTxStartBurst();
+			}
+			else
+#endif
+			{
+				SPI0WritePageRegByte(0x04, 0x50, 0x10);     // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+			}
 			slotState = DMR_STATE_TX_START_4;
 			break;
 
@@ -1745,7 +1831,16 @@ void hrc6000TimeslotInterruptHandler(void)
 
 		case DMR_STATE_TX_START_5: // Start TX (sixth step)
 			SPI0WritePageRegByte(0x04, 0x41, 0x80);     // Transmit during next Timeslot
-			SPI0WritePageRegByte(0x04, 0x50, 0x10);     // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+#if defined(HAS_DMR_SMS_TX)
+			if (dmrSmsIsrTxActive())
+			{
+				hrc6000DataTxStartBurst();
+			}
+			else
+#endif
+			{
+				SPI0WritePageRegByte(0x04, 0x50, 0x10);     // Set Data Type to 0001 (Voice LC Header), Data, LCSS=00
+			}
 			hrc.TAPhase = 0;
 			slotState = DMR_STATE_TX_1;
 			break;
@@ -1763,6 +1858,43 @@ void hrc6000TimeslotInterruptHandler(void)
 			break;
 
 		case DMR_STATE_TX_2: // Ongoing TX (active timeslot)
+#if defined(HAS_DMR_SMS_TX)
+			// Fork: DMR SMS (ported from dondch/OpenGD77-AES256): on each active timeslot the next
+			// burst of the data call instead of a voice frame. The chip BPTC / trellis encodes the 12
+			// info bytes for the slot type written to reg 0x50.
+			if (dmrSmsIsrTxActive())
+			{
+				uint8_t dataType;
+				uint8_t payload[LC_DATA_LENGTH];
+
+				if (dmrSmsIsrTxNext(&dataType, payload))
+				{
+					SPI0WritePageRegByteArray(0x02, 0x00, payload, LC_DATA_LENGTH);
+					SPI0WritePageRegByte(0x04, 0x41, 0x80);   // transmit during next timeslot
+					SPI0WritePageRegByte(0x04, 0x50, dataType);
+					slotState = DMR_STATE_TX_1;
+					break;
+				}
+
+				// All out (trxTransmissionEnabled cleared). A stock radio sends no terminator after
+				// data. DMO: straight back to receive, as the end of the SMS acknowledgement does (the
+				// original). RMO: no terminator either (theirs sent Terminators with whatever LC the
+				// register held), the normal end of a repeater transmission from TX_END_2.
+				hrc.transmissionEnabled = false;
+				SPI0WritePageRegByte(0x04, 0x41, 0x00);
+				if (currentRadioDevice->trxDMRModeTx == DMR_MODE_DMO)
+				{
+					HRC6000InitDigitalDmrRx();
+					addTimerCallback(hrc6000TxBurstCallback, 1, MENU_ANY, false);
+					slotState = DMR_STATE_TX_END_3_DMO;
+				}
+				else
+				{
+					slotState = DMR_STATE_TX_END_2;
+				}
+				break;
+			}
+#endif
 			if (hrc.transmissionEnabled)
 			{
 				if (settingsUsbMode == USB_MODE_HOTSPOT)
@@ -1863,6 +1995,17 @@ void hrc6000TimeslotInterruptHandler(void)
 #endif
 			break;
 
+#if defined(HAS_DMR_SMS_ACK)
+		case DMR_STATE_TX_ACK_1: // the DMR SMS acknowledgement goes out in this timeslot
+			SPI0WritePageRegByte(0x04, 0x41, 0x00); // and nothing in the next one
+			slotState = DMR_STATE_TX_ACK_2;
+			break;
+		case DMR_STATE_TX_ACK_2: // sent: back to receive, as the end of a DMO transmission does
+			addTimerCallback(hrc6000TxBurstCallback, 29, MENU_ANY, false);
+			HRC6000InitDigitalDmrRx();
+			slotState = DMR_STATE_TX_END_3_DMO;
+			break;
+#endif
 		case DMR_STATE_TX_END_3_DMO:
 			slotState = DMR_STATE_IDLE;
 			trxIsTransmitting = false;
@@ -2662,6 +2805,73 @@ int HRC6000GetIsWakingState(void)
 {
 	return hrc.isWaking;
 }
+
+#if defined(HAS_DMR_SMS_ACK)
+// Fork: DMR SMS acknowledgement, ported from dondch/OpenGD77-AES256. One data header burst
+// (the Response packet, functions/dmrSmsPdu.c) in the NEXT timeslot, from the receive state,
+// without a data call key-up (no CSBK preamble, no Voice LC): the chip keeps the passive timing
+// it locked to the sender, so the burst lands in the slot after the sender's last one, where a
+// stock radio puts its acknowledgement. The RF_TX interrupt keys the PA for the burst as for any
+// DMR burst (hrc6000TxInterruptHandler) and the timeslot interrupt turns it off after 20 ms;
+// TX_ACK_1 / TX_ACK_2 then return to receive the way a DMO transmission ends. The UI is not
+// told and trxTransmissionEnabled stays false.
+static void hrc6000DataAckStart(const uint8_t *hdr12)
+{
+	audioAmpDisable(AUDIO_AMP_CHANNEL_RF);
+	// keyed without trxSetTX(): set the PA drive for the TX frequency if the last transmission
+	// left another one (the original's bench: a radio that had not transmitted since boot sent
+	// its ACK about 31 dB down)
+	if ((currentRadioDevice->lastSetTxFrequency != currentRadioDevice->currentTxFrequency) ||
+			(currentRadioDevice->lastSetTxPowerLevel != currentRadioDevice->txPowerLevel))
+	{
+		trxConfigurePA_DAC_ForFrequencyBand();
+	}
+	SPI0WritePageRegByteArray(0x02, 0x00, hdr12, LC_DATA_LENGTH);
+	SPI0WritePageRegByte(0x04, 0x50, 0x60); // Data Header, Data, LCSS = 00
+	SPI0WritePageRegByte(0x04, 0x41, 0x80); // transmit during the next timeslot
+	slotState = DMR_STATE_TX_ACK_1;
+}
+#endif
+
+#if defined(HAS_DMR_SMS_TX)
+// Fork: DMR SMS key-up burst, ported from dondch/OpenGD77-AES256: the next queued burst (a CSBK
+// preamble) instead of a Voice LC header. A stock TYT SMS is CSBK led, with no Voice LC header; a
+// receiver that sees Voice LC headers treats the call as voice and drops the data PDU. TX_START_1 /
+// 3 / 5 take three of the six preamble bursts, TX_2 the rest, the data header and the blocks.
+static void hrc6000DataTxStartBurst(void)
+{
+	uint8_t dataType;
+	uint8_t payload[LC_DATA_LENGTH];
+
+	if (dmrSmsIsrTxNext(&dataType, payload))
+	{
+		SPI0WritePageRegByteArray(0x02, 0x00, payload, LC_DATA_LENGTH);
+		SPI0WritePageRegByte(0x04, 0x50, dataType);
+	}
+	else
+	{
+		SPI0WritePageRegByte(0x04, 0x50, 0x10); // the queue cannot be empty here: a Voice LC header as a fallback
+	}
+}
+
+// Fork: DMR SMS, ported from dondch/OpenGD77-AES256: hrc6000Tick() starts a transmission only from
+// the idle slot state, which a recent reception keeps away until END_TICK_TIMEOUT of silence; the
+// PA would be keyed with no burst state machine running. Forced to idle, as the receive timeout
+// does, under the interrupt guard of this file. functions/dmrSms.c only calls it when nothing is
+// being transmitted or heard.
+void HRC6000ForceDMRIdleForTx(void)
+{
+	interruptsDisableC6000Interrupts();
+	while (hrc.inIRQHandler);
+
+	slotState = DMR_STATE_IDLE;
+	trxIsTransmitting = false;
+	hrc.isWaking = WAKING_MODE_NONE;
+	hrc.tickCount = 0;
+
+	interruptsEnableC6000Interrupts();
+}
+#endif
 
 void HRC6000ClearActiveDMRID(void)
 {

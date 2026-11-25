@@ -137,6 +137,8 @@ typedef enum
 	BIT_SCAN_ON_BOOT_ENABLED        = (SETTINGS_BITS_BANK_0 | (1 << 7)),
 #if !defined(STM32F405xx)
 	BIT_POWEROFF_SUSPEND            = (SETTINGS_BITS_BANK_0 | (1 << 8)),
+#else
+	BIT_CLOCK_LOCAL_AND_ZULU        = (SETTINGS_BITS_BANK_0 | (1 << 8)), // Fork: with local time on, the EMCOM footer also shows Zulu (bit unused on STM32F405)
 #endif
 	BIT_SATELLITE_MANUAL_AUTO       = (SETTINGS_BITS_BANK_0 | (1 << 9)),
 	BIT_UI_EMCOM_CONTRAST           = (SETTINGS_BITS_BANK_0 | (1 << 10)), // Fork: EMCOM contrast style (was unused)

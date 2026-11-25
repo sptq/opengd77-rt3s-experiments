@@ -51,7 +51,7 @@ static
 
 // Fork: the first 64 KB of the last 2 MB hold the EMCOM event log (functions/eventLog.h)
 #define LOG_FLASH_16MB_START_ADDRESS  ((14 * 1024 * 1024) + (64 * 1024)) // Last 2MB - 64KB
-#define LOG_FLASH_16MB_MEM_SIZE        ((2 * 1024 * 1024) - (128 * 1024) - (320 * 1024)) // Fork: then 320 KB of SSTV pictures (functions/sstvStore.h) and 64 KB of field tools data (functions/fieldData.h)
+#define LOG_FLASH_16MB_MEM_SIZE        ((2 * 1024 * 1024) - (128 * 1024) - (320 * 1024) - (8 * 1024)) // Fork: then the 8 KB DMR SMS inbox (functions/dmrSms.h), 320 KB of SSTV pictures (functions/sstvStore.h) and 64 KB of field tools data (functions/fieldData.h)
 #if defined(CPU_MK22FN512VLL12)
 #define LOG_FLASH_2MB_START_ADDRESS    (1 * 1024 * 1024) // Last 1MB
 #define LOG_FLASH_2MB_MEM_SIZE         (1 * 1024 * 1024)

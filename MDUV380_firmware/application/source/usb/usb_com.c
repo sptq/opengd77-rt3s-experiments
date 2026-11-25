@@ -687,6 +687,10 @@ static void cpsHandleCommand(void)
 				dmrIDCacheInit();
 				flashingDMRIDs = false;
 			}
+			if (isCompressingAMBE)
+			{
+				soundResetBufferQueue();
+			}
 			isCompressingAMBE = false;
 			rxPowerSavingSetLevel(nonVolatileSettings.ecoLevel);
 			uiCPSUpdate(CPS2UI_COMMAND_END, 0, 0, FONT_SIZE_1, TEXT_ALIGN_LEFT, 0, NULL);

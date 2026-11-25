@@ -25,15 +25,16 @@ DISPLAY_OPTS = [('Brightness', '100%'), ('Min bright', '5%'), ('Contrast', '18')
 
 
 def standby(P):
-    s = R.Screen(P['bg']); R.status_bar(s, P); R.bar(s, P, 0); R.zone_row(s, P); R.hero(s, P); R.divs(s, P)
-    R.params_fm(s, P); R.emcom_rows(s, P); R.footer(s, P); return s
+    return R.screen_standby(P)
 
 
 def rx(P):
-    s = R.Screen(P['bg']); R.status_bar(s, P, 'RX'); R.bar(s, P, 25); R.zone_row(s, P); R.hero(s, P); R.divs(s, P)
-    s.text(2, R.PANEL_Y1 - 2, '-63dBm', 3, P['rx']); s.text(R.W - 2, R.PANEL_Y1 - 2, 'S9+10', 3, P['rx'], True)
-    R.kv(s, P, 2, R.PANEL_Y2 + 2, 'RXT', '88.5', P['rx'])
-    R.emcom_rows(s, P, unread=2); R.footer(s, P); return s
+    s = R.Screen(P['bg']); R.status_bar(s, P, 'RX'); R.bar(s, P, 25); R.zone_row(s, P); R.hero(s, P); R.divs(s, P, R.EXPANDED_DIV2_Y)
+    s.text(2, R.PANEL_LARGE_Y1, '-63dBm', 3, P['rx']); s.text(R.W - 2, R.PANEL_LARGE_Y1, 'S9+10', 3, P['rx'], True)
+    R.kv(s, P, 2, R.PANEL_Y2, 'RXT', '88.5', P['rx'])
+    R.kv(s, P, 2, R.PANEL_Y3, 'DIST', '12.3km', P['fg'])
+    R.emcom_rows(s, P, unread=2, y1=R.EXPANDED_ROW_Y1, y2=R.EXPANDED_ROW_Y2, y3=R.EXPANDED_ROW_Y3)
+    R.footer(s, P, right='RX', rc=P['rx']); return s
 
 
 def tx(P):

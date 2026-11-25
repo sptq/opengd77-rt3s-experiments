@@ -2520,10 +2520,19 @@ static void handleQuickMenuEvent(uiEvent_t *ev)
 				case CH_SCREEN_QUICK_MENU_COPY2VFO:
 				{
 					int8_t currentTS = trxGetDMRTimeSlot();
+					uint8_t vfoStepFlag = settingsVFOChannel[nonVolatileSettings.currentVFONumber].VFOflag5 & 0xF0;
 
 					memcpy(&settingsVFOChannel[nonVolatileSettings.currentVFONumber].rxFreq, &currentChannelData->rxFreq, CODEPLUG_CHANNEL_DATA_STRUCT_SIZE - 16);// Don't copy the name of channel, which are in the first 16 bytes
 					settingsVFOChannel[nonVolatileSettings.currentVFONumber].rxTone = currentChannelData->rxTone;
 					settingsVFOChannel[nonVolatileSettings.currentVFONumber].txTone = currentChannelData->txTone;
+
+					// A CPS codeplug can leave an invalid step (8..15) in the channel; keep the VFO's own step then (issue #20)
+					if (VFO_FREQ_STEP_INDEX_IS_VALID(settingsVFOChannel[nonVolatileSettings.currentVFONumber].VFOflag5) == false)
+					{
+						settingsVFOChannel[nonVolatileSettings.currentVFONumber].VFOflag5 =
+								(settingsVFOChannel[nonVolatileSettings.currentVFONumber].VFOflag5 & 0x0F) |
+								(VFO_FREQ_STEP_INDEX_IS_VALID(vfoStepFlag) ? vfoStepFlag : (VFO_FREQ_STEP_DEFAULT_INDEX << 4));
+					}
 
 					if (nonVolatileSettings.overrideTG == 0)
 					{

@@ -33,21 +33,20 @@
 #include "hardware/UC1701.h"
 #endif
 #include "hardware/HR-C6000.h"
+#include "functions/sound.h"
 #include "user_interface/uiGlobals.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 
+#define DMR_RX_AGC_MAX DMR_RX_AGC_SETTING_COUNT
 #if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
-#define DMR_RX_AGC_MAX 16
 #define FM_MIC_GAIN_MIN 1  // Limit to min 1, as 0: no audio
 #define FM_MIC_GAIN_MAX 31
 #elif defined(PLATFORM_MD9600)
-#define DMR_RX_AGC_MAX 16
 #define FM_MIC_GAIN_MIN 0
 #define FM_MIC_GAIN_MAX 15
 #else
-#define DMR_RX_AGC_MAX 8
 #define FM_MIC_GAIN_MIN 0
 #define FM_MIC_GAIN_MAX 15
 #endif
@@ -264,9 +263,9 @@ static void updateScreen(bool isFirstRun)
 					break;
 				case OPTIONS_AUDIO_DMR_RX_AGC:
 					leftSide = currentLanguage->dmr_rx_agc;
-					if (nonVolatileSettings.dmrRxAGC > 0)
+					if (nonVolatileSettings.dmrRxAGC != 0)
 					{
-						snprintf(rightSideVar, SCREEN_LINE_BUFFER_SIZE, "%udB", ((nonVolatileSettings.dmrRxAGC - 1) * 3));
+						snprintf(rightSideVar, SCREEN_LINE_BUFFER_SIZE, "%ddB", ((nonVolatileSettings.dmrRxAGC - 4) * 3));
 					}
 					else
 					{
@@ -533,6 +532,7 @@ static void handleEvent(uiEvent_t *ev)
 					if (nonVolatileSettings.dmrRxAGC < DMR_RX_AGC_MAX)
 					{
 						settingsIncrement(nonVolatileSettings.dmrRxAGC, 1);
+						soundDMRRxAGCSettingsChanged();
 					}
 					break;
 #if defined(PLATFORM_MD9600)
@@ -658,11 +658,7 @@ static void handleEvent(uiEvent_t *ev)
 					if (nonVolatileSettings.dmrRxAGC > 0)
 					{
 						settingsDecrement(nonVolatileSettings.dmrRxAGC, 1);
-
-						if (nonVolatileSettings.dmrRxAGC == 0)
-						{
-							soundResetDMRRxAGCGain();
-						}
+						soundDMRRxAGCSettingsChanged();
 					}
 					break;
 #if defined(PLATFORM_MD9600)
@@ -706,15 +702,12 @@ static void exitCallback(void *data)
 	{
 		// Restore original settings.
 		memcpy(&nonVolatileSettings, &originalNonVolatileSettings, sizeof(settingsStruct_t));
+		soundDMRRxAGCSettingsChanged();
 		soundBeepVolumeDivider = nonVolatileSettings.beepVolumeDivider;
 		HRC6000SetMicGainDMR(nonVolatileSettings.micGainDMR);
 		trxSetMicGainFM(nonVolatileSettings.micGainFM);
 		voxSetParameters(nonVolatileSettings.voxThreshold, nonVolatileSettings.voxTailUnits);
 
-		if (nonVolatileSettings.dmrRxAGC == 0)
-		{
-			soundResetDMRRxAGCGain();
-		}
 
 #if defined(PLATFORM_RD5R)
 		settingsSetDirty();

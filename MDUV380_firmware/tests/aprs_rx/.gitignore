@@ -2,3 +2,5 @@ test_decoder
 test_parse
 test_text
 test_sked
+test_dmr_rx_agc
+test_stqc

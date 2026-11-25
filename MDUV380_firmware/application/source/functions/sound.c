@@ -36,6 +36,9 @@
 #include "interfaces/interrupts.h"
 #include "interfaces/i2s.h"
 #include "functions/blackout.h"
+#include "user_interface/uiGlobals.h"
+#include "usb/usb_com.h"
+
 
 
 #define MIC_AVERAGE_COUNTER_RELOAD     10
@@ -43,12 +46,11 @@
 
 static void soundBeepTaskFunction(void *data);
 
-typedef union
+typedef union byteSwap16
 {
 	int16_t byte16;
 	uint8_t bytes8[2];
 } byteSwap16_t;
-byteSwap16_t swapper;
 
 Task_t beepTask;
 
@@ -143,11 +145,17 @@ static const uint32_t DELAYED_BEEP_DURATION_MS = 0;
 static bool isInDelayedStart = false;
 static uint32_t delayedStartCounter = 0;
 
-volatile float dmrRxAGCrxPeakAverage = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES;
-static volatile uint32_t dmrRxAGCpeakRx = 0;
-static const uint32_t DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE = 100;
-static float dmrRxAgcGain = 1.0;
-static int16_t AGC_SETTINGS_LUT[] = { 1,2,4,8,16,32,64,128 };
+static volatile dmrRxAgcState_t dmrRxAgcState =
+{
+	DMR_RX_AGC_DEFAULT_PEAK_SAMPLES, 1.0f, 1.0f, { 0U, 0U, 0U }
+};
+static volatile dmrRxAgcState_t dmrRxAgcTransitionState =
+{
+	DMR_RX_AGC_DEFAULT_PEAK_SAMPLES, 1.0f, 1.0f, { 0U, 0U, 0U }
+};
+static volatile dmrRxAgcOwner_t dmrRxAgcOwner;
+static volatile uint32_t dmrRxAgcTransitionBuffers;
+static volatile uint32_t melodyGeneration;
 
 uint8_t audioAmpGetStatus(void)
 {
@@ -224,11 +232,11 @@ void soundSetMelody(const int16_t *melody)
 		taskENTER_CRITICAL();
 		if ((voicePromptsIsPlaying() == false) || (melody == NULL))
 		{
+			melodyGeneration++;
 			sine_beep_freq = 0;
 			sine_beep_duration = 0;
 			melody_play = (int16_t *)melody;
 			melody_idx = 0;
-			soundResetDMRRxAGCGain();
 			isInDelayedStart = false;
 		}
 		taskEXIT_CRITICAL();
@@ -264,6 +272,7 @@ void soundInitBeepTask(void)
 	sine_beep_freq = 0;
 	sine_beep_duration = 0;
 	taskEXIT_CRITICAL();
+	soundDMRRxAGCSettingsChanged();
 
 	xTaskCreate(soundBeepTaskFunction,           /* pointer to the task */
 			"beepTask",                          /* task name for kernel awareness debugging */
@@ -283,6 +292,19 @@ void soundInit(void)
 	wavbuffer_read_idx = 0;
 	wavbuffer_write_idx = 0;
 	wavbuffer_count = 0;
+	dmrRxAgcTransitionBuffers = 0U;
+}
+
+// Hotspot mode also uses the shared indices for encoded frames. Discard its
+// queue and any RX-PCM quarantine as one bounded task-context operation.
+void soundResetBufferQueue(void)
+{
+	taskENTER_CRITICAL();
+	wavbuffer_read_idx = 0;
+	wavbuffer_write_idx = 0;
+	wavbuffer_count = 0;
+	dmrRxAgcTransitionBuffers = 0U;
+	taskEXIT_CRITICAL();
 }
 
 void soundTerminateSound(void)
@@ -316,6 +338,8 @@ void soundRetrieveBuffer(void)
 		currentWaveBuffer = (uint8_t *)audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx];// cast just to prevent compiler warning
 		wavbuffer_read_idx = ((wavbuffer_read_idx + 1) % WAV_BUFFER_COUNT);
 		wavbuffer_count--;
+		dmrRxAgcTransitionBuffers = dmrRxAgcTransitionBuffersAfterConsume(dmrRxAgcTransitionBuffers,
+				(uint32_t)wavbuffer_count);
 	}
 	taskEXIT_CRITICAL();
 }
@@ -324,9 +348,10 @@ void soundRetrieveBuffer(void)
 // Subsequent data fills are done using soundRefillData()
 bool soundFillData(void)
 {
-#if defined(I2S_APRS_RX)
-	i2sAprsRxStop(); // before refilling, so the APRS capture DMA does not play/consume the sound buffers
-#endif
+	#if defined(I2S_APRS_RX)
+	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
+	#endif
+
 	for(int i = 0; i < 2; i++)
 	{
 		soundRefillData(i);
@@ -337,79 +362,150 @@ bool soundFillData(void)
 	return true;
 }
 
+static void soundDMRRxAGCSetHardwareGain(int8_t gain)
+{
+#if defined(PLATFORM_MD9600) || defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
+	HRC6000SetDmrRxGain(gain);
+#else
+	HRC6000SetDmrAGCGain(gain);
+#endif
+}
+
+void soundDMRRxAGCSetStationLevel(const void *station, uint32_t stationId, uint32_t stationToken, uint16_t rememberedPeak)
+{
+	dmrRxAgcOwnerSnapshot_t previousOwner;
+	dmrRxAgcState_t previousState;
+	bool sameOwner;
+
+	// The caller supplies the intended entry and identity explicitly. The owner
+	// is invalidated before state reset and published only after both are ready.
+	// I2S DMA runs at NVIC priority 6, below FreeRTOS's priority-5 mask, so this
+	// short critical section prevents the ISR from seeing a partial publication.
+	taskENTER_CRITICAL();
+	dmrRxAgcStateCopy(&previousState, &dmrRxAgcState);
+	sameOwner = dmrRxAgcOwnerSnapshot(&dmrRxAgcOwner, &previousOwner) &&
+			(previousOwner.entry == station) &&
+			(previousOwner.stationId == stationId) &&
+			(previousOwner.stationToken == stationToken);
+	dmrRxAgcOwnerInvalidate(&dmrRxAgcOwner);
+	dmrRxAgcSetStationLevel(&dmrRxAgcState, rememberedPeak);
+	if (!sameOwner)
+	{
+		dmrRxAgcStateCopy(&dmrRxAgcTransitionState, &previousState);
+		dmrRxAgcTransitionBuffers = ((trxTransmissionEnabled == false) &&
+				(settingsUsbMode != USB_MODE_HOTSPOT) && !isCompressingAMBE &&
+				(wavbuffer_count > 0)) ? (uint32_t)wavbuffer_count : 0U;
+	}
+	dmrRxAgcOwnerPublish(&dmrRxAgcOwner, station, stationId, stationToken);
+	taskEXIT_CRITICAL();
+}
+
+void soundDMRRxAGCInvalidateStation(void)
+{
+	taskENTER_CRITICAL();
+	dmrRxAgcStateCopy(&dmrRxAgcTransitionState, &dmrRxAgcState);
+	dmrRxAgcOwnerInvalidate(&dmrRxAgcOwner);
+	dmrRxAgcSetStationLevel(&dmrRxAgcState, 0U);
+	dmrRxAgcTransitionBuffers = ((trxTransmissionEnabled == false) &&
+			(settingsUsbMode != USB_MODE_HOTSPOT) && !isCompressingAMBE &&
+			(wavbuffer_count > 0)) ? (uint32_t)wavbuffer_count : 0U;
+	taskEXIT_CRITICAL();
+}
+
+void soundDMRRxAGCSettingsChanged(void)
+{
+	taskENTER_CRITICAL();
+	dmrRxAgcSettingsChanged(&dmrRxAgcState);
+	dmrRxAgcSettingsChanged(&dmrRxAgcTransitionState);
+	taskEXIT_CRITICAL();
+
+	// On platforms where this API is implemented, the same HRC6000 register is
+	// also owned by the volume control while AGC is enabled. Only neutralize it
+	// for the disabled state; enabled-setting changes must not overwrite volume.
+	if (nonVolatileSettings.dmrRxAGC == 0U)
+	{
+		soundDMRRxAGCSetHardwareGain(0);
+	}
+}
+
 bool soundRefillData(uint32_t bufNum)
 {
-	uint32_t samp;
-
 	if (wavbuffer_count >= 2)
 	{
 		for(int j = 0; j < 2; j++)
 		{
-			if (((wavbuffer_read_idx % 16) == 0) &&
-					(voicePromptsIsPlaying() == false) && (soundMelodyIsPlaying() == false))
-			{
-				if ((nonVolatileSettings.dmrRxAGC != 0) && (dmrRxAGCrxPeakAverage != 0))
-				{
-					dmrRxAgcGain  = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES / dmrRxAGCrxPeakAverage;
-					dmrRxAgcGain *= AGC_SETTINGS_LUT[nonVolatileSettings.dmrRxAGC - 1];
+			uint8_t setting = nonVolatileSettings.dmrRxAGC;
+			uint32_t peak = 0;
+			bool transitionBuffer = (dmrRxAgcTransitionBuffers > 0U);
 
-					// hack alert. Arbitrary gain limit
-					if (dmrRxAgcGain > 32.0)
+			if ((setting == 0U) || voicePromptsIsPlaying())
+			{
+				// Bypass is a bit-for-bit PCM copy. In particular, do not use
+				// abs(INT16_MIN), gain interpolation, or saturation here.
+				for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
+				{
+					i2s_Tx_Buffer[bufNum][j][2 * i] = (uint16_t)dmrRxAgcReadPcmSample(audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx], i);
+				}
+				dmrRxAgcSetBypass(&dmrRxAgcState);
+				dmrRxAgcSetBypass(&dmrRxAgcTransitionState);
+			}
+			else
+			{
+				dmrRxAgcState_t processingState;
+				dmrRxAgcOwnerSnapshot_t ownerSnapshot;
+				bool ownerValid = dmrRxAgcOwnerSnapshot(&dmrRxAgcOwner, &ownerSnapshot);
+
+				// Only a coherent owner may update the persistent AGC state. A
+				// transition or list reset uses an isolated state so its bounded
+				// limiter output remains audible without learning across stations.
+				if (ownerValid && !transitionBuffer)
+				{
+					dmrRxAgcStateCopy(&processingState, &dmrRxAgcState);
+				}
+				else if (transitionBuffer)
+				{
+					dmrRxAgcStateCopy(&processingState, &dmrRxAgcTransitionState);
+				}
+				else
+				{
+					dmrRxAgcStateInit(&processingState);
+				}
+
+				// The input remains owned by this refill until wavbuffer_read_idx
+				// advances below. The shared operation keeps host coverage aligned
+				// with production peak, scaling, and gain-finalization behavior.
+				peak = dmrRxAgcProcessPcmBuffer(&processingState, setting,
+						audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx],
+						i2s_Tx_Buffer[bufNum][j], (WAV_BUFFER_SIZE / 2));
+				if (transitionBuffer)
+				{
+					dmrRxAgcStateCopy(&dmrRxAgcTransitionState, &processingState);
+				}
+				else if (ownerValid && dmrRxAgcOwnerStillCurrent(&dmrRxAgcOwner, &ownerSnapshot))
+				{
+					dmrRxAgcStateCopy(&dmrRxAgcState, &processingState);
+					if ((peak > 500U) && (ownerSnapshot.entry != NULL))
 					{
-						dmrRxAgcGain = 32.0;
+						((LinkItem_t *)ownerSnapshot.entry)->rxAGCGain = (uint16_t)processingState.peakAverage;
 					}
-				}
-			}
-
-			dmrRxAGCpeakRx = 0;
-
-			for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
-			{
-				swapper.bytes8[0] = audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx][2 * i];
-				swapper.bytes8[1] = audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx][(2 * i) + 1];
-				i2s_Tx_Buffer[bufNum][j][2 * i] = (int16_t)(swapper.byte16 * dmrRxAgcGain);				// Only fill the Left Channel. Right Channel is not used by the HRC6000
-
-				samp = abs(swapper.byte16);
-
-				if (samp > dmrRxAGCpeakRx)
-				{
-					dmrRxAGCpeakRx = samp;
-				}
-			}
-
-			// filter out some but not all kerchunkers
-			if ((dmrRxAGCpeakRx > 200) && (voicePromptsIsPlaying() == false) && (soundMelodyIsPlaying() == false))
-			{
-				dmrRxAGCrxPeakAverage -= dmrRxAGCrxPeakAverage / DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE;
-				dmrRxAGCrxPeakAverage += ((float)dmrRxAGCpeakRx) / DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE;
-
-				if (dmrRxAGCpeakRx > 500)
-				{
-					LinkHead->rxAGCGain = (uint16_t)dmrRxAGCrxPeakAverage;
 				}
 			}
 
 			wavbuffer_read_idx = ((wavbuffer_read_idx + 1) % WAV_BUFFER_COUNT);
 			wavbuffer_count--;
+			dmrRxAgcTransitionBuffers = dmrRxAgcTransitionBuffersAfterConsume(dmrRxAgcTransitionBuffers,
+					(uint32_t)wavbuffer_count);
 		}
-
-		if (wavbuffer_count == 0)
-		{
-			soundResetDMRRxAGCGain();
-		}
-
 		return (wavbuffer_count > 0);
 	}
 	else
 	{
 		memset(i2s_Tx_Buffer[bufNum], 0x00, (2 * (WAV_BUFFER_SIZE * sizeof(uint16_t))));
 
-		soundResetDMRRxAGCGain();
-#if 0
-#if defined(USING_EXTERNAL_DEBUGGER)
-		SEGGER_RTT_printf(0, "END %d\n",LinkHead->rxAGCGain);
-#endif
-#endif
+		// The level is kept: this happens mid-over as well as at the end, and a
+		// new caller's level is set by uiUtilities. Only the click filter starts
+		// over, since the next buffers may belong to someone else.
+		dmrRxAgcClearHistory(&dmrRxAgcState);
 	}
 
 	return false;
@@ -438,9 +534,9 @@ bool soundReceiveData(void)
 	{
 		return false;
 	}
-#if defined(I2S_APRS_RX)
-	i2sAprsRxStop();
-#endif
+	#if defined(I2S_APRS_RX)
+	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
+	#endif
     isSending = false;
     isReceiving = true;
 	soundStartDMA();
@@ -453,15 +549,16 @@ void soundReceiveRefillData(uint32_t bufNum)
 	{
 		for(int j = 0; j < 2; j++)
 		{
+			byteSwap16_t sample;
+
 			for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
 			{
-				swapper.byte16 = i2s_Rx_Buffer[bufNum][j][i * 2];             // only use the Left Channel of the Mic Audio. Right Channel contains a duplicate.
-				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][(2 * i) + 1] = swapper.bytes8[1];
-				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][2 * i] = swapper.bytes8[0];
-
-				if (abs(swapper.byte16) > runningMaxValue)
+				sample.byte16 = i2s_Rx_Buffer[bufNum][j][i * 2];             // only use the Left Channel of the Mic Audio. Right Channel contains a duplicate.
+				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][(2 * i) + 1] = sample.bytes8[1];
+				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][2 * i] = sample.bytes8[0];
+				if (abs(sample.byte16) > runningMaxValue)
 				{
-					runningMaxValue = abs(swapper.byte16);
+					runningMaxValue = abs(sample.byte16);
 				}
 			}
 
@@ -524,24 +621,17 @@ bool soundMelodyIsPlaying(void)
 	return (melody_play != NULL);
 }
 
-void soundResetDMRRxAGCGain(void)
-{
-	dmrRxAgcGain = 1.0;
-	dmrRxAGCrxPeakAverage = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES;
-	dmrRxAGCpeakRx = 0U;
-#if defined(CPU_MK22FN512VLL12) || defined(PLATFORM_MD9600)
-	HRC6000SetDmrRxGain(0);
-#else
-	HRC6000SetDmrAGCGain(0);
-#endif
-}
-
 void soundTickMelody(void)
 {
 	taskENTER_CRITICAL();
 	if (melody_play != NULL)
 	{
-		if (sine_beep_duration == 0)
+		// <= rather than ==: soundSetMelody() can zero the duration from another
+		// task in between the beep task's "> 0" test and its decrement, which
+		// leaves it at -1. On == that never matches again, so the melody never
+		// advances, soundStopMelody() never runs, and the audio path stays stuck
+		// in beep mode until the radio is power cycled.
+		if (sine_beep_duration <= 0)
 		{
 			if (melody_play[melody_idx] == -1)
 			{
@@ -556,7 +646,6 @@ void soundTickMelody(void)
 					isInDelayedStart = true;
 					delayedStartCounter = DELAYED_BEEP_DURATION_MS;
 				}
-
 				if (delayedStartCounter == 0)
 				{
 					sine_beep_freq = melody_play[melody_idx];
@@ -573,21 +662,54 @@ void soundTickMelody(void)
 	taskEXIT_CRITICAL();
 }
 
+static bool soundBeepGenerationIsCurrent(uint32_t generation)
+{
+	bool current;
+
+	taskENTER_CRITICAL();
+	current = ((melodyGeneration == generation) && (melody_play != NULL) && (sine_beep_duration > 0));
+	taskEXIT_CRITICAL();
+
+	return current;
+}
+
 static void soundBeepTaskFunction(void *data)
 {
 	const int WAIT_TIMEOUT_COUNT = 10;
 	uint8_t tmp_val;
 	int beep_idx = 0;
 	bool beep = false;
+	uint32_t beepGeneration = 0;
 	uint8_t task_spi_sound[32];
 	int waitTimeout;
 
 	while (1U)
 	{
+		bool durationActive;
+		uint32_t activeGeneration;
+		int16_t activeFrequency;
+		int activeVolumeDivider;
+
 			beepTask.AliveCount = TASK_FLAGGED_ALIVE;
 
-			if (sine_beep_duration > 0)
+			// Take a coherent snapshot. The SPI operations below may block and
+			// must not run inside this critical section.
+			taskENTER_CRITICAL();
+			durationActive = ((melody_play != NULL) && (sine_beep_duration > 0));
+			activeGeneration = melodyGeneration;
+			activeFrequency = sine_beep_freq;
+			activeVolumeDivider = soundBeepVolumeDivider;
+			taskEXIT_CRITICAL();
+
+			if (durationActive)
 			{
+				if (activeGeneration != beepGeneration)
+				{
+					beep = false;
+					beep_idx = 0;
+					beepGeneration = activeGeneration;
+				}
+
 				if (rxPowerSavingIsRxOn() == false)
 				{
 					rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE);
@@ -602,7 +724,7 @@ static void soundBeepTaskFunction(void *data)
 
 					while ((SPI0ClearPageRegByteWithMask(0x04, 0x06, 0xFD, 0x02) == -1) &&  ((waitTimeout--) > 0))
 					{
-						vTaskDelay((1U / portTICK_PERIOD_MS));
+						vTaskDelay((1 / portTICK_PERIOD_MS));
 					}
 
 					interruptsEnableC6000Interrupts();
@@ -616,7 +738,7 @@ static void soundBeepTaskFunction(void *data)
 
 				while ((SPI0ReadPageRegByte(0x04, 0x88, &tmp_val) == -1) &&  ((waitTimeout--) > 0))
 				{
-					vTaskDelay((1U / portTICK_PERIOD_MS));
+					vTaskDelay((1 / portTICK_PERIOD_MS));
 				}
 
 				interruptsEnableC6000Interrupts();
@@ -626,13 +748,15 @@ static void soundBeepTaskFunction(void *data)
 				{
 					for (int i = 0; i < 16; i++)
 					{
-						swapper.byte16 = ((int)sine_beep16[beep_idx]) >> soundBeepVolumeDivider;
-						task_spi_sound[(2 * i) + 1] = swapper.bytes8[0];// low byte
-						task_spi_sound[2 * i] = swapper.bytes8[1];// high byte
+						byteSwap16_t beepSample;
 
-						if (sine_beep_freq != 0)
+						beepSample.byte16 = ((int)sine_beep16[beep_idx]) >> activeVolumeDivider;
+						task_spi_sound[(2 * i) + 1] = beepSample.bytes8[0];// low byte
+						task_spi_sound[2 * i] = beepSample.bytes8[1];// high byte
+
+						if (activeFrequency != 0)
 						{
-							beep_idx = beep_idx + (int)(sine_beep_freq / 3.915f);
+							beep_idx = beep_idx + (int)(activeFrequency / 3.915f);
 
 							// Stay in sine_beep16[] boundaries.
 							while (beep_idx >= 0x0800)
@@ -641,19 +765,51 @@ static void soundBeepTaskFunction(void *data)
 							}
 						}
 					}
-					waitTimeout = WAIT_TIMEOUT_COUNT;
+					bool generationCurrent = soundBeepGenerationIsCurrent(activeGeneration);
 
-					interruptsDisableC6000Interrupts();
-
-					while ((SPI0WritePageRegByteArray(0x03, 0x00, task_spi_sound, 0x20) == -1) &&  ((waitTimeout--) > 0))
+					// The generation check is deliberately immediately before the
+					// transfer. A cancellation can still race a blocking SPI write,
+					// but stale frames are not submitted when the replacement is
+					// already visible to the task.
+					if (generationCurrent)
 					{
-						vTaskDelay((1U / portTICK_PERIOD_MS));
-					}
+						int spiStatus;
 
-					interruptsEnableC6000Interrupts();
+						waitTimeout = WAIT_TIMEOUT_COUNT;
+
+						interruptsDisableC6000Interrupts();
+
+						spiStatus = SPI0WritePageRegByteArray(0x03, 0x00, task_spi_sound, 0x20);
+						while ((spiStatus == -1) && (waitTimeout > 0))
+						{
+							if (!soundBeepGenerationIsCurrent(activeGeneration))
+							{
+								break;
+							}
+
+							waitTimeout--;
+							vTaskDelay((1 / portTICK_PERIOD_MS));
+
+							if (!soundBeepGenerationIsCurrent(activeGeneration))
+							{
+								break;
+							}
+
+							spiStatus = SPI0WritePageRegByteArray(0x03, 0x00, task_spi_sound, 0x20);
+						}
+
+						interruptsEnableC6000Interrupts();
+					}
 				}
 
-				sine_beep_duration--;
+				// Only the melody whose frame we rendered may be decremented.
+				// soundSetMelody() can replace it while the SPI transfer is busy.
+				taskENTER_CRITICAL();
+				if ((melodyGeneration == activeGeneration) && (melody_play != NULL) && (sine_beep_duration > 0))
+				{
+					sine_beep_duration--;
+				}
+				taskEXIT_CRITICAL();
 			}
 			else
 			{
@@ -665,7 +821,7 @@ static void soundBeepTaskFunction(void *data)
 
 					while ((SPI0ClearPageRegByteWithMask(0x04, 0x06, 0xFD, 0x00) == -1) &&  ((waitTimeout--) >> 0))
 					{
-						vTaskDelay((1U / portTICK_PERIOD_MS));
+						vTaskDelay((1 / portTICK_PERIOD_MS));
 					}
 
 					interruptsEnableC6000Interrupts();
@@ -674,6 +830,6 @@ static void soundBeepTaskFunction(void *data)
 				}
 			}
 
-		vTaskDelay((1U / portTICK_PERIOD_MS));
+		vTaskDelay((1 / portTICK_PERIOD_MS));
 	}
 }

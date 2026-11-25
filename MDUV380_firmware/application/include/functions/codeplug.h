@@ -39,6 +39,12 @@ extern const int CODEPLUG_MIN_VARIABLE_SQUELCH;
 extern const int CODEPLUG_MIN_PER_CHANNEL_POWER;
 
 extern const int VFO_FREQ_STEP_TABLE[8];
+#define VFO_FREQ_STEP_TABLE_SIZE       8
+#define VFO_FREQ_STEP_DEFAULT_INDEX    4 // 12.5 kHz
+// Step index (upper nibble of VFOflag5). A codeplug written by a CPS can hold 8..15 there,
+// which would index past VFO_FREQ_STEP_TABLE, so out-of-range values fall back to the default.
+#define VFO_FREQ_STEP_INDEX_IS_VALID(flag5) (((flag5) >> 4) < VFO_FREQ_STEP_TABLE_SIZE)
+#define VFO_FREQ_STEP_INDEX(flag5)     (VFO_FREQ_STEP_INDEX_IS_VALID(flag5) ? ((flag5) >> 4) : VFO_FREQ_STEP_DEFAULT_INDEX)
 extern const int VFO_SWEEP_SCAN_RANGE_SAMPLE_STEP_TABLE[7];
 
 #define CODEPLUG_ADDR_QUICKKEYS                                0x7524 // LSB,HSB

@@ -58,6 +58,7 @@
 #include "functions/eventLog.h"
 #include "functions/netControl.h"
 #include "functions/sked.h"
+#include "functions/dmrSms.h"
 
 #if defined(USING_EXTERNAL_DEBUGGER)
 #include "SeggerRTT/RTT/SEGGER_RTT.h"
@@ -624,6 +625,18 @@ void applicationMainTask(void)
 
 			(void) txInhibitCheckAndWarn();
 		}
+
+#if defined(HAS_DMR_SMS_TX)
+		// Fork: no PTT while a DMR SMS data call is keyed (about 2 s)
+		if (dmrSmsTxBusy() && (buttons & BUTTON_PTT))
+		{
+			if (buttons == BUTTON_PTT)
+			{
+				button_event = EVENT_BUTTON_NONE;
+			}
+			buttons &= ~BUTTON_PTT;
+		}
+#endif
 
 		// hack to allow SK1 + Up / Down to be Left / Right
 #if ! (defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)) // top side button IS orange
@@ -1442,6 +1455,9 @@ void applicationMainTask(void)
 #endif
 #if defined(HAS_EVENT_LOG)
 		eventLogTick(); // Fork: EMCOM event log (TX, FM RX, DMR calls)
+#endif
+#if defined(HAS_DMR_SMS)
+		dmrSmsTick(); // Fork: DMR SMS receive (PDU from the HR-C6000 interrupt -> inbox)
 #endif
 #if defined(HAS_NET_CONTROL)
 		netTick(); // Fork: EMCOM net control (check-ins, silence alarm)

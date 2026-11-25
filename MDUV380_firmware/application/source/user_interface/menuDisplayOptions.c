@@ -103,6 +103,9 @@ enum
 #endif
 	DISPLAY_TIMEZONE_VALUE,
 	DISPLAY_TIME_UTC_OR_LOCAL,
+#if defined(HAS_EMCOM_UI)
+	DISPLAY_SET_TIME, // Fork: opens Radio infos > Time to type the time
+#endif
 	DISPLAY_SHOW_DISTANCE,
 	DISPLAY_DMR_LAST_TALKER_ON_SCREEN,
 #if defined(HAS_EMCOM_UI)
@@ -110,6 +113,24 @@ enum
 #endif
 	NUM_DISPLAY_MENU_ITEMS
 };
+
+#if defined(HAS_EMCOM_UI)
+// Fork: 0 Zulu (UTC everywhere), 1 local time, 2 local time + Zulu in the EMCOM footer
+static int clockMode(void)
+{
+	if ((nonVolatileSettings.timezone & 0x80) == 0)
+	{
+		return 0;
+	}
+	return (settingsIsOptionBitSet(BIT_CLOCK_LOCAL_AND_ZULU) ? 2 : 1);
+}
+
+static void setClockMode(int mode)
+{
+	settingsSet(nonVolatileSettings.timezone, (uint8_t)((mode == 0) ? (nonVolatileSettings.timezone & ~0x80) : (nonVolatileSettings.timezone | 0x80)));
+	settingsSetOptionBit(BIT_CLOCK_LOCAL_AND_ZULU, (mode == 2));
+}
+#endif
 
 menuStatus_t menuDisplayOptions(uiEvent_t *ev, bool isFirstRun)
 {
@@ -327,9 +348,25 @@ static void updateScreen(bool isFirstRun)
 					break;
 
 				case DISPLAY_TIME_UTC_OR_LOCAL:
+#if defined(HAS_EMCOM_UI)
+					{
+						// Fork: Zulu (UTC) / Local / Local + Zulu (the EMCOM footer shows both)
+						static const char *clockNames[] = { "Zulu", "Local", "Loc+Zulu" };
+
+						leftSide = "Clock";
+						rightSideConst = clockNames[clockMode()];
+					}
+#else
 					leftSide = currentLanguage->UTC;
 					rightSideConst = (nonVolatileSettings.timezone & 0x80) ? currentLanguage->no : currentLanguage->yes;
+#endif
 					break;
+#if defined(HAS_EMCOM_UI)
+				case DISPLAY_SET_TIME:
+					leftSide = "Set time";
+					rightSideConst = ">";
+					break;
+#endif
 
 				case DISPLAY_SHOW_DISTANCE:
 					leftSide = currentLanguage->show_distance;
@@ -721,8 +758,21 @@ static void handleEvent(uiEvent_t *ev)
 					break;
 
 				case DISPLAY_TIME_UTC_OR_LOCAL:
+#if defined(HAS_EMCOM_UI)
+					if (clockMode() < 2)
+					{
+						setClockMode(clockMode() + 1);
+					}
+#else
 					settingsSet(nonVolatileSettings.timezone, (uint8_t) (nonVolatileSettings.timezone & ~0x80));
+#endif
 					break;
+#if defined(HAS_EMCOM_UI)
+				case DISPLAY_SET_TIME:
+					menuRadioInfosOpenPage(RADIO_INFOS_CURRENT_TIME);
+					menuSystemPushNewMenu(MENU_RADIO_INFOS);
+					return;
+#endif
 
 				case DISPLAY_SHOW_DISTANCE:
 					if (settingsIsOptionBitSet(BIT_DISPLAY_CHANNEL_DISTANCE) == false)
@@ -932,7 +982,14 @@ static void handleEvent(uiEvent_t *ev)
 					break;
 
 				case DISPLAY_TIME_UTC_OR_LOCAL:
+#if defined(HAS_EMCOM_UI)
+					if (clockMode() > 0)
+					{
+						setClockMode(clockMode() - 1);
+					}
+#else
 					settingsSet(nonVolatileSettings.timezone, (uint8_t) (nonVolatileSettings.timezone | 0x80));
+#endif
 					break;
 
 				case DISPLAY_SHOW_DISTANCE:

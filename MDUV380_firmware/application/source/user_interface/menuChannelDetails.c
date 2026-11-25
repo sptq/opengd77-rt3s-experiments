@@ -551,8 +551,8 @@ static void updateScreen(bool isFirstRun, bool allowedToSpeakUpdate)
 						rightSideUnitsPrompt = PROMPT_KILOHERTZ;
 						rightSideUnitsStr = "kHz";
 						leftSide = currentLanguage->stepFreq;
-						tmpVal = VFO_FREQ_STEP_TABLE[(tmpChannel.VFOflag5 >> 4)] / 100;
-						snprintf(rightSideVar, SCREEN_LINE_BUFFER_SIZE, "%u.%02u", tmpVal, VFO_FREQ_STEP_TABLE[(tmpChannel.VFOflag5 >> 4)] - (tmpVal * 100));
+						tmpVal = VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(tmpChannel.VFOflag5)] / 100;
+						snprintf(rightSideVar, SCREEN_LINE_BUFFER_SIZE, "%u.%02u", tmpVal, VFO_FREQ_STEP_TABLE[VFO_FREQ_STEP_INDEX(tmpChannel.VFOflag5)] - (tmpVal * 100));
 						break;
 					case CH_DETAILS_TOT:// TOT
 						leftSide = currentLanguage->tot;
@@ -1241,7 +1241,7 @@ static void handleEvent(uiEvent_t *ev)
 					}
 					break;
 				case CH_DETAILS_FREQ_STEP:
-					tmpVal = (tmpChannel.VFOflag5 >> 4) + 1;
+					tmpVal = VFO_FREQ_STEP_INDEX(tmpChannel.VFOflag5) + 1;
 					if (tmpVal > 7)
 					{
 						tmpVal = 7;
@@ -1480,7 +1480,7 @@ static void handleEvent(uiEvent_t *ev)
 					}
 					break;
 				case CH_DETAILS_FREQ_STEP:
-					tmpVal = (tmpChannel.VFOflag5 >> 4) - 1;
+					tmpVal = VFO_FREQ_STEP_INDEX(tmpChannel.VFOflag5) - 1;
 					if (tmpVal < 0)
 					{
 						tmpVal = 0;

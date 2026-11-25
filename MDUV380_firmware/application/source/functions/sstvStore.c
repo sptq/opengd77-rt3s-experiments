@@ -23,8 +23,8 @@
 #error "SSTV store slot layout"
 #endif
 _Static_assert(sizeof(sstvStoreHeader_t) == 32U, "SSTV store header size");
-// interfaces/gps.c: LOG_FLASH_16MB_START_ADDRESS + LOG_FLASH_16MB_MEM_SIZE
-_Static_assert(((14U * 1024U * 1024U) + (64U * 1024U) + ((2U * 1024U * 1024U) - (128U * 1024U) - (320U * 1024U))) == SSTV_STORE_FLASH_ADDRESS, "the GPS log must end where the SSTV store starts");
+// interfaces/gps.c: LOG_FLASH_16MB_START_ADDRESS + LOG_FLASH_16MB_MEM_SIZE, then the 8 KB DMR SMS inbox (functions/dmrSms.h)
+_Static_assert(((14U * 1024U * 1024U) + (64U * 1024U) + ((2U * 1024U * 1024U) - (128U * 1024U) - (320U * 1024U) - (8U * 1024U)) + (8U * 1024U)) == SSTV_STORE_FLASH_ADDRESS, "the GPS log and the DMR SMS inbox must end where the SSTV store starts");
 
 static const uint16_t *savePixels = NULL;
 static sstvStoreHeader_t saveHeader;

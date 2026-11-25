@@ -5,6 +5,32 @@ This is an independent fork maintained by **Marcin SP7TQ**, based on the
 upstream [OpenGD77](https://www.opengd77.com/) R20260131 source. Features
 marked *(untested)* build and pass host tests but still need on-air checking.
 
+## R20260131-SP7TQ.7 — 2026-11-25
+
+* **Fix: the radio froze with voice prompts on** (issue #21). With *Options → Sound → Prompt* set to *Voice* / *Voice L2* / *Voice L3*, highlighting a fork menu entry (PACE, Position, Coverage, Radio check, APRS RX, Event log, SSTV, and *Reset* / *Quickkeys* at the end of *Options*) froze the radio until the battery was pulled. These names have no recording in the voice pack; the firmware read past the voice pack table of contents. They are now spelled letter by letter, and playback refuses prompt numbers outside the table. Radios with *Beep* or *Silent* were not affected.
+
+## R20260131-SP7TQ.6 — 2026-11-25
+
+* **DMR SMS** (new main menu tile *DMR SMS*, envelope icon): cleartext text messages over DMR, receive and send. Send and receive work through a BrandMeister hotspot (service numbers 262993 / 262994 answer); radio to radio with a stock TYT is not tested yet *(untested)*. The data path is ported from [dondch/OpenGD77-AES256](https://github.com/dondch/OpenGD77-AES256), without any encryption (encrypted traffic is not allowed on the amateur bands; encrypted messages are ignored).
+  * **Receive**: stock TYT / Motorola IP format (UDP 4007, TMS, UTF-16), the TYT "DMR format" text and Defined / Raw Short Data from the network (BrandMeister sends its replies as confirmed rate 3/4 short data). Polish and other accented letters are shown without diacritics. A confirmed private message is acknowledged on a simplex (DMO) channel; through a hotspot BrandMeister repeats its reply 3 times and the copies are dropped.
+  * **Inbox** in the SPI flash (kept over a power cycle, the newest 16..32 messages): list newest first, `GREEN` reads, `0` deletes, long `0` then `GREEN` deletes all. New message: card, beep, `MSG IN` event log entry and `SMS n` (or `MSG a+b` with APRS) on the EMCOM main screen.
+  * **Send**: `#` new message, `GREEN` on a message replies. Recipient: DMR ID on the keypad, `*` private / group, `#` the channel contact. Text: quick texts `WX` / `RPT` / `INBOX` (BrandMeister services), the APRS canned replies or typed text (no diacritics yet). Sent as an unconfirmed data call (IP / UDP / TMS, rate 1/2); refused like PTT on FM, RX only, TX inhibit or out of band channels. Sent messages show `>` in the list (`!` if not sent) and go to the event log as `MSG OUT`.
+  * `*` on the list: receive diagnostics (data bursts, blocks, completed packets, drops), for reports.
+* **Decoders** (new main menu tile): the DTMF and CW decoders moved out of APRS RX to their own screen, with a third view:
+  * **STQC selcall** (issue #18) *(untested on a real signal)*: receive only decoder for the Digitex / Platan five-tone selcall (fire brigade sirens, SW-xx CB selcall): address and command as numbers and the tones as sent, 5 last calls, event log entry and a background notification like DTMF. Tested on synthetic calls (5 dB SNR, +-2 % tone error, 70..130 ms tones). No encoder or transmit path.
+* **Clock**: *Options → Display → Clock* Zulu / Local / Loc+Zulu (the EMCOM footer shows `14:05Z`, `15:05` or `15:05/14:05Z`); *Set time* opens *Radio infos → Time*, where the EMCOM style now shows how to type the time (`HHMMSS`) and date (`YYYYMMDD`).
+* **RSSI screen**: `UP` / `DOWN` set the FM squelch (same card as on the channel screen); the EMCOM strip shows `SQL n`.
+* **DMR RX AGC and minimum volume** (PR #23, desertblade, issue #22): the hardware volume no longer changes with the AGC; AGC levels -9..+12 dB with learned gain per station and smooth changes. Users who had AGC on hear a different level (new curve).
+* **EMCOM screens** (PR #25, desertblade, issue #24): optional distance to the repeater / channel (*Options → Display → Show dist*), expanded DMR caller, standby and TX layouts, local / Zulu clock and battery voltage options in the status bar.
+* **Fixes**:
+  * Keypad / PTT lock hung the radio with the EMCOM style (issue #14).
+  * VFO step of millions of kHz after *Channel → VFO* with a codeplug written by a CPS (issue #20).
+  * EMCOM header: the volume indicator was hidden since PR #25 (it followed the volume pop-up option).
+  * EMCOM footer: the battery time left now also shows next to `RX` / `SCAN` / locks when it fits.
+  * APRS RX: key hints in the bottom bar of every view.
+* CI: the build target can be chosen for manual runs (PR #17, desertblade).
+* Memory: the FreeRTOS heap went from 20 KB to 16 KB (5.5 KB were never used), the free main RAM is used by DMR SMS; the SMS and Decoders screens are linked after the codec. 8 KB at the end of the GPS log area of the SPI flash now hold the SMS inbox.
+
 ## R20260131-SP7TQ.5 — 2026-11-22
 
 * **VFO power in the channel details**: the Power row showed `N/A` in the VFO; it now shows the master power (e.g. `Master 1W`) and `LEFT` / `RIGHT` change it at once, like `SK2` + `UP` / `DOWN` on the VFO screen.

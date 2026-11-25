@@ -1,5 +1,5 @@
 /*
- * Fork: DTMF and CW (Morse) decoders on the 8 kHz receive audio.
+ * Fork: DTMF, CW (Morse) and STQC selcall decoders on the 8 kHz receive audio.
  * See toneRxDecoders.h.
  *
  * Use of this source code or binary releases for commercial purposes is
@@ -535,4 +535,204 @@ void cwRxProcess(const int16_t *samples, uint32_t count, uint32_t stride)
 			cw.n = 0;
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// STQC (receive only)
+// ---------------------------------------------------------------------------
+#define STQC_N                 80U      // 10 ms blocks: bins ~100 Hz wide (the tones are >= 217 Hz apart), tolerant of off-frequency senders
+#define STQC_TONES             5U
+#define STQC_MIN_MEAN_SQUARE   400.0f   // as DTMF: ~ -38 dBFS rms
+#define STQC_MIN_RATIO         0.35f    // best tone power / block energy
+#define STQC_MIN_SEPARATION    4.0f     // best tone vs the 2nd best (6 dB)
+#define STQC_ACCEPT_BLOCKS     4U       // 40 ms of a clean tone makes a symbol
+#define STQC_DROPOUT_BLOCKS    3U       // a tone may miss this many blocks and go on
+#define STQC_MAX_TONE_BLOCKS   40U      // 400 ms: a steady tone or carrier, not a selcall
+#define STQC_GROUP_END_BLOCKS  12U      // 120 ms without a tone ends a group
+
+static const float stqcFreqs[STQC_TONES] = { 980.0f, 1197.0f, 1446.0f, 1795.0f, 2105.0f };
+
+static struct
+{
+	stqcRxGroupCallback_t callback;
+	float    coeff[STQC_TONES];
+	float    s1[STQC_TONES];
+	float    s2[STQC_TONES];
+	float    energy;
+	uint16_t n;
+	int8_t   tone;        // tone being tracked, -1: none
+	uint8_t  run;         // blocks of 'tone'
+	uint8_t  miss;        // blocks without it since the last one
+	bool     emitted;     // 'tone' already added to the group
+	bool     invalid;     // the group saw something that is not STQC
+	uint8_t  quiet;       // blocks without any tone
+	uint8_t  len;
+	uint8_t  symbols[STQC_MAX_SYMBOLS];
+} stqc;
+
+void stqcRxInit(stqcRxGroupCallback_t callback)
+{
+	memset(&stqc, 0, sizeof(stqc));
+	stqc.callback = callback;
+	stqc.tone = -1;
+	for (uint32_t i = 0; i < STQC_TONES; i++)
+	{
+		stqc.coeff[i] = 2.0f * cosf((TWO_PI * stqcFreqs[i]) / SAMPLE_RATE);
+	}
+}
+
+static int stqcBlockTone(void)
+{
+	float p[STQC_TONES];
+	uint32_t best = 0;
+
+	if ((stqc.energy / (float)STQC_N) < STQC_MIN_MEAN_SQUARE)
+	{
+		return -1;
+	}
+
+	for (uint32_t i = 0; i < STQC_TONES; i++)
+	{
+		p[i] = (stqc.s1[i] * stqc.s1[i]) + (stqc.s2[i] * stqc.s2[i]) - (stqc.coeff[i] * stqc.s1[i] * stqc.s2[i]);
+		if (p[i] > p[best])
+		{
+			best = i;
+		}
+	}
+
+	if ((p[best] / ((stqc.energy * (float)STQC_N) / 2.0f)) < STQC_MIN_RATIO)
+	{
+		return -1;
+	}
+	for (uint32_t i = 0; i < STQC_TONES; i++)
+	{
+		if ((i != best) && ((p[i] * STQC_MIN_SEPARATION) > p[best]))
+		{
+			return -1;
+		}
+	}
+	return (int)best;
+}
+
+static void stqcGroupEnd(void)
+{
+	if ((stqc.invalid == false) && (stqc.len >= STQC_MIN_SYMBOLS) && stqc.callback)
+	{
+		stqc.callback(stqc.symbols, stqc.len);
+	}
+	stqc.len = 0;
+	stqc.invalid = false;
+}
+
+static void stqcBlockEnd(void)
+{
+	int t = stqcBlockTone();
+
+	if (t < 0)
+	{
+		if (stqc.tone >= 0)
+		{
+			if (++stqc.miss > STQC_DROPOUT_BLOCKS)
+			{
+				stqc.tone = -1;
+			}
+		}
+		if (stqc.quiet < 255U)
+		{
+			stqc.quiet++;
+		}
+		if ((stqc.quiet >= STQC_GROUP_END_BLOCKS) && ((stqc.len > 0) || stqc.invalid))
+		{
+			stqcGroupEnd();
+		}
+		return;
+	}
+
+	stqc.quiet = 0;
+	if (t == stqc.tone)
+	{
+		stqc.miss = 0;
+		if (stqc.run < 255U)
+		{
+			stqc.run++;
+		}
+		if (stqc.run > STQC_MAX_TONE_BLOCKS)
+		{
+			stqc.invalid = true;
+		}
+	}
+	else
+	{
+		stqc.tone = (int8_t)t;
+		stqc.run = 1;
+		stqc.miss = 0;
+		stqc.emitted = false;
+	}
+
+	if ((stqc.emitted == false) && (stqc.run >= STQC_ACCEPT_BLOCKS))
+	{
+		stqc.emitted = true;
+		if (stqc.len < STQC_MAX_SYMBOLS)
+		{
+			stqc.symbols[stqc.len++] = (uint8_t)t;
+		}
+		else
+		{
+			stqc.invalid = true; // longer than any STQC group
+		}
+	}
+}
+
+void stqcRxProcess(const int16_t *samples, uint32_t count, uint32_t stride)
+{
+	for (uint32_t s = 0; s < count; s++)
+	{
+		float x = (float)samples[s * stride];
+
+		for (uint32_t i = 0; i < STQC_TONES; i++)
+		{
+			float s0 = x + (stqc.coeff[i] * stqc.s1[i]) - stqc.s2[i];
+			stqc.s2[i] = stqc.s1[i];
+			stqc.s1[i] = s0;
+		}
+		stqc.energy += (x * x);
+
+		if (++stqc.n >= STQC_N)
+		{
+			stqcBlockEnd();
+			memset(stqc.s1, 0, sizeof(stqc.s1));
+			memset(stqc.s2, 0, sizeof(stqc.s2));
+			stqc.energy = 0.0f;
+			stqc.n = 0;
+		}
+	}
+}
+
+uint16_t stqcSymbolsToValue(const uint8_t *symbols, uint8_t len)
+{
+	uint32_t value = 0;
+	uint8_t prev = 0; // the sender assumes a 0 before the first symbol
+
+	for (uint8_t i = 0; i < len; i++)
+	{
+		uint8_t d = ((symbols[i] >= 4U) ? prev : symbols[i]);
+
+		value = ((value * 4U) + d);
+		prev = d;
+	}
+	return (uint16_t)value;
+}
+
+void stqcValueToSymbolText(uint16_t value, uint8_t len, char *buf)
+{
+	char prevSent = '0';
+
+	for (uint8_t i = 0; i < len; i++)
+	{
+		char d = (char)('0' + ((value >> (2U * (len - 1U - i))) & 3U));
+
+		buf[i] = ((d == prevSent) ? '4' : d);
+		prevSent = buf[i];
+	}
+	buf[len] = 0;
 }
