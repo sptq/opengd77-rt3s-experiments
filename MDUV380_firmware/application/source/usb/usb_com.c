@@ -1142,6 +1142,11 @@ static void cpsHandleCommand(void)
 		case 200: // Fork: remote key press ('C', 200, key code, 1 = long press), for screen tests over USB
 			usbRemoteKeyPress((char)com_requestbuffer[2], (com_requestbuffer[3] != 0));
 			break;
+#if defined(PLATFORM_MD9600)
+		case 201: // Fork: test, 1200 samples of ADC2 channel <n> at <rate / 100> Hz into the wave buffer (read area 7)
+			usbAdcCapture(com_requestbuffer[2], (uint32_t)(com_requestbuffer[3] * 100U));
+			break;
+#endif
 		case 254: // PING
 #if defined(HAS_GPS)
 			cpsStopGPSNMEA();
@@ -1369,3 +1374,43 @@ void usbRemoteKeyApply(keyboardCode_t *keys, int *keyEvent)
 			break;
 	}
 }
+
+#if defined(PLATFORM_MD9600)
+// --- Fork: ADC2 capture for the FM audio path tests ------------------------------------------------
+extern ADC_HandleTypeDef hadc2;
+
+void usbAdcCapture(uint8_t channel, uint32_t rate)
+{
+	ADC_ChannelConfTypeDef conf = { 0 };
+	uint16_t *out = (uint16_t *)audioAndHotspotDataBuffer.rawBuffer;
+	uint32_t period;
+	uint32_t next;
+
+	if ((rate < 1000U) || (rate > 25500U))
+	{
+		rate = 9600U;
+	}
+	period = (SystemCoreClock / rate);
+
+	conf.Channel = (channel & 0x1FU);
+	conf.Rank = 1;
+	conf.SamplingTime = ADC_SAMPLETIME_56CYCLES;
+	HAL_ADC_ConfigChannel(&hadc2, &conf);
+
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	next = DWT->CYCCNT;
+
+	for (int i = 0; i < 1200; i++)
+	{
+		while ((int32_t)(DWT->CYCCNT - next) < 0)
+		{
+		}
+		next += period;
+		HAL_ADC_Start(&hadc2);
+		HAL_ADC_PollForConversion(&hadc2, 2);
+		out[i] = (uint16_t)HAL_ADC_GetValue(&hadc2);
+	}
+}
+#endif

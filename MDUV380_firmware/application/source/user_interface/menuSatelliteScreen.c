@@ -53,6 +53,8 @@
 #else
 #define NUM_PASSES_TO_DISPLAY_ON_LIST_SCREEN 6
 #endif
+#elif defined(EMCOM_UI_MONO)
+#define NUM_PASSES_TO_DISPLAY_ON_LIST_SCREEN 5 // Fork: 128 x 64 mono list, 9 px rows from y 10 to 54
 #else
 #define NUM_PASSES_TO_DISPLAY_ON_LIST_SCREEN 3
 #endif
@@ -487,6 +489,494 @@ static void emPrediction(satellitePass_t *pass)
 }
 #endif
 
+#if defined(EMCOM_UI_MONO)
+// Fork: 128 x 64 mono layout of the satellite views and of the TX view (MD-9600), by Marcin SP7TQ.
+// Always used on this display, whatever the style setting (the classic views were made for it but
+// are hard to read). Drawing only, as the EMCOM colour views: the predictions, the keys, the voice
+// prompts and the Doppler retune are shared with the classic screen. No static data.
+// ST7567: a set pixel is dark; title bar 0..8, key bar 55..63 (uiEmcomMono.c).
+#define MO_LIST_Y      10   // predictions list: 5 rows of 9 px, 10..54
+#define MO_ROW_H        9
+#define MO_POLAR_CX   105   // sky plot right of the numbers: 84..126 x 11..53
+#define MO_POLAR_CY    32
+#define MO_POLAR_R     21
+#define MO_METER_X     77   // RSSI column between the numbers and the sky plot: 77..81 x 11..53
+#define MO_METER_Y     11
+#define MO_METER_H     43
+
+static int32_t moLocalOffset(void)
+{
+	return ((nonVolatileSettings.timezone & 0x80) ? (((nonVolatileSettings.timezone & 0x7F) - 64) * (15 * 60)) : 0);
+}
+
+// "3:12", "1:02:03", "45s"
+static void moDuration(char *buf, size_t size, uint32_t secs)
+{
+	if (secs >= 3600U)
+	{
+		snprintf(buf, size, "%u:%02u:%02u", (unsigned)(secs / 3600U), (unsigned)((secs / 60U) % 60U), (unsigned)(secs % 60U));
+	}
+	else if (secs >= 60U)
+	{
+		snprintf(buf, size, "%u:%02u", (unsigned)(secs / 60U), (unsigned)(secs % 60U));
+	}
+	else
+	{
+		snprintf(buf, size, "%us", (unsigned)secs);
+	}
+}
+
+// "14:52" / "14:52:10" of a UTC time, local time when a time zone is set
+static void moClock(char *buf, size_t size, time_t_custom utc, bool withSeconds)
+{
+	struct tm t;
+	time_t_custom tt = (time_t_custom)(utc + moLocalOffset());
+
+	gmtime_r_Custom(&tt, &t);
+	if (withSeconds)
+	{
+		snprintf(buf, size, "%02u:%02u:%02u", (unsigned)t.tm_hour, (unsigned)t.tm_min, (unsigned)t.tm_sec);
+	}
+	else
+	{
+		snprintf(buf, size, "%02u:%02u", (unsigned)t.tm_hour, (unsigned)t.tm_min);
+	}
+}
+
+// "437.80230" from 10 Hz units
+static void moFreq(char *buf, size_t size, uint32_t freq10Hz)
+{
+	snprintf(buf, size, "%u.%05u", (unsigned)(freq10Hz / 100000U), (unsigned)(freq10Hz % 100000U));
+}
+
+// Title counter: "AOS 12:34" until the AOS, "LOS 4:12" while in view, NULL without a pass to come
+static const char *moCountdown(char *buf, size_t size, const satellitePass_t *p)
+{
+	time_t_custom now = uiDataGlobal.dateTimeSecs;
+	char t[12];
+
+	if ((p->valid != PREDICTION_RESULT_OK) || (now > p->satelliteLOS))
+	{
+		return NULL;
+	}
+
+	if (now < p->satelliteAOS)
+	{
+		moDuration(t, sizeof(t), (p->satelliteAOS - now));
+		snprintf(buf, size, "AOS %s", t);
+	}
+	else
+	{
+		moDuration(t, sizeof(t), (p->satelliteLOS - now));
+		snprintf(buf, size, "LOS %s", t);
+	}
+	return buf;
+}
+
+// Text with its right edge at xRight; inverted: light text on an area already dark
+static void moTextRight(int16_t xRight, int16_t y, const char *s, ucFont_t font, bool inverted)
+{
+	int16_t w = (int16_t)(strlen(s) * (((font == FONT_SIZE_1) || (font == FONT_SIZE_1_BOLD)) ? 6 : 8));
+
+	displayPrintCore((int16_t)MAX(0, (xRight - w)), y, s, font, TEXT_ALIGN_LEFT, inverted);
+}
+
+// Small label and an 8x16 value beside it ("AZ 214°"), the label on the middle of the value
+static void moBigValue(int16_t x, int16_t y, const char *label, const char *value)
+{
+	int16_t w = emcomUiText(x, (y + 4), label, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+
+	emcomUiText((int16_t)(x + w + 2), y, value, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+}
+
+static void moDegrees(char *buf, size_t size, int value)
+{
+	snprintf(buf, size, "%d%c", value, 176);
+}
+
+// AZ / EL of the active satellite, 8x16, at y (16 px high)
+static void moAzEl(int16_t y)
+{
+	char buf[12];
+
+	moDegrees(buf, sizeof(buf), currentSatelliteResults.azimuthAsInteger);
+	moBigValue(0, y, "AZ", buf);
+	moDegrees(buf, sizeof(buf), currentSatelliteResults.elevationAsInteger);
+	moBigValue(64, y, "EL", buf);
+}
+
+static bool moAlarmPending(void)
+{
+	return ((uiDataGlobal.SatelliteAndAlarmData.alarmType == ALARM_TYPE_SATELLITE) &&
+			(uiDataGlobal.dateTimeSecs < uiDataGlobal.SatelliteAndAlarmData.alarmTime));
+}
+
+// No Keps loaded
+static void moNoKeps(void)
+{
+	displayClearBuf();
+	emcomUiTitle("SATELLITES", NULL);
+	displayPrintCore(0, 24, currentLanguage->list_empty, FONT_SIZE_1_BOLD, TEXT_ALIGN_CENTER, false);
+	emcomUiKeyBar("RED EXIT");
+}
+
+// Predictions being calculated: satellites done / loaded and a progress bar
+static void moPredicting(void)
+{
+	char buf[16];
+
+	displayClearBuf();
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)numTotalSatellitesPredicted, (unsigned)numSatellitesLoaded);
+	emcomUiTitle("SATELLITES", buf);
+	displayPrintCore(0, 20, currentLanguage->predicting, FONT_SIZE_1_BOLD, TEXT_ALIGN_CENTER, false);
+	displayDrawRect(4, 32, (DISPLAY_SIZE_X - 8), 8, true);
+	if (numSatellitesLoaded > 0)
+	{
+		displayFillRect(6, 34, (int16_t)(((DISPLAY_SIZE_X - 12) * (uint32_t)numTotalSatellitesPredicted) / numSatellitesLoaded), 4, false);
+	}
+	emcomUiKeyBar("RED EXIT");
+	displayRender();
+}
+
+// List of the next passes: the body and the key bar first, the title once the count is known
+static void moListBegin(void)
+{
+	displayClearBuf();
+	emcomUiKeyBar("GRN PASS * POS RED EXIT");
+}
+
+// Title: the position in the list, or the time of a pending pass alarm
+static void moListTitle(int position, int total)
+{
+	char buf[24];
+	char t[12];
+	const char *counter = NULL;
+
+	if (moAlarmPending())
+	{
+		moClock(t, sizeof(t), uiDataGlobal.SatelliteAndAlarmData.alarmTime, false);
+		snprintf(buf, sizeof(buf), "ALM %s", t);
+		counter = buf;
+	}
+	else if (total > 0)
+	{
+		snprintf(buf, sizeof(buf), "%d/%d", (position + 1), total);
+		counter = buf;
+	}
+	emcomUiTitle("SATELLITES", counter);
+}
+
+// One pass: name, AOS (or LOS when in view now), maximum elevation. Row 0, the one GREEN opens,
+// is a dark bar; a satellite in view now has a bar at the left edge.
+static void moListRow(int row, satelliteData_t *sat, int passNumber, const struct tm *aos)
+{
+	char buf[16];
+	char t[8];
+	int16_t y = (int16_t)(MO_LIST_Y + (row * MO_ROW_H));
+	bool selected = (row == 0);
+	bool visible = ((passNumber == 0) && sat->predictions.isVisible);
+
+	if (selected)
+	{
+		displayFillRect(0, y, DISPLAY_SIZE_X, MO_ROW_H, false);
+	}
+	if (visible)
+	{
+		displayFillRect(0, (y + 2), 2, 5, selected); // light on the dark bar
+	}
+
+	snprintf(buf, 9, "%s", sat->name); // 8 characters
+	displayPrintCore(4, (y + 1), buf, (selected ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, selected);
+
+	if (visible)
+	{
+		moClock(t, sizeof(t), sat->predictions.passes[0].satelliteLOS, false);
+		snprintf(buf, sizeof(buf), "LOS %s", t);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "AOS %02u:%02u", (unsigned)aos->tm_hour, (unsigned)aos->tm_min);
+	}
+	displayPrintCore(54, (y + 1), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, selected);
+
+	moDegrees(buf, sizeof(buf), satelliteGetMaximumElevation(sat, passNumber));
+	moTextRight((DISPLAY_SIZE_X - 1), (y + 1), buf, (selected ? FONT_SIZE_1_BOLD : FONT_SIZE_1), selected);
+}
+
+static void moListEmpty(void)
+{
+	displayPrintCore(0, 28, currentLanguage->list_empty, FONT_SIZE_1_BOLD, TEXT_ALIGN_CENTER, false);
+}
+
+// RSSI from S0 to S9, 0 .. range
+static int moRssiLevel(int range)
+{
+	int lvl = MIN(MAX(0, (trxGetRSSIdBm(RADIO_DEVICE_PRIMARY) - SMETER_S0)), (SMETER_S9 - SMETER_S0));
+
+	return ((lvl * range) / (SMETER_S9 - SMETER_S0));
+}
+
+// Tracking / tuning view: AZ / EL 8x16, Doppler corrected RX / TX with the QRG and the power,
+// Doppler shift on the RX and the RSSI bar; the title counts down to the AOS / LOS
+static void moSelected(const char *freqName)
+{
+	char buf[24];
+	char cnt[16];
+	uint8_t powerLevel = trxGetPowerLevel();
+	satellite_txRxFreqs *f = &currentSatelliteResults.freqs[currentSatelliteFreqIndex];
+	uint32_t nominalRx = currentActiveSatellite->freqs[currentSatelliteFreqIndex].rxFreq;
+
+	displayClearBuf();
+	emcomUiTitle(currentActiveSatellite->name, moCountdown(cnt, sizeof(cnt), &currentActiveSatellite->predictions.passes[0]));
+
+	// AZ / EL (10..25)
+	moAzEl(10);
+
+	// RX 8x8 and the QRG chip (28)
+	emcomUiText(0, 28, "RX", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	if (f->rxFreq != 0)
+	{
+		moFreq(buf, sizeof(buf), (f->rxFreq / 10U));
+		emcomUiText(14, 28, buf, FONT_SIZE_2, THEME_ITEM_FG_DEFAULT, false);
+	}
+	else
+	{
+		emcomUiText(14, 28, "---", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	}
+	snprintf(buf, 7, "%s", freqName); // 6 characters
+	emcomUiChip((DISPLAY_SIZE_X - 1), 28, buf, THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, true);
+
+	// TX 8x8 and the power (37)
+	emcomUiText(0, 37, "TX", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	if ((f->rxFreq != 0) && (f->txFreq != 0))
+	{
+		moFreq(buf, sizeof(buf), (f->txFreq / 10U));
+		emcomUiText(14, 37, buf, FONT_SIZE_2, THEME_ITEM_FG_DEFAULT, false);
+	}
+	else
+	{
+		emcomUiText(14, 37, ((f->rxFreq != 0) ? "RX only" : "---"), FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	}
+	snprintf(buf, sizeof(buf), "%s%s", getPowerLevel(powerLevel), getPowerLevelUnit(powerLevel));
+	emcomUiText((DISPLAY_SIZE_X - 1), 37, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+
+	// Doppler shift of the RX frequency, RSSI bar S0..S9 (46..52)
+	if ((f->rxFreq != 0) && (nominalRx != 0))
+	{
+		int32_t d = (int32_t)(f->rxFreq - nominalRx);
+		uint32_t a = (uint32_t)((d < 0) ? -d : d);
+
+		snprintf(buf, sizeof(buf), "%c%u.%02uk", ((d < 0) ? '-' : '+'), (unsigned)(a / 1000U), (unsigned)((a % 1000U) / 10U));
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "---");
+	}
+	emcomUiKeyValue(0, 46, "DOP", buf, THEME_ITEM_FG_DEFAULT);
+	displayDrawRect(66, 46, (DISPLAY_SIZE_X - 66), 7, true);
+	displayFillRect(68, 48, (int16_t)moRssiLevel(DISPLAY_SIZE_X - 70), 3, false);
+
+	emcomUiKeyBar("1-3 QRG # NEXT RED LIST");
+	displayRender();
+}
+
+// Sky plot view, static part: title with the countdown, horizon and 45 degree circles, cardinal
+// ticks, N, the RSSI column frame and the key bar (the pass track is drawn by the classic maths)
+static void moPolarFrame(satellitePass_t *pass)
+{
+	char cnt[16];
+
+	displayClearBuf();
+	emcomUiTitle(currentActiveSatellite->name, moCountdown(cnt, sizeof(cnt), pass));
+	emcomUiKeyBar("UP/DN VIEW  RED LIST");
+
+	displayPrintCore((MO_POLAR_CX - 2), (MO_POLAR_CY - MO_POLAR_R + 2), "N", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayDrawCircle(MO_POLAR_CX, MO_POLAR_CY, MO_POLAR_R, true);
+	for (int i = 0; i < 24; i++) // 45 degrees, dotted
+	{
+		float a = ((float)i * (float)(TWO_PI / 24.0));
+
+		displaySetPixel((int16_t)(MO_POLAR_CX + (sinf(a) * (float)(MO_POLAR_R / 2)) + 0.5f),
+				(int16_t)(MO_POLAR_CY - (cosf(a) * (float)(MO_POLAR_R / 2)) + 0.5f), true);
+	}
+	displayDrawFastHLine((MO_POLAR_CX - MO_POLAR_R), MO_POLAR_CY, 3, true);       // W
+	displayDrawFastHLine((MO_POLAR_CX + MO_POLAR_R - 2), MO_POLAR_CY, 3, true);   // E
+	displayDrawFastVLine(MO_POLAR_CX, (MO_POLAR_CY + MO_POLAR_R - 2), 3, true);   // S
+	displaySetPixel(MO_POLAR_CX, MO_POLAR_CY, true);                              // zenith
+
+	displayDrawRect(MO_METER_X, MO_METER_Y, 5, MO_METER_H, true);
+}
+
+// Sky plot view, before the AOS (or after the LOS) of the shown pass: AOS time 8x16, max elevation, duration
+static void moPolarNext(satellitePass_t *pass)
+{
+	char buf[16];
+	bool before = (uiDataGlobal.dateTimeSecs < pass->satelliteAOS);
+
+	emcomUiText(0, 10, (before ? "NEXT AOS" : "AOS"), FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText((MO_METER_X - 3), 10, ((moLocalOffset() != 0) ? "LT" : "UTC"), FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+	moClock(buf, sizeof(buf), pass->satelliteAOS, true);
+	emcomUiText(0, 18, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+
+	moDegrees(buf, sizeof(buf), satelliteGetMaximumElevation(currentActiveSatellite, currentActiveSatellite->predictions.selectedPassNumber));
+	emcomUiKeyValue(0, 36, "MAX EL", buf, THEME_ITEM_FG_DEFAULT);
+	moDuration(buf, sizeof(buf), pass->satellitePassDuration);
+	emcomUiKeyValue(0, 45, "DUR", buf, THEME_ITEM_FG_DEFAULT);
+}
+
+// Sky plot view, satellite in view: AZ / EL 8x16 (labels above), Doppler corrected RX / TX
+static void moPolarNow(void)
+{
+	char buf[16];
+	char line[24];
+	satellite_txRxFreqs *f = &currentSatelliteResults.freqs[currentSatelliteFreqIndex];
+
+	emcomUiText(0, 10, "AZ", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(40, 10, "EL", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	moDegrees(buf, sizeof(buf), currentSatelliteResults.azimuthAsInteger);
+	emcomUiText(0, 18, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+	moDegrees(buf, sizeof(buf), currentSatelliteResults.elevationAsInteger);
+	emcomUiText(40, 18, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+
+	if (f->rxFreq != 0)
+	{
+		moFreq(buf, sizeof(buf), (f->rxFreq / 10U));
+		snprintf(line, sizeof(line), "RX %s", buf);
+	}
+	else
+	{
+		snprintf(line, sizeof(line), "RX ---");
+	}
+	emcomUiText(0, 36, line, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+
+	if ((f->rxFreq != 0) && (f->txFreq != 0))
+	{
+		moFreq(buf, sizeof(buf), (f->txFreq / 10U));
+		snprintf(line, sizeof(line), "TX %s", buf);
+	}
+	else
+	{
+		snprintf(line, sizeof(line), "TX %s", ((f->rxFreq != 0) ? "RX only" : "---"));
+	}
+	emcomUiText(0, 45, line, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+}
+
+// Position on the track: a filled square while in view, an open square at the AOS point before it
+static void moPolarSpot(int16_t x, int16_t y, const satellitePass_t *pass)
+{
+	time_t_custom now = uiDataGlobal.dateTimeSecs;
+
+	if ((now >= pass->satelliteAOS) && (now <= pass->satelliteLOS))
+	{
+		displayFillRect((x - 2), (y - 2), 5, 5, false);
+	}
+	else
+	{
+		displayFillRect((x - 1), (y - 1), 3, 3, true);
+		displayDrawRect((x - 2), (y - 2), 5, 5, true);
+	}
+}
+
+// Sky plot view, live part: the RSSI column (S0 at the bottom, S9 at the top)
+static void moPolarLive(void)
+{
+	int16_t inner = (MO_METER_H - 2);
+	int16_t lvl = (int16_t)moRssiLevel(inner);
+
+	displayFillRect((MO_METER_X + 1), (MO_METER_Y + 1), 3, inner, true);
+	displayFillRect((MO_METER_X + 1), (MO_METER_Y + 1 + (inner - lvl)), 3, lvl, false);
+}
+
+static void moPolarNoPass(const char *text)
+{
+	displayClearBuf();
+	emcomUiTitle(currentActiveSatellite->name, NULL);
+	displayPrintCore(0, 26, text, FONT_SIZE_1_BOLD, TEXT_ALIGN_CENTER, false);
+	emcomUiKeyBar("UP/DN VIEW  RED LIST");
+}
+
+// Pass details: AOS / LOS 8x16 with the date and the time zone, max elevation, duration, alarm
+static void moPrediction(satellitePass_t *pass)
+{
+	char buf[24];
+	satelliteData_t *sat = currentActiveSatellite;
+	const char *counter = NULL;
+
+	displayClearBuf();
+	if (sat->predictions.numPasses > 0)
+	{
+		snprintf(buf, sizeof(buf), "PASS %u/%u", (unsigned)(sat->predictions.selectedPassNumber + 1), (unsigned)sat->predictions.numPasses);
+		counter = buf;
+	}
+	emcomUiTitle(sat->name, counter);
+
+	if (pass->valid == PREDICTION_RESULT_OK)
+	{
+		struct tm t;
+		time_t_custom tt = (time_t_custom)(pass->satelliteAOS + moLocalOffset());
+
+		gmtime_r_Custom(&tt, &t);
+		moClock(buf, sizeof(buf), pass->satelliteAOS, true);
+		moBigValue(0, 10, "AOS", buf);
+		snprintf(buf, sizeof(buf), "%02u.%02u", (unsigned)t.tm_mday, (unsigned)(t.tm_mon + 1));
+		emcomUiText((DISPLAY_SIZE_X - 1), 14, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+
+		moClock(buf, sizeof(buf), pass->satelliteLOS, true);
+		moBigValue(0, 26, "LOS", buf);
+		emcomUiText((DISPLAY_SIZE_X - 1), 30, ((moLocalOffset() != 0) ? "LT" : "UTC"), FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+
+		moDegrees(buf, sizeof(buf), satelliteGetMaximumElevation(sat, sat->predictions.selectedPassNumber));
+		emcomUiKeyValue(0, 45, "MAX", buf, THEME_ITEM_FG_DEFAULT);
+		moDuration(buf, sizeof(buf), pass->satellitePassDuration);
+		emcomUiKeyValue(46, 45, "DUR", buf, THEME_ITEM_FG_DEFAULT);
+
+		if ((uiDataGlobal.SatelliteAndAlarmData.alarmType == ALARM_TYPE_SATELLITE) &&
+				(uiDataGlobal.SatelliteAndAlarmData.alarmTime == (pass->satelliteAOS - ALARM_OFFSET_SECS)))
+		{
+			emcomUiChip((DISPLAY_SIZE_X - 1), 45, "ALM", THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, true);
+		}
+	}
+	else if ((pass->valid == PREDICTION_RESULT_LIMIT) && (sat->predictions.numPasses == 0))
+	{
+		displayPrintCore(0, 28, currentLanguage->list_empty, FONT_SIZE_1_BOLD, TEXT_ALIGN_CENTER, false);
+	}
+
+	emcomUiKeyBar("</> PASS SK2+GRN ALM");
+	displayRender();
+}
+
+// TX from the satellite screen (the EMCOM main screen is not used then): AZ / EL, TX frequency
+// 8x16 with the power, RX, and a dark state bar with the TX time. Rows 10..13 are left for the
+// mic level bar the TX screen draws under the title.
+static void moTx(uint32_t txTimeSecs)
+{
+	char buf[24];
+	char cnt[16];
+	uint8_t powerLevel = trxGetPowerLevel();
+
+	displayClearBuf();
+	emcomUiTitle(currentActiveSatellite->name, moCountdown(cnt, sizeof(cnt), &currentActiveSatellite->predictions.passes[0]));
+
+	moAzEl(15);
+
+	emcomUiChip(0, 35, "TX", THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, false);
+	moFreq(buf, sizeof(buf), currentChannelData->txFreq);
+	emcomUiText(18, 31, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+	snprintf(buf, sizeof(buf), "%s%s", getPowerLevel(powerLevel), getPowerLevelUnit(powerLevel));
+	emcomUiText((DISPLAY_SIZE_X - 1), 35, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+
+	snprintf(buf, sizeof(buf), "RX ");
+	moFreq(&buf[3], (sizeof(buf) - 3), currentChannelData->rxFreq);
+	emcomUiText(0, 47, buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+
+	displayFillRect(0, (DISPLAY_SIZE_Y - 9), DISPLAY_SIZE_X, 9, false);
+	displayPrintCore(2, (DISPLAY_SIZE_Y - 8), "TRANSMIT", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+	snprintf(buf, sizeof(buf), "%u:%02u", (unsigned)(txTimeSecs / 60U), (unsigned)(txTimeSecs % 60U));
+	moTextRight((DISPLAY_SIZE_X - 2), (DISPLAY_SIZE_Y - 8), buf, FONT_SIZE_1_BOLD, true);
+	displayRender();
+}
+#endif
+
 menuStatus_t menuSatelliteScreen(uiEvent_t *ev, bool isFirstRun)
 {
 	if (isFirstRun)
@@ -667,10 +1157,14 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 	{
 		if (firstRun)
 		{
+#if defined(EMCOM_UI_MONO)
+			moNoKeps();
+#else
 			displayClearBuf();
 
 			menuDisplayTitle(currentLanguage->satellite);
 			displayPrintCentered((DISPLAY_SIZE_Y / 2) - 6, currentLanguage->list_empty, FONT_SIZE_2);
+#endif
 
 			voicePromptsInit();
 			voicePromptsAppendLanguageString(currentLanguage->satellite);
@@ -705,10 +1199,12 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 #if defined(HAS_EMCOM_COLOUR_UI)
 		const bool emcom = emcomStyleEnabled();
+#elif defined(EMCOM_UI_MONO)
+		const bool emcom = true; // 128 x 64: always the mono views, whatever the style setting
 #endif
 
 		if (firstRun
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 				&& (emcom == false) // every EMCOM view draws its whole screen
 #endif
 		)
@@ -728,7 +1224,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 		if (numTotalSatellitesPredicted != numSatellitesLoaded)
 		{
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+			if (emcom)
+			{
+				moPredicting();
+			}
+			else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 			if (emcom)
 			{
 				emPredicting();
@@ -784,7 +1286,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			{
 				const char *freqNames[] = { currentLanguage->voice_prompt_level_1, currentLanguage->APRS, "CW Rx" };// Temporary hard coded names, will eventually need new language strings
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+				if (emcom)
+				{
+					moSelected(freqNames[currentSatelliteFreqIndex]); // whole view every 250 ms (RSSI bar, countdown)
+				}
+				else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					if (firstRun || hasRecalculated || announceVP)
@@ -896,7 +1404,14 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 				int polarCX = (POLAR_GRAPHICS_X_OFFSET + (DISPLAY_SIZE_X / 2));
 				int polarCY = (DISPLAY_SIZE_Y / 2);
 				int polarR = MAX_RADIUS;
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+				if (emcom)
+				{
+					polarCX = MO_POLAR_CX;
+					polarCY = MO_POLAR_CY;
+					polarR = MO_POLAR_R;
+				}
+#elif defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					polarCX = EM_POLAR_CX;
@@ -919,7 +1434,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							gmtime_r_Custom(&displayedPassTimeDiff, &dispTimeAndDate);
 						}
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+						if (emcom)
+						{
+							moPolarFrame(displayedPredictionPass);
+						}
+						else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 						if (emcom)
 						{
 							emPolarFrame();
@@ -939,7 +1460,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							voicePromptsAppendString(currentActiveSatellite->name);
 						}
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 						if (emcom == false)
 #endif
 						{
@@ -959,7 +1480,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 						{
 							startTime = displayedPredictionPass->satelliteAOS;
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+							if (emcom)
+							{
+								moPolarNext(displayedPredictionPass);
+							}
+							else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 							if (emcom)
 							{
 								bool before = (uiDataGlobal.dateTimeSecs < displayedPredictionPass->satelliteAOS);
@@ -1042,7 +1569,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 						else
 						{
 							startTime = uiDataGlobal.dateTimeSecs;
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+							if (emcom)
+							{
+								moPolarNow();
+							}
+							else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 							if (emcom)
 							{
 								snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%d%c", currentSatelliteResults.azimuthAsInteger, 176);
@@ -1064,7 +1597,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 								voicePromptsAppendString(buffer);
 							}
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 							if (emcom == false)
 #endif
 							{
@@ -1107,13 +1640,24 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 						if ((satX != INT16_MIN) && (satY != INT16_MIN))
 						{
+#if defined(EMCOM_UI_MONO)
+							moPolarSpot(satX, satY, displayedPredictionPass);
+							UNUSED_PARAMETER(DOT_RADIUS);
+#else
 							displayThemeApply(THEME_ITEM_FG_SATELLITE_COLOUR, THEME_ITEM_BG);
 							displayFillCircle(satX, satY, (DOT_RADIUS + 1), true);
 							displayThemeResetToDefault();
+#endif
 						}
 					}
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+					if (emcom)
+					{
+						moPolarLive();
+					}
+					else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						emPolarLive();
@@ -1140,7 +1684,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 					char buf[SCREEN_LINE_BUFFER_SIZE];
 
 					snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "%s: %s", currentLanguage->pass, currentLanguage->none);
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+					if (emcom)
+					{
+						moPolarNoPass(buf);
+					}
+					else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						displayClearBuf();
@@ -1181,7 +1731,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			{
 				satellitePass_t *displayedPredictionPass  = &currentActiveSatellite->predictions.passes[currentActiveSatellite->predictions.selectedPassNumber];
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 				const bool classicDraw = (emcom == false);
 #else
 				const bool classicDraw = true;
@@ -1275,7 +1825,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 				}
 
 				menuSatelliteScreenNextUpdateTime = 0;// Don't do time based update
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+				if (emcom)
+				{
+					moPrediction(displayedPredictionPass);
+				}
+				else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					emPrediction(displayedPredictionPass);
@@ -1303,7 +1859,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 					predictionsListNumSatellitePassesDisplayed = 0;
 					predictionsListSelectedSatellite = 0;
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+					if (emcom)
+					{
+						moListBegin();
+					}
+					else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						emListFrame();
@@ -1356,7 +1918,13 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 								snprintf(passTimeBuffer, SCREEN_LINE_BUFFER_SIZE, "%02u:%02u:%02u%s", passDateTime.tm_hour, passDateTime.tm_min, passDateTime.tm_sec, ((nonVolatileSettings.timezone & 0x80) ? "" : "UTC"));
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+								if (emcom)
+								{
+									moListRow(predictionsListNumSatellitePassesDisplayed, foundSat, foundPassNumber, &passDateTime);
+								}
+								else
+#elif defined(HAS_EMCOM_COLOUR_UI)
 								if (emcom)
 								{
 									emListRow(predictionsListNumSatellitePassesDisplayed, foundSat, foundPassNumber, &passDateTime);
@@ -1411,7 +1979,16 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							numSatellitesFound++;
 						}
 					}
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(EMCOM_UI_MONO)
+					if (emcom)
+					{
+						moListTitle(currentlyDisplayedListPosition, totalPredictions);
+						if (predictionsListNumSatellitePassesDisplayed == 0)
+						{
+							moListEmpty();
+						}
+					}
+#elif defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom && (predictionsListNumSatellitePassesDisplayed == 0))
 					{
 						emText(4, (EM_LIST_Y + 14), currentLanguage->list_empty, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
@@ -2073,6 +2650,9 @@ static void selectSatellite(uint32_t selectedSatellite)
 
 bool menuSatelliteIsDisplayingHeader(void)
 {
+#if defined(EMCOM_UI_MONO)
+	return false; // the mono views have a title bar, not the radio header (it would be drawn over it)
+#endif
 #if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled())
 	{
@@ -2084,6 +2664,12 @@ bool menuSatelliteIsDisplayingHeader(void)
 
 void menuSatelliteTxScreen(uint32_t txTimeSecs)
 {
+#if defined(EMCOM_UI_MONO)
+	// The EMCOM main screen is not used for a TX from here (emcomScreenActive()): the mono TX view
+	satelliteCalculateForDateTimeSecs(currentActiveSatellite, uiDataGlobal.dateTimeSecs, &currentSatelliteResults, SATELLITE_PREDICTION_LEVEL_FULL);
+	moTx(txTimeSecs);
+	return;
+#endif
 	char buffer[SCREEN_LINE_BUFFER_SIZE];
 
 	displayClearBuf();

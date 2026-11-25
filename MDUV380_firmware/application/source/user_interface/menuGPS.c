@@ -414,6 +414,9 @@ menuStatus_t menuGPS(uiEvent_t *ev, bool isFirstRun)
 							// Fork: the EMCOM status page has a clock and the search timer, redrawn every second
 							|| (emcomStyleEnabled() && (menuDataGlobal.currentItemIndex == PAGE_STATUS) &&
 									(SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF))
+#elif defined(EMCOM_UI_MONO)
+							// Fork: the 128 x 64 pages show the UTC clock and the search timer, redrawn every second
+							|| (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
 #endif
 					))
 			{
@@ -425,6 +428,7 @@ menuStatus_t menuGPS(uiEvent_t *ev, bool isFirstRun)
 	return menuGPSExitCode;
 }
 
+#if !defined(EMCOM_UI_MONO) // Fork: the 128 x 64 pages are drawn by monoDrawPage()
 static int displayBars(gpsSatellitesData_t *satellitesArray, uint16_t satCount, bool numbersInBold, int dispPosition, float spacing, themeItem_t fgColour, themeItem_t bgColour)
 {
 #if ! defined(HAS_COLOURS)
@@ -475,6 +479,7 @@ static int displayBars(gpsSatellitesData_t *satellitesArray, uint16_t satCount, 
 
 	return dispPosition;
 }
+#endif
 
 static uint16_t getTotalNumberOfUsableSats(void)
 {
@@ -493,6 +498,7 @@ static uint16_t getTotalNumberOfUsableSats(void)
 	return n;
 }
 
+#if !defined(EMCOM_UI_MONO)
 static void displayDirectionFixType(DirectionFixtype_t type)
 {
 	uint16_t fgColour, bgColour;
@@ -1091,6 +1097,7 @@ static bool displayCoords(bool isFirstRun, bool forceRedraw)
 
 	return false;
 }
+#endif // !EMCOM_UI_MONO
 
 #if defined(HAS_EMCOM_COLOUR_UI)
 //
@@ -1933,6 +1940,667 @@ static void emDrawPage(void)
 	displayThemeResetToDefault();
 }
 #endif
+#if defined(EMCOM_UI_MONO)
+//
+// Fork: 128 x 64 mono pages (MD-9600), drawn whole into the frame buffer once a second:
+//   title bar "GPS <page>" with the fix state on the right (the status page: the UTC time),
+//   body rows of 6x8 text (label regular, value bold) or graphics, key bar with the page number.
+//
+// The receiver does not report which satellites are used in the fix (GSA is not stored), so,
+// as on the colour screens, "used" means heard (SNR > 0) and "unused" in view without a signal.
+//
+#define MONO_ROW(n)          ((int16_t)(10 + ((n) * 9))) // body text rows 10, 19, 28, 37, 46
+#define MONO_VALUE_X         24                          // value column after a 3 letter label
+#define MONO_RIGHT           (DISPLAY_SIZE_X - 1)
+#define MONO_SAT_BD          0x80U                       // satellite code flag: BeiDou array
+#define MONO_SATS_MAX        (GPS_STORAGE_MAX * 2)
+
+// Signal page: one bar per satellite, strongest first
+#define MONO_BARS_MAX        9                           // 2 digit PRN under each bar
+#define MONO_BARS_TOP        19
+#define MONO_BARS_BASE       45                          // the axis line, bars end above it
+#define MONO_BARS_H          (MONO_BARS_BASE - MONO_BARS_TOP)
+#define MONO_BARS_MAX_DB     50
+
+// Sky plot / compass: circle on the left, values on the right
+#define MONO_PLOT_CX         22
+#define MONO_PLOT_CY         32
+#define MONO_PLOT_R          21
+#define MONO_COL_X           50
+
+static const char * const monoPageNames[] = { "GPS", "GPS SIGNAL", "GPS SKY", "GPS POSITION", "GPS COURSE" };
+
+static bool monoGpsIsOn(void)
+{
+	return (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF);
+}
+
+static bool monoHasFix(void)
+{
+	return ((gpsData.Status & GPS_STATUS_HAS_FIX) != 0);
+}
+
+static const char *monoFixWord(void)
+{
+	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) == GPS_NOT_DETECTED)
+	{
+		return "NO GPS";
+	}
+
+	if (monoGpsIsOn() == false)
+	{
+		return "OFF";
+	}
+
+	if (monoHasFix())
+	{
+		if (gpsData.Status & GPS_STATUS_3D_FIX)
+		{
+			return "3D FIX";
+		}
+		return ((gpsData.Status & GPS_STATUS_2D_FIX) ? "2D FIX" : "FIX");
+	}
+
+	return "NO FIX";
+}
+
+static int monoPageIndex(void)
+{
+	return (((menuDataGlobal.currentItemIndex >= 0) && (menuDataGlobal.currentItemIndex < PAGES_MAX)) ? menuDataGlobal.currentItemIndex : 0);
+}
+
+// "45s", "3:12", "1:02:03"
+static void monoDuration(char *buf, size_t size, uint32_t secs)
+{
+	if (secs >= 3600U)
+	{
+		snprintf(buf, size, "%u:%02u:%02u", (unsigned)MIN((secs / 3600U), 99U), (unsigned)((secs / 60U) % 60U), (unsigned)(secs % 60U));
+	}
+	else if (secs >= 60U)
+	{
+		snprintf(buf, size, "%u:%02u", (unsigned)(secs / 60U), (unsigned)(secs % 60U));
+	}
+	else
+	{
+		snprintf(buf, size, "%us", (unsigned)secs);
+	}
+}
+
+static uint32_t monoSearchSecs(void)
+{
+	return ((ticksGetMillis() - gpsSearchStartMs()) / 1000U);
+}
+
+// HDOP "0.9", "12", or "--" without a fix
+static void monoHdop(char *buf, size_t size)
+{
+	uint16_t h = gpsData.AccuracyInCm; // HDOP x 100
+
+	if ((monoHasFix() == false) || (h == 0U))
+	{
+		snprintf(buf, size, "--");
+	}
+	else if (h < 1000U)
+	{
+		snprintf(buf, size, "%u.%u", (unsigned)(h / 100U), (unsigned)((h % 100U) / 10U));
+	}
+	else
+	{
+		snprintf(buf, size, "%u", (unsigned)MIN((h / 100U), 99U));
+	}
+}
+
+// "51.75920N" / "19.45603E"
+static void monoCoord(char *buf, size_t size, double v, char positive, char negative)
+{
+	uint32_t a = (uint32_t)((fabs(v) * 100000.0) + 0.5);
+
+	snprintf(buf, size, "%u.%05u%c", (unsigned)(a / 100000U), (unsigned)(a % 100000U), ((v >= 0.0) ? positive : negative));
+}
+
+static unsigned monoSpeedKmh(void)
+{
+	return (unsigned)MIN((uint32_t)(((gpsData.SpeedInHundredthKn * 1852U) + 50000U) / 100000U), 999U);
+}
+
+static bool monoIsMoving(void)
+{
+	return (monoHasFix() && (gpsData.SpeedInHundredthKn > GPS_SPEED_THRESHOLD_MIN));
+}
+
+static void monoPixel(int16_t x, int16_t y)
+{
+	if ((x >= 0) && (x < DISPLAY_SIZE_X) && (y >= 0) && (y < DISPLAY_SIZE_Y))
+	{
+		displaySetPixel(x, y, true);
+	}
+}
+
+// Label (regular) at x, value (bold) in the value column
+static void monoKeyValue(int16_t y, const char *key, const char *value)
+{
+	emcomUiText(0, y, key, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(MONO_VALUE_X, y, value, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+}
+
+// Label + value, right aligned on the screen edge; returns the x of the label
+static int16_t monoKeyValueRight(int16_t y, const char *key, const char *value)
+{
+	int16_t x = (int16_t)(MONO_RIGHT - emcomUiText(MONO_RIGHT, y, value, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, true) - 4);
+
+	return (int16_t)(x - emcomUiText(x, y, key, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true));
+}
+
+static int16_t monoTextWidth(const char *str)
+{
+	return (int16_t)(strlen(str) * 6);
+}
+
+static void monoKeyBar(void)
+{
+	char buf[24];
+
+	snprintf(buf, sizeof(buf), "%d/%d UP/DN  RED EXIT", (monoPageIndex() + 1), PAGES_MAX);
+	emcomUiKeyBar(buf);
+}
+
+static uint8_t monoSatsInView(bool beidou)
+{
+	return (uint8_t)MIN((beidou ? gpsData.SatsInViewBD : gpsData.SatsInViewGP), GPS_STORAGE_MAX);
+}
+
+static gpsSatellitesData_t *monoSat(uint8_t code)
+{
+	return ((code & MONO_SAT_BD) ? &gpsData.BDSatellites[code & 0x7FU] : &gpsData.GPSatellites[code]);
+}
+
+static uint8_t monoSatsHeard(bool beidou)
+{
+	uint8_t n = 0;
+
+	for (uint8_t i = 0; i < monoSatsInView(beidou); i++)
+	{
+		n += ((beidou ? gpsData.BDSatellites[i].RSSI : gpsData.GPSatellites[i].RSSI) > 0) ? 1 : 0;
+	}
+	return n;
+}
+
+// The satellites in view, strongest first (no signal last), at most maxCount; returns the
+// number stored, *total gets the number in view.
+static uint8_t monoSortedSats(uint8_t *codes, uint8_t maxCount, uint8_t *total)
+{
+	uint8_t n = 0;
+
+	*total = 0;
+	for (uint8_t c = 0; c < 2; c++)
+	{
+		uint8_t count = monoSatsInView(c != 0);
+
+		for (uint8_t i = 0; i < count; i++)
+		{
+			uint8_t code = (uint8_t)(i | ((c != 0) ? MONO_SAT_BD : 0U));
+			int8_t rssi = monoSat(code)->RSSI;
+			uint8_t pos = n;
+
+			(*total)++;
+
+			while ((pos > 0) && (monoSat(codes[pos - 1])->RSSI < rssi))
+			{
+				pos--;
+			}
+
+			if (pos >= maxCount)
+			{
+				continue; // weaker than all the stored ones, list full
+			}
+
+			if (n < maxCount)
+			{
+				n++;
+			}
+
+			for (uint8_t k = (uint8_t)(n - 1); k > pos; k--)
+			{
+				codes[k] = codes[k - 1];
+			}
+			codes[pos] = code;
+		}
+	}
+
+	return n;
+}
+
+// Horizon circle with a bold N inside the top and the centre point
+static void monoPlotFrame(void)
+{
+	displayDrawCircle(MONO_PLOT_CX, MONO_PLOT_CY, MONO_PLOT_R, true);
+	displayPrintCore((MONO_PLOT_CX - 2), (MONO_PLOT_CY - MONO_PLOT_R + 2), "N", FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+	monoPixel(MONO_PLOT_CX, MONO_PLOT_CY);
+}
+
+// GPS off / not detected: say so, with the key that turns it on
+static void monoOffPage(void)
+{
+	emcomUiTitle(monoPageNames[monoPageIndex()], monoFixWord());
+
+	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) == GPS_NOT_DETECTED)
+	{
+		emcomUiChip(0, MONO_ROW(0), "NO GPS RECEIVER", THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_OUTLINE, false);
+		emcomUiText(0, MONO_ROW(1) + 3, "No GPS module found.", FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiText(0, MONO_ROW(2) + 3, "Checked at power on.", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiKeyBar("RED EXIT");
+		return;
+	}
+
+	emcomUiChip(0, MONO_ROW(0), "GPS OFF", THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_OUTLINE, false);
+	emcomUiText(0, MONO_ROW(1) + 3, "Hold GRN to turn on", FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(0, MONO_ROW(2) + 3, "or Options > General", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(0, MONO_ROW(3) + 3, "First fix: 1-5 min", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiKeyBar("HOLD GRN ON  RED EXIT");
+}
+
+// Status: fix chip + TTFF, SAT heard / in view + HDOP, LAT + locator, LON, ALT + speed; UTC in the title
+static void monoStatusPage(void)
+{
+	char buf[24];
+	char value[12];
+	bool hasFix = monoHasFix();
+	int16_t chipW;
+
+	if (gpsData.Status & GPS_STATUS_HAS_TIME)
+	{
+		struct tm t;
+		time_t_custom tt = gpsData.Time;
+
+		gmtime_r_Custom(&tt, &t);
+		snprintf(buf, sizeof(buf), "UTC %02u:%02u:%02u", (unsigned)t.tm_hour, (unsigned)t.tm_min, (unsigned)t.tm_sec);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "UTC --:--:--");
+	}
+	emcomUiTitle(monoPageNames[PAGE_COORDS], buf);
+
+	// Fix state: solid chip with a fix, outline chip with the search time without
+	if (hasFix)
+	{
+		chipW = emcomUiChip(0, MONO_ROW(0), monoFixWord(), THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, false);
+	}
+	else
+	{
+		monoDuration(value, sizeof(value), monoSearchSecs());
+		snprintf(buf, sizeof(buf), "SEARCH %s", value);
+		chipW = emcomUiChip(0, MONO_ROW(0), buf, THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_OUTLINE, false);
+	}
+
+	if (gpsLastTtffSecs() != 0U)
+	{
+		monoDuration(value, sizeof(value), gpsLastTtffSecs());
+		if ((chipW + 4 + monoTextWidth("TTFF") + 4 + monoTextWidth(value)) <= MONO_RIGHT)
+		{
+			monoKeyValueRight(MONO_ROW(0), "TTFF", value);
+		}
+	}
+
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)(monoSatsHeard(false) + monoSatsHeard(true)), (unsigned)(monoSatsInView(false) + monoSatsInView(true)));
+	monoKeyValue(MONO_ROW(1), "SAT", buf);
+	monoHdop(value, sizeof(value));
+	monoKeyValueRight(MONO_ROW(1), "HDOP", value);
+
+	if (hasFix)
+	{
+		char loc[12] = { 0 };
+
+		monoCoord(buf, sizeof(buf), gpsData.LatitudeHiRes, 'N', 'S');
+		monoKeyValue(MONO_ROW(2), "LAT", buf);
+		monoCoord(buf, sizeof(buf), gpsData.LongitudeHiRes, 'E', 'W');
+		monoKeyValue(MONO_ROW(3), "LON", buf);
+
+		coordsToMaidenhead((uint8_t *)loc, gpsData.LatitudeHiRes, gpsData.LongitudeHiRes);
+		loc[6] = 0;
+		emcomUiText(MONO_RIGHT, MONO_ROW(2), loc, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, true);
+
+		snprintf(buf, sizeof(buf), "%dm", (int)gpsData.HeightInM);
+		monoKeyValue(MONO_ROW(4), "ALT", buf);
+		snprintf(buf, sizeof(buf), "%ukm/h", monoSpeedKmh());
+		monoKeyValueRight(MONO_ROW(4), "SPD", buf);
+	}
+	else
+	{
+		monoKeyValue(MONO_ROW(2), "LAT", "--");
+		monoKeyValue(MONO_ROW(3), "LON", "--");
+		monoKeyValue(MONO_ROW(4), "ALT", "--");
+		monoKeyValueRight(MONO_ROW(4), "SPD", "--");
+	}
+
+	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) == GPS_MODE_ON_NMEA)
+	{
+		emcomUiText(MONO_RIGHT, MONO_ROW(3), "NMEA", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+	}
+}
+
+// Signal: one bar per satellite (height = SNR, 0..50 dB-Hz), PRN under it, strongest first.
+// GPS bars solid, BeiDou bars hatched; a satellite in view without a signal is a hollow stub.
+static void monoSignalPage(void)
+{
+	uint8_t codes[MONO_BARS_MAX];
+	uint8_t total;
+	uint8_t n = monoSortedSats(codes, MONO_BARS_MAX, &total);
+	char buf[24];
+	char value[12];
+	int16_t x;
+
+	emcomUiTitle(monoPageNames[PAGE_RSSI], monoFixWord());
+
+	// Summary: heard / in view (+ the ones not shown), legend
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)(monoSatsHeard(false) + monoSatsHeard(true)), (unsigned)total);
+	monoKeyValue(MONO_ROW(0), "SAT", buf);
+	if (total > n)
+	{
+		snprintf(value, sizeof(value), "+%u", (unsigned)(total - n));
+		emcomUiText((int16_t)(MONO_VALUE_X + monoTextWidth(buf) + 4), MONO_ROW(0), value, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	}
+
+	x = (int16_t)(MONO_RIGHT - emcomUiText(MONO_RIGHT, MONO_ROW(0), "BD", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true) - 7);
+	displayDrawRect(x, MONO_ROW(0), 5, 7, true);
+	displayDrawFastHLine(x, (MONO_ROW(0) + 2), 5, true);
+	displayDrawFastHLine(x, (MONO_ROW(0) + 4), 5, true);
+	x = (int16_t)(x - 4);
+	x = (int16_t)(x - emcomUiText(x, MONO_ROW(0), "GPS", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true) - 7);
+	displayFillRect(x, MONO_ROW(0), 5, 7, false);
+
+	if (n == 0)
+	{
+		emcomUiText(0, MONO_ROW(2), "No satellites yet", FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
+		if (monoHasFix() == false)
+		{
+			monoDuration(value, sizeof(value), monoSearchSecs());
+			snprintf(buf, sizeof(buf), "Searching %s", value);
+			emcomUiText(0, MONO_ROW(3), buf, FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		}
+		emcomUiText(0, MONO_ROW(4), "Open sky helps", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+		return;
+	}
+
+	int16_t pitch = (int16_t)MIN(16, (DISPLAY_SIZE_X / n));
+	int16_t barW = (int16_t)(pitch - 3);
+	int16_t refY = (int16_t)(MONO_BARS_BASE - ((30 * MONO_BARS_H) / MONO_BARS_MAX_DB));
+
+	// axis, and a dotted 30 dB-Hz reference (a usable signal) between the bars
+	displayDrawFastHLine(0, MONO_BARS_BASE, DISPLAY_SIZE_X, true);
+	for (int16_t px = 0; px < DISPLAY_SIZE_X; px += 2)
+	{
+		int16_t rel = (int16_t)(px - 1);
+
+		if ((rel < 0) || (rel >= (n * pitch)) || ((rel % pitch) >= barW))
+		{
+			monoPixel(px, refY);
+		}
+	}
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		gpsSatellitesData_t *sat = monoSat(codes[i]);
+		bool bd = ((codes[i] & MONO_SAT_BD) != 0);
+		bool heard = (sat->RSSI > 0);
+
+		x = (int16_t)(1 + (i * pitch));
+
+		if (heard)
+		{
+			int16_t h = (int16_t)MAX(1, ((MIN(sat->RSSI, MONO_BARS_MAX_DB) * MONO_BARS_H) / MONO_BARS_MAX_DB));
+			int16_t y = (int16_t)(MONO_BARS_BASE - h);
+
+			if (bd)
+			{
+				displayDrawRect(x, y, barW, h, true);
+				for (int16_t yy = (int16_t)(y + 2); yy < MONO_BARS_BASE; yy += 2)
+				{
+					displayDrawFastHLine(x, yy, barW, true);
+				}
+			}
+			else
+			{
+				displayFillRect(x, y, barW, h, false);
+			}
+		}
+		else
+		{
+			// hollow stub; BeiDou with a dotted middle row
+			displayDrawRect(x, (MONO_BARS_BASE - 4), barW, 4, true);
+			if (bd)
+			{
+				for (int16_t px = (int16_t)(x + 2); px < (x + barW - 1); px += 2)
+				{
+					monoPixel(px, (MONO_BARS_BASE - 2));
+				}
+			}
+		}
+
+		snprintf(buf, sizeof(buf), "%02u", (unsigned)(sat->Number % 100U));
+		emcomUiText((int16_t)MAX(0, (x + (barW / 2) - 6)), (MONO_BARS_BASE + 2), buf, (heard ? FONT_SIZE_1_BOLD : FONT_SIZE_1), THEME_ITEM_FG_DEFAULT, false);
+	}
+}
+
+// Sky plot: horizon circle (N up) and a dotted 45 degree ring; satellites as 3 x 3 squares, filled
+// with a signal, hollow without. Counts, HDOP and TTFF / search time beside it.
+static void monoSkyPage(void)
+{
+	char buf[12];
+
+	emcomUiTitle(monoPageNames[PAGE_POLAR], monoFixWord());
+
+	monoPlotFrame();
+	for (int a = 0; a < 360; a += 20)
+	{
+		float r = (a * DEG_TO_RAD);
+
+		monoPixel((int16_t)(MONO_PLOT_CX + lroundf(sinf(r) * (MONO_PLOT_R / 2))), (int16_t)(MONO_PLOT_CY - lroundf(cosf(r) * (MONO_PLOT_R / 2))));
+	}
+
+	// no signal first, so the heard ones stay on top
+	for (uint8_t pass = 0; pass < 2; pass++)
+	{
+		for (uint8_t c = 0; c < 2; c++)
+		{
+			for (uint8_t i = 0; i < monoSatsInView(c != 0); i++)
+			{
+				gpsSatellitesData_t *sat = monoSat((uint8_t)(i | ((c != 0) ? MONO_SAT_BD : 0U)));
+				bool heard = (sat->RSSI > 0);
+
+				if ((sat->Number == 0) || (sat->El < 0) || (sat->Az < 0) || (heard != (pass == 1)))
+				{
+					continue;
+				}
+
+				float f = ((1.0f - (MIN(sat->El, 90) / 90.0f)) * MONO_PLOT_R);
+				float a = (sat->Az * DEG_TO_RAD);
+				int16_t x = (int16_t)(MONO_PLOT_CX + lroundf(sinf(a) * f));
+				int16_t y = (int16_t)(MONO_PLOT_CY - lroundf(cosf(a) * f));
+
+				if (heard)
+				{
+					displayFillRect((x - 1), (y - 1), 3, 3, false);
+				}
+				else
+				{
+					displayDrawRect((x - 1), (y - 1), 3, 3, true);
+					displaySetPixel(x, y, false);
+				}
+			}
+		}
+	}
+
+	// Right column
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)monoSatsHeard(false), (unsigned)monoSatsInView(false));
+	emcomUiKeyValue(MONO_COL_X, MONO_ROW(0), "GPS ", buf, THEME_ITEM_FG_DEFAULT);
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)monoSatsHeard(true), (unsigned)monoSatsInView(true));
+	emcomUiKeyValue(MONO_COL_X, MONO_ROW(1), "BD  ", buf, THEME_ITEM_FG_DEFAULT);
+	monoHdop(buf, sizeof(buf));
+	emcomUiKeyValue(MONO_COL_X, MONO_ROW(2), "HDOP", buf, THEME_ITEM_FG_DEFAULT);
+	if (monoHasFix())
+	{
+		if (gpsLastTtffSecs() != 0U)
+		{
+			monoDuration(buf, sizeof(buf), gpsLastTtffSecs());
+		}
+		else
+		{
+			snprintf(buf, sizeof(buf), "--");
+		}
+		emcomUiKeyValue(MONO_COL_X, MONO_ROW(3), "TTFF", buf, THEME_ITEM_FG_DEFAULT);
+	}
+	else
+	{
+		monoDuration(buf, sizeof(buf), monoSearchSecs());
+		emcomUiKeyValue(MONO_COL_X, MONO_ROW(3), "SRCH", buf, THEME_ITEM_FG_DEFAULT);
+	}
+
+	// legend
+	displayFillRect(MONO_COL_X, (MONO_ROW(4) + 2), 3, 3, false);
+	emcomUiText((MONO_COL_X + 5), MONO_ROW(4), "sig", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	displayDrawRect((MONO_COL_X + 28), (MONO_ROW(4) + 2), 3, 3, true);
+	emcomUiText((MONO_COL_X + 33), MONO_ROW(4), "none", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+}
+
+// Position: LAT / LON in 8x16, locator + altitude (no fix: the search time + satellites heard)
+static void monoPositionPage(void)
+{
+	char buf[24];
+	char value[12];
+
+	emcomUiTitle(monoPageNames[PAGE_DIRECTION], monoFixWord());
+
+	emcomUiText(0, 14, "LAT", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(0, 31, "LON", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiDivider(44);
+
+	if (monoHasFix())
+	{
+		char loc[12] = { 0 };
+
+		monoCoord(buf, sizeof(buf), gpsData.LatitudeHiRes, 'N', 'S');
+		emcomUiText(MONO_VALUE_X, 10, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+		monoCoord(buf, sizeof(buf), gpsData.LongitudeHiRes, 'E', 'W');
+		emcomUiText(MONO_VALUE_X, 27, buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+
+		coordsToMaidenhead((uint8_t *)loc, gpsData.LatitudeHiRes, gpsData.LongitudeHiRes);
+		loc[6] = 0;
+		monoKeyValue(MONO_ROW(4), "LOC", loc);
+		snprintf(buf, sizeof(buf), "%dm", (int)gpsData.HeightInM);
+		monoKeyValueRight(MONO_ROW(4), "ALT", buf);
+	}
+	else
+	{
+		emcomUiText(MONO_VALUE_X, 10, "--", FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+		emcomUiText(MONO_VALUE_X, 27, "--", FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, false);
+
+		monoDuration(value, sizeof(value), monoSearchSecs());
+		emcomUiKeyValue(0, MONO_ROW(4), "SEARCH", value, THEME_ITEM_FG_DEFAULT);
+		snprintf(buf, sizeof(buf), "%u/%u", (unsigned)(monoSatsHeard(false) + monoSatsHeard(true)), (unsigned)(monoSatsInView(false) + monoSatsInView(true)));
+		monoKeyValueRight(MONO_ROW(4), "SAT", buf);
+	}
+}
+
+// Course: compass with the course arrow (when moving), speed in 8x16, course, altitude
+static void monoCoursePage(void)
+{
+	char buf[16];
+	bool moving = monoIsMoving();
+	int course = (int)((gpsData.CourseInHundredthDeg / 100U) % 360U);
+
+	emcomUiTitle(monoPageNames[PAGE_DIRECTION_2], monoFixWord());
+
+	monoPlotFrame();
+	// E, S, W ticks inside the horizon
+	displayDrawFastHLine((MONO_PLOT_CX + MONO_PLOT_R - 3), MONO_PLOT_CY, 3, true);
+	displayDrawFastVLine(MONO_PLOT_CX, (MONO_PLOT_CY + MONO_PLOT_R - 3), 3, true);
+	displayDrawFastHLine((MONO_PLOT_CX - MONO_PLOT_R + 1), MONO_PLOT_CY, 3, true);
+
+	if (moving)
+	{
+		float a = (course * DEG_TO_RAD);
+		float tip = (MONO_PLOT_R - 4);
+		float base = 7.0f;
+		float spread = (140.0f * DEG_TO_RAD);
+
+		displayDrawLine(MONO_PLOT_CX, MONO_PLOT_CY,
+				(int16_t)(MONO_PLOT_CX + lroundf(sinf(a) * tip)), (int16_t)(MONO_PLOT_CY - lroundf(cosf(a) * tip)), true);
+		displayFillTriangle((int16_t)(MONO_PLOT_CX + lroundf(sinf(a) * tip)), (int16_t)(MONO_PLOT_CY - lroundf(cosf(a) * tip)),
+				(int16_t)(MONO_PLOT_CX + lroundf(sinf(a + spread) * base)), (int16_t)(MONO_PLOT_CY - lroundf(cosf(a + spread) * base)),
+				(int16_t)(MONO_PLOT_CX + lroundf(sinf(a - spread) * base)), (int16_t)(MONO_PLOT_CY - lroundf(cosf(a - spread) * base)), true);
+	}
+	else
+	{
+		displayDrawRect((MONO_PLOT_CX - 2), (MONO_PLOT_CY - 2), 5, 5, true); // standing still
+	}
+
+	// Right column: speed, course, altitude
+	emcomUiText(MONO_COL_X, MONO_ROW(0), "SPD", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, false);
+	emcomUiText(MONO_RIGHT, MONO_ROW(0), "km/h", FONT_SIZE_1, THEME_ITEM_FG_DEFAULT, true);
+	if (monoHasFix())
+	{
+		snprintf(buf, sizeof(buf), "%u", monoSpeedKmh());
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "--");
+	}
+	emcomUiText(MONO_RIGHT, MONO_ROW(1), buf, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, true);
+
+	if (moving)
+	{
+		snprintf(buf, sizeof(buf), "%03d %s", course, directions[((course * 10 + 112) / 225) % 16]);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "--");
+	}
+	emcomUiKeyValue(MONO_COL_X, MONO_ROW(3), "CRS", buf, THEME_ITEM_FG_DEFAULT);
+
+	if (monoHasFix())
+	{
+		snprintf(buf, sizeof(buf), "%dm", (int)gpsData.HeightInM);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "--");
+	}
+	emcomUiKeyValue(MONO_COL_X, MONO_ROW(4), "ALT", buf, THEME_ITEM_FG_DEFAULT);
+}
+
+static void monoDrawPage(void)
+{
+	displayClearBuf();
+
+	if (monoGpsIsOn() == false)
+	{
+		monoOffPage();
+		return;
+	}
+
+	switch (monoPageIndex())
+	{
+		case PAGE_COORDS:
+			monoStatusPage();
+			break;
+		case PAGE_RSSI:
+			monoSignalPage();
+			break;
+		case PAGE_POLAR:
+			monoSkyPage();
+			break;
+		case PAGE_DIRECTION:
+			monoPositionPage();
+			break;
+		default:
+			monoCoursePage();
+			break;
+	}
+
+	monoKeyBar();
+}
+#endif // EMCOM_UI_MONO
 
 static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 {
@@ -1941,6 +2609,11 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 
 	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
 	{
+#if defined(EMCOM_UI_MONO)
+		// Fork: 128 x 64 pages draw their whole screen
+		monoDrawPage();
+		res = true;
+#else
 #if defined(HAS_EMCOM_COLOUR_UI)
 		if (emIsEmcomPage())
 		{
@@ -1995,6 +2668,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 			case PAGES_MAX:
 				break;
 		}
+#endif // EMCOM_UI_MONO
 
 		//
 		// Update the Voice Prompts
@@ -2063,7 +2737,9 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 			{
 				prevSatsInView = 0xFFFF;
 
-#if defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
+#if defined(EMCOM_UI_MONO)
+				if (false) // Fork: the 128 x 64 pages show the search state themselves
+#elif defined(PLATFORM_MD9600) || defined(CPU_MK22FN512VLL12)
 				if (menuDataGlobal.currentItemIndex < PAGE_RSSI)   // Do not display anything on RSSI, Polar and Direction* screens
 #else
 				if ((menuDataGlobal.currentItemIndex < PAGE_POLAR)  // Do not display anything on Polar and Direction* screens
@@ -2117,6 +2793,11 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 	{
 		if (isFirstRun || forceRedraw || (prevGPSState != SETTINGS_GPS_MODE_GET(nonVolatileSettings)))
 		{
+#if defined(EMCOM_UI_MONO)
+			const bool emPage = true;
+
+			monoDrawPage(); // GPS off / not detected, with the key to turn it on
+#else
 #if defined(HAS_EMCOM_COLOUR_UI)
 			const bool emPage = emIsEmcomPage();
 
@@ -2130,10 +2811,11 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 			{
 				displayFillRect(0, (((DISPLAY_SIZE_Y - FONT_SIZE_3_HEIGHT) >> 1) + (FONT_SIZE_3_HEIGHT >> 1)), DISPLAY_SIZE_X, FONT_SIZE_3_HEIGHT, true);
 			}
+#endif
 
 			if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) == GPS_MODE_OFF)
 			{
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 				if (emPage == false)
 #endif
 				{
@@ -2151,7 +2833,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 			}
 			else
 			{
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_COLOUR_UI) || defined(EMCOM_UI_MONO)
 				if (emPage == false)
 #endif
 				{
@@ -2187,6 +2869,9 @@ static void updateScreen(bool isFirstRun, bool forceRedraw)
 
 	if (isFirstRun || forceRedraw)
 	{
+#if defined(EMCOM_UI_MONO)
+		displayClearBuf(); // Fork: the 128 x 64 pages draw their own title bar
+#else
 		char buffer[SCREEN_LINE_BUFFER_SIZE];
 
 		displayClearBuf();
@@ -2201,6 +2886,7 @@ static void updateScreen(bool isFirstRun, bool forceRedraw)
 			displayPrintCore(0, 3, buffer, FONT_SIZE_1, TEXT_ALIGN_RIGHT, false);
 			displayThemeResetToDefault();
 		}
+#endif
 	}
 
 	res = displayGPSData(isFirstRun, forceRedraw);

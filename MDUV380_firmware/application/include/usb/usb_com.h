@@ -106,5 +106,8 @@ void USB_DEBUG_printf(const char *format, ...) __attribute__((format(__printf__,
 #include "io/keyboard.h"
 void usbRemoteKeyPress(char key, bool longPress);
 void usbRemoteKeyApply(keyboardCode_t *keys, int *keyEvent);
+#if defined(PLATFORM_MD9600)
+void usbAdcCapture(uint8_t channel, uint32_t rate); // test: FM audio path
+#endif
 
 #endif /* _OPENGD77_USB_COM_H_ */
