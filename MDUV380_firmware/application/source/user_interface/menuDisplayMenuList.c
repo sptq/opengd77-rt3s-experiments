@@ -133,12 +133,12 @@ static void updateMonoListScreen(const char *title)
 		displayFillRect((DISPLAY_SIZE_X - 3), thumbY, 3, thumbH, false);
 	}
 
-	emcomUiKeyBar("GRN open  RED back");
+	emcomUiKeyBar("GRN open  A back");
 	displayRender();
 }
 #endif
 
-#if defined(HAS_EMCOM_COLOUR_UI)
+#if defined(HAS_EMCOM_UI)
 // Fork: EMCOM style launcher: 4 x 3 tiles with an icon and the key number (1..9, 0),
 // the full name of the selected entry in the bottom bar.
 #define GRID_COLS      4
@@ -168,14 +168,16 @@ static uiIcon_t menuIcon(int menuNum)
 #if defined(HAS_SSTV_MENU)
 		case MENU_SSTV:               return UI_ICON_SSTV;
 		case MENU_APRS_RX:            return UI_ICON_APRS;
+		case MENU_DECODERS:           return UI_ICON_DTMF;
+		case MENU_DMR_SMS:            return UI_ICON_MAIL;
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 		case MENU_EVENT_LOG:          return UI_ICON_LOG;
 		case MENU_PACE:               return UI_ICON_PACE;
 		case MENU_POSITION:           return UI_ICON_POSITION;
 		case MENU_COVERAGE:           return UI_ICON_COVERAGE;
 		case MENU_RADIO_CHECK:        return UI_ICON_RADIOCHECK;
 		case MENU_NET_CONTROL:        return UI_ICON_NET;
-		case MENU_DECODERS:           return UI_ICON_DTMF;
-		case MENU_DMR_SMS:            return UI_ICON_MAIL;
 #endif
 		case MENU_CONTACT_LIST:       return UI_ICON_CONTACTLIST;
 		case MENU_DTMF_CONTACT_LIST:  return UI_ICON_DTMF;
@@ -214,6 +216,77 @@ static void drawIcon(int16_t x, int16_t y, uiIcon_t icon, bool inverted)
 	}
 }
 
+#if defined(EMCOM_UI_MONO)
+// Fork: 128 x 64 launcher (mockup M2): 4 x 2 tiles with the 16 x 16 icon and the key number,
+// the selected tile dark; the name of the selected entry and the keys under them
+#define MT_COLS   4
+#define MT_ROWS   2
+#define MT_W      31
+#define MT_H      22
+#define MT_Y0     10
+
+static void updateMonoTileScreen(const char *title)
+{
+	int sel = menuDataGlobal.currentItemIndex;
+	int n = menuDataGlobal.numItems;
+	int topRow = (((sel / MT_COLS) > (MT_ROWS - 1)) ? ((sel / MT_COLS) - (MT_ROWS - 1)) : 0);
+
+	displayClearBuf();
+	menuDisplayTitle(title);
+
+	for (int k = 0; k < n; k++)
+	{
+		int row = ((k / MT_COLS) - topRow);
+		int col = (k % MT_COLS);
+
+		if ((row < 0) || (row >= MT_ROWS))
+		{
+			continue;
+		}
+
+		int16_t x = (int16_t)(col * (MT_W + 1));
+		int16_t y = (int16_t)(MT_Y0 + (row * (MT_H + 1)));
+		bool selected = (k == sel);
+
+		if (selected)
+		{
+			displayFillRect(x, y, MT_W, MT_H, false);
+		}
+		else
+		{
+			displayDrawRect(x, y, MT_W, MT_H, true);
+		}
+		drawIcon((x + 13), (y + 3), menuIcon(menuDataGlobal.currentMenuList[k].menuNum), (selected == false));
+
+		if (k < 10)
+		{
+			char num[2] = { (char)((k == 9) ? '0' : ('1' + k)), 0 };
+
+			displayPrintCore((x + 2), (y + 2), num, FONT_SIZE_1, TEXT_ALIGN_LEFT, selected);
+		}
+	}
+
+	// name of the selected entry, the keys on the right
+	for (int16_t dx = 0; dx < DISPLAY_SIZE_X; dx += 2)
+	{
+		displaySetPixel(dx, 55, true);
+	}
+	if (sel < n)
+	{
+		const char *name = menuItemName(&menuDataGlobal.currentMenuList[sel]);
+		char buf[16];
+
+		snprintf(buf, sizeof(buf), "%s", (name ? name : ""));
+		buf[13] = 0;
+		displayPrintCore(0, 56, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+	}
+	displayPrintCore((DISPLAY_SIZE_X - (6 * 6)), 56, "A back", FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	displayRender();
+}
+#endif
+#endif
+
+#if defined(HAS_EMCOM_COLOUR_UI)
 static void updateGridScreen(const char *title)
 {
 	int sel = menuDataGlobal.currentItemIndex;
@@ -302,7 +375,14 @@ static void updateScreen(bool isFirstRun)
 	if (emcomStyleEnabled())
 	{
 #if defined(EMCOM_UI_MONO)
-		updateMonoListScreen(mName);
+		if (menuSystemGetCurrentMenuNumber() == MENU_MAIN_MENU)
+		{
+			updateMonoTileScreen(mName);
+		}
+		else
+		{
+			updateMonoListScreen(mName);
+		}
 #else
 		updateGridScreen(mName);
 #endif

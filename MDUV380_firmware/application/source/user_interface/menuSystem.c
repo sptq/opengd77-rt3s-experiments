@@ -30,6 +30,9 @@
 #include "user_interface/uiEmcom.h"
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
+#include "user_interface/uiTextEdit.h"
+#include "functions/sound.h"
+#include "io/keyboard.h"
 
 menuDataGlobal_t menuDataGlobal =
 {
@@ -450,6 +453,27 @@ static void menuSystemPreProcessEvent(uiEvent_t *ev)
 		int currentMenu = menuSystemGetCurrentMenuNumber();
 #if defined(PLATFORM_MD9600)
 		bool isEnteringDTMF = ((trxIsTransmitting || (currentMenu == MENU_NUMERICAL_ENTRY)) && (trxGetMode() == RADIO_MODE_ANALOG));
+#endif
+
+#if defined(PLATFORM_MD9600) && defined(EMCOM_UI_MONO)
+		// Fork: long A on the microphone (or long BACK on the front panel) goes straight back to the
+		// channel / VFO screen from any menu (the microphone has no other way home)
+		if ((currentMenu != UI_CHANNEL_MODE) && (currentMenu != UI_VFO_MODE) && (currentMenu != UI_TX_SCREEN) &&
+				(currentMenu != MENU_NUMERICAL_ENTRY) && (currentMenu != UI_CPS) && (currentMenu != UI_HOTSPOT_MODE) &&
+				(currentMenu != UI_LOCK_SCREEN) && (currentMenu != UI_POWER_OFF) && (trxIsTransmitting == false) &&
+				(uiTextEditIsActive() == false) &&
+				(((ev->keys.key == KEY_A) || (ev->keys.key == KEY_RED)) &&
+						((ev->keys.event & (KEY_MOD_DOWN | KEY_MOD_LONG)) == (KEY_MOD_DOWN | KEY_MOD_LONG))))
+		{
+			ev->keys.key = 0;
+			ev->keys.event = 0;
+			ev->events &= ~KEY_EVENT;
+			ev->hasEvent = (ev->events != NO_EVENT);
+			keyboardReset();
+			menuSystemPopAllAndDisplayRootMenu();
+			soundSetMelody(MELODY_KEY_LONG_BEEP);
+			return;
+		}
 #endif
 
 		if ((currentMenu != UI_CHANNEL_MODE) && (currentMenu != UI_VFO_MODE))

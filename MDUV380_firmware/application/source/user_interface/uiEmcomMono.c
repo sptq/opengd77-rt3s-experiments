@@ -500,6 +500,14 @@ static void clockString(char *buf, size_t size)
 	snprintf(buf, size, "%02d:%02dZ", t.tm_hour, t.tm_min);
 }
 
+// "LABEL value": label regular, value bold (the same on every screen)
+static int16_t kv(int16_t x, int16_t y, const char *label, const char *value)
+{
+	int16_t w = (int16_t)(txt(x, y, label, FONT_SIZE_1, false, AL_L) + 3);
+
+	return (int16_t)(w + txt((int16_t)(x + w), y, value, FONT_SIZE_1_BOLD, false, AL_L));
+}
+
 // --- status bar -------------------------------------------------------------------------------
 static void drawStatusBar(emcomState_t st)
 {
@@ -622,8 +630,9 @@ static void drawBottomRow(emcomState_t st)
 	char clock[16];
 	int16_t r = (W - 1);
 
+	dotted(0, (FOOT_Y - 1), W);
 	clockString(clock, sizeof(clock));
-	int16_t leftEnd = txt(0, FOOT_Y, clock, FONT_SIZE_1, false, AL_L);
+	int16_t leftEnd = txt(0, FOOT_Y, clock, FONT_SIZE_1_BOLD, false, AL_L);
 
 	if (sosOn)
 	{
@@ -943,33 +952,33 @@ static void drawInfoRow(bool isVFO)
 	toneString(txT, tx, sizeof(tx));
 	if ((rxT == CODEPLUG_CSS_TONE_NONE) && (txT == CODEPLUG_CSS_TONE_NONE))
 	{
-		snprintf(buf, sizeof(buf), "No tones");
+		kv(0, ROW_Y, "TONE", "off");
 	}
 	else if (rxT == txT)
 	{
-		snprintf(buf, sizeof(buf), "%s %s", ((codeplugGetCSSType(txT) & CSS_TYPE_DCS) ? "DCS" : "CTCSS"), tx);
+		kv(0, ROW_Y, ((codeplugGetCSSType(txT) & CSS_TYPE_DCS) ? "DCS" : "CTCSS"), tx);
 	}
 	else
 	{
-		snprintf(buf, sizeof(buf), "RX %s TX %s", rx, tx);
+		int16_t w = kv(0, ROW_Y, "RX", rx);
+		kv((int16_t)(w + 6), ROW_Y, "TX", tx);
 	}
-	txt(0, ROW_Y, buf, FONT_SIZE_1, false, AL_L);
 
 	if (isVFO)
 	{
 		if (currentChannelData->tot != 0)
 		{
 			uint32_t secs = (currentChannelData->tot * 15U);
-			snprintf(buf, sizeof(buf), "TOT %u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
-			txt((W - 1), ROW_Y, buf, FONT_SIZE_1, false, AL_R);
+			snprintf(buf, sizeof(buf), "%u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
+			kv((int16_t)(W - 1 - ((strlen(buf) + 4) * 6) + 3), ROW_Y, "TOT", buf);
 		}
 	}
 	else
 	{
 		uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
 
-		snprintf(buf, sizeof(buf), "SQL%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
-		txt((W - 1), ROW_Y, buf, FONT_SIZE_1, false, AL_R);
+		snprintf(buf, sizeof(buf), "%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
+		kv((int16_t)(W - 1 - ((strlen(buf) + 4) * 6) + 3), ROW_Y, "SQL", buf);
 	}
 }
 
@@ -987,6 +996,7 @@ static void drawFmRx(void)
 	levelBar(barX, barY, barW, 7, rssiPermille(dBm), 6);
 	barVisible = true;
 
+	dotted(0, (FOOT_Y - 1), W);
 	mmss((int)((ticksGetMillis() - rxSinceMs) / 1000U), buf, sizeof(buf));
 	char rxt[20];
 	snprintf(rxt, sizeof(rxt), "RX %s", buf);
@@ -1122,7 +1132,7 @@ static void drawTx(const emcomMainInfo_t *info)
 		contactName(name, sizeof(name), &id);
 		snprintf(buf, sizeof(buf), "%s%u", (((id >> 24) == PC_CALL_FLAG) ? "PC" : "TG"), (unsigned)(id & 0xFFFFFF));
 		txt((W - 1), 45, buf, FONT_SIZE_1, false, AL_R);
-		dotted(0, 54, W);
+		dotted(0, 55, W);
 		name[21] = 0;
 		txt(0, 56, name, FONT_SIZE_1, false, AL_L);
 	}
@@ -1136,7 +1146,7 @@ static void drawTx(const emcomMainInfo_t *info)
 			snprintf(buf, sizeof(buf), "T%s", tn);
 			txt((W - 1), 45, buf, FONT_SIZE_1, false, AL_R);
 		}
-		dotted(0, 54, W);
+		dotted(0, 55, W);
 		txt(0, 56, "SK2 1750  0-9 DTMF", FONT_SIZE_1, false, AL_L);
 	}
 }
@@ -1510,11 +1520,33 @@ void emcomUiDivider(int16_t y)
 	dotted(0, y, W);
 }
 
+// The key hints of the shared screens say RED for the back key: on the MD-9600 that is A on the
+// microphone (or BACK on the front panel), so "RED" is shown as "A"
+static void micKeys(char *dst, size_t size, const char *src)
+{
+	size_t o = 0;
+
+	for (size_t i = 0; src[i] && (o < (size - 1)); i++)
+	{
+		if ((strncmp(&src[i], "RED", 3) == 0) && ((i == 0) || (src[i - 1] == ' ')) && ((src[i + 3] == ' ') || (src[i + 3] == 0)))
+		{
+			dst[o++] = 'A';
+			i += 2;
+			continue;
+		}
+		dst[o++] = src[i];
+	}
+	dst[o] = 0;
+}
+
 void emcomUiKeyBar(const char *keys)
 {
+	char buf[32];
+
+	micKeys(buf, sizeof(buf), keys);
 	box(0, (EMCOM_UI_KEYBAR_Y - 1), W, (H - EMCOM_UI_KEYBAR_Y + 1), false);
 	dotted(0, (EMCOM_UI_KEYBAR_Y - 1), W);
-	txt(0, EMCOM_UI_KEYBAR_Y, keys, FONT_SIZE_1, false, AL_L);
+	txt(0, EMCOM_UI_KEYBAR_Y, buf, FONT_SIZE_1, false, AL_L);
 }
 
 void emcomUiConfirmBar(const char *question)
