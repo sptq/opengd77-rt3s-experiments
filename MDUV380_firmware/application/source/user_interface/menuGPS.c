@@ -70,6 +70,25 @@ void gpsWaypointSet(double lat, double lon)
 static bool waypointEditActive = false;
 static uint8_t waypointEditFieldIndex = 0; // 0: latitude, 1: longitude
 static char waypointEditFields[2][WAYPOINT_EDIT_FIELD_LEN + 1];
+#elif defined(PLATFORM_MD9600)
+// Fork: the waypoint store only (Position screen: set / distance), no waypoint page yet
+static double waypointLat = 0.0;
+static double waypointLon = 0.0;
+static bool waypointIsSet = false;
+
+bool gpsWaypointGet(double *lat, double *lon)
+{
+	*lat = waypointLat;
+	*lon = waypointLon;
+	return waypointIsSet;
+}
+
+void gpsWaypointSet(double lat, double lon)
+{
+	waypointLat = lat;
+	waypointLon = lon;
+	waypointIsSet = true;
+}
 #endif
 
 // Fork: trip computer page (distance, moving time, avg/max speed, altitude

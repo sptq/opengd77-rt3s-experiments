@@ -593,6 +593,7 @@ void applicationMainTask(void)
 				((currentChannelData->aprsConfigIndex != 0) && (aprsBeaconingIsTransmitting() == false)))
 		{
 			keyboardCheckKeyEvent(&keys, &key_event); // Read keyboard state and event
+			usbRemoteKeyApply(&keys, &key_event); // Fork: remote key press over USB
 
 			buttonsCheckButtonsEvent(&buttons, &button_event, (keys.key != 0)); // Read button state and event
 		}
@@ -1230,6 +1231,7 @@ void applicationMainTask(void)
 			// delay the CPS processing and cause and error to be sent to the CPS
 			frontPanelButtons = buttonsFrontPanelRead();
 			keyboardCheckKeyEvent(&keys, &key_event, frontPanelButtons); // Read keyboard state and event
+			usbRemoteKeyApply(&keys, &key_event); // Fork: remote key press over USB
 			// frontPanelButtons variable will have ALARM, P1 and P2 states cleared, as they will
 			// become ORANGE, SK2 and SK1 buttons, after calling buttonsCheckButtonsEvent()
 			buttonsCheckButtonsEvent(&buttons, &button_event, (keys.key != 0), uiDataGlobal.sk2latched, &frontPanelButtons); // Read button state and event

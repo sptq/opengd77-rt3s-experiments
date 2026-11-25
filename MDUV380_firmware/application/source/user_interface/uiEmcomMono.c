@@ -1597,6 +1597,16 @@ static bool sosScreenAllowsTx(int menu)
 #if defined(HAS_GPS)
 		case MENU_GPS:
 #endif
+#if defined(HAS_FIELD_TOOLS_MENU)
+		case MENU_POSITION:
+		case MENU_PACE:
+		case MENU_COVERAGE:
+		case MENU_RADIO_CHECK:
+		case MENU_NET_CONTROL:
+		case MENU_WAYPOINTS:
+		case MENU_SKED:
+		case MENU_EVENT_LOG:
+#endif
 			return true;
 		default:
 			return false;

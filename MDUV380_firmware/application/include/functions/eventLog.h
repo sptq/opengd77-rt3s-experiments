@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD9600)
 #define HAS_EVENT_LOG
 
 #define EVENT_LOG_FLASH_ADDRESS   (14U * 1024U * 1024U)  // the GPS NMEA log now starts 64 KB later

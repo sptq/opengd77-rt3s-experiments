@@ -1139,6 +1139,9 @@ static void cpsHandleCommand(void)
 			}
 			break;
 #endif
+		case 200: // Fork: remote key press ('C', 200, key code, 1 = long press), for screen tests over USB
+			usbRemoteKeyPress((char)com_requestbuffer[2], (com_requestbuffer[3] != 0));
+			break;
 		case 254: // PING
 #if defined(HAS_GPS)
 			cpsStopGPSNMEA();
@@ -1320,3 +1323,49 @@ bool USB_DeviceIsResetting(void)
 	return usbIsResetting;
 }
 #endif // PLATFORM_MD9600
+
+// --- Fork: remote key press over USB -----------------------------------------------------------
+// The main loop calls usbRemoteKeyApply() after reading the keypad: when the keypad is idle, the
+// queued key is fed as a press, (long: held for a long press) and a release.
+static volatile char remoteKey = 0;
+static volatile bool remoteKeyLong = false;
+static volatile uint8_t remoteKeyPhase = 0;
+
+void usbRemoteKeyPress(char key, bool longPress)
+{
+	remoteKeyLong = longPress;
+	remoteKeyPhase = 0;
+	remoteKey = key;
+}
+
+void usbRemoteKeyApply(keyboardCode_t *keys, int *keyEvent)
+{
+	char k = remoteKey;
+
+	if ((k == 0) || (keys->key != 0) || (*keyEvent != EVENT_KEY_NONE))
+	{
+		return;
+	}
+
+	keys->key = k;
+	*keyEvent = EVENT_KEY_CHANGE;
+	switch (remoteKeyPhase)
+	{
+		case 0:
+			keys->event = (KEY_MOD_DOWN | KEY_MOD_PRESS);
+			remoteKeyPhase = (remoteKeyLong ? 1 : 2);
+			break;
+		case 1:
+			keys->event = (KEY_MOD_DOWN | KEY_MOD_LONG);
+			remoteKeyPhase = 3;
+			break;
+		case 2:
+			keys->event = KEY_MOD_UP;
+			remoteKey = 0;
+			break;
+		default:
+			keys->event = (KEY_MOD_UP | KEY_MOD_LONG);
+			remoteKey = 0;
+			break;
+	}
+}

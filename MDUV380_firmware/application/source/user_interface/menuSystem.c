@@ -96,6 +96,8 @@ menuDataGlobal_t menuDataGlobal =
 #if defined(HAS_SSTV_MENU)
 				NULL,// SSTV
 				NULL,// APRS RX
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 				NULL,// Event log
 				NULL,// PACE
 				NULL,// Position
@@ -104,6 +106,8 @@ menuDataGlobal_t menuDataGlobal =
 				NULL,// Net control
 				NULL,// Waypoints
 				NULL,// Sked
+#endif
+#if defined(HAS_SSTV_MENU)
 				NULL,// Decoders
 				NULL,// DMR SMS
 #endif
@@ -170,6 +174,8 @@ static menuFunctionData_t menuFunctions[] =
 #if defined(HAS_SSTV_MENU)
 		{ menuSSTV,                 NULL, NULL, 0 },
 		{ menuAPRSRx,               NULL, NULL, 0 },
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 		{ menuEventLog,             NULL, NULL, 0 },
 		{ menuPACE,                 NULL, NULL, 0 },
 		{ menuPosition,             NULL, NULL, 0 },
@@ -178,6 +184,8 @@ static menuFunctionData_t menuFunctions[] =
 		{ menuNetControl,           NULL, NULL, 0 },
 		{ menuWaypoints,            NULL, NULL, 0 },
 		{ menuSked,                 NULL, NULL, 0 },
+#endif
+#if defined(HAS_SSTV_MENU)
 		{ menuDecoders,             NULL, NULL, 0 },
 		{ menuDmrSms,               NULL, NULL, 0 },
 #endif
@@ -686,12 +694,14 @@ const menuItemNewData_t mainMenuItems[] =
 	{   4, MENU_RSSI_SCREEN     },
 	{   9, MENU_OPTIONS         },
 	{   7, MENU_LAST_HEARD      },
-#if defined(HAS_SSTV_MENU)
+#if defined(HAS_FIELD_TOOLS_MENU)
 	{ 285, MENU_PACE            },// stringOffset 285 = .pace field (fork)
 	{ 286, MENU_POSITION        },// stringOffset 286 = .position field (fork)
 	{ 287, MENU_COVERAGE        },// stringOffset 287 = .coverage field (fork)
 	{ 288, MENU_RADIO_CHECK     },// stringOffset 288 = .radio_check field (fork)
 	{ MENU_STRING_NET_CONTROL, MENU_NET_CONTROL },// fork: fixed English name, see menuItemName()
+#endif
+#if defined(HAS_SSTV_MENU)
 	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
 	{ MENU_STRING_DECODERS, MENU_DECODERS },// fork: fixed English name, see menuItemName()
 	{ MENU_STRING_DMR_SMS, MENU_DMR_SMS },// fork: fixed English name, see menuItemName()
@@ -701,6 +711,8 @@ const menuItemNewData_t mainMenuItems[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	{ 282, MENU_SSTV            },// stringOffset 282 = .sstv field (fork, end of stringsTable_t)
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 	{ 284, MENU_EVENT_LOG       },// stringOffset 284 = .event_log field (fork)
 #endif
 	{ 150, MENU_RADIO_INFOS     },

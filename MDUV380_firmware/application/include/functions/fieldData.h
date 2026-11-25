@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include "functions/skedMath.h"
 
-#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD9600)
 #define HAS_FIELD_TOOLS
 
 #define FIELD_DATA_FLASH_ADDRESS   ((16U * 1024U * 1024U) - (64U * 1024U)) // the GPS NMEA log ends here

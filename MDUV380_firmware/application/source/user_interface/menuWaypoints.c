@@ -30,7 +30,7 @@
 #include "interfaces/gps.h"
 #endif
 
-#if defined(HAS_FIELD_TOOLS) && defined(HAS_GPS) && defined(HAS_EMCOM_UI)
+#if defined(HAS_FIELD_TOOLS) && defined(HAS_GPS) && defined(HAS_EMCOM_UI) && !defined(PLATFORM_MD9600) // MD-9600: needs the GPS waypoint page
 
 #define REFRESH_MS   1000U
 #define ROW_H        11

@@ -77,6 +77,8 @@ static const uint16_t quickkeyChoices[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	QUICKKEY_MENUVALUE_CHECKED(MENU_APRS_RX, 0, 0),
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 	QUICKKEY_MENUVALUE_CHECKED(MENU_EVENT_LOG, 0, 0),
 	QUICKKEY_MENUVALUE_CHECKED(MENU_PACE, 0, 0),
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_POSITION),   // menu IDs >= 32: actions
@@ -85,6 +87,8 @@ static const uint16_t quickkeyChoices[] =
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_NET_CONTROL),
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_WAYPOINTS),
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_SKED),
+#endif
+#if defined(HAS_SSTV_MENU)
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_DECODERS),
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_DMR_SMS),
 	QUICKKEY_MENUVALUE_CHECKED(MENU_SSTV, 0, 0),
@@ -119,7 +123,7 @@ const char *quickkeyActionGetName(quickkeyAction_t action)
 			return "SOS (press x2)";
 		case QUICKKEY_ACTION_BLACKOUT:
 			return "Blackout";
-#if defined(HAS_SSTV_MENU)
+#if defined(HAS_FIELD_TOOLS_MENU)
 		case QUICKKEY_ACTION_MENU_POSITION:
 			return currentLanguage->position;
 		case QUICKKEY_ACTION_MENU_COVERAGE:
@@ -132,6 +136,8 @@ const char *quickkeyActionGetName(quickkeyAction_t action)
 			return "Waypoints";
 		case QUICKKEY_ACTION_MENU_SKED:
 			return "Sked";
+#endif
+#if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:
 			return "Decoders";
 		case QUICKKEY_ACTION_MENU_DMR_SMS:
@@ -149,13 +155,15 @@ static int quickkeyActionMenu(quickkeyAction_t action)
 {
 	switch (action)
 	{
-#if defined(HAS_SSTV_MENU)
+#if defined(HAS_FIELD_TOOLS_MENU)
 		case QUICKKEY_ACTION_MENU_POSITION:     return MENU_POSITION;
 		case QUICKKEY_ACTION_MENU_COVERAGE:     return MENU_COVERAGE;
 		case QUICKKEY_ACTION_MENU_RADIO_CHECK:  return MENU_RADIO_CHECK;
 		case QUICKKEY_ACTION_MENU_NET_CONTROL:  return MENU_NET_CONTROL;
 		case QUICKKEY_ACTION_MENU_WAYPOINTS:    return MENU_WAYPOINTS;
 		case QUICKKEY_ACTION_MENU_SKED:         return MENU_SKED;
+#endif
+#if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:     return MENU_DECODERS;
 		case QUICKKEY_ACTION_MENU_DMR_SMS:      return MENU_DMR_SMS;
 #endif
@@ -255,15 +263,17 @@ bool quickkeyActionExecute(quickkeyAction_t action, bool isChannelMode)
 			// Same as SK1 + 5
 			blackoutToggle();
 			return true;
-#if defined(HAS_SSTV_MENU)
+#if defined(HAS_FIELD_TOOLS_MENU)
 		case QUICKKEY_ACTION_MENU_POSITION:
 		case QUICKKEY_ACTION_MENU_COVERAGE:
 		case QUICKKEY_ACTION_MENU_RADIO_CHECK:
 		case QUICKKEY_ACTION_MENU_NET_CONTROL:
 		case QUICKKEY_ACTION_MENU_WAYPOINTS:
 		case QUICKKEY_ACTION_MENU_SKED:
+#if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:
 		case QUICKKEY_ACTION_MENU_DMR_SMS:
+#endif
 			// called from the Channel / VFO screen only (applicationMain.c), as the menu quickkeys
 			menuSystemPushNewMenu(quickkeyActionMenu(action));
 			return true;

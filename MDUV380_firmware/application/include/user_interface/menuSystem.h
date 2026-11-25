@@ -346,8 +346,15 @@ enum MENU_SCREENS
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) // = I2S_APRS_RX (interfaces/i2s.h)
 #define HAS_SSTV_MENU
 #define HAS_APRS_RX_MENU
+#define HAS_FIELD_TOOLS_MENU
+#elif defined(PLATFORM_MD9600) // no FM audio capture: the field tools only
+#define HAS_FIELD_TOOLS_MENU
+#endif
+#if defined(HAS_SSTV_MENU)
 	MENU_SSTV,// Fork: SSTV picture receive
 	MENU_APRS_RX,// Fork: APRS receive (frames, stations, radar, messages)
+#endif
+#if defined(HAS_FIELD_TOOLS_MENU)
 	MENU_EVENT_LOG,// Fork: EMCOM event log
 	MENU_PACE,// Fork: PACE communication plan
 	MENU_POSITION,// Fork: MGRS / UTM position
@@ -356,6 +363,8 @@ enum MENU_SCREENS
 	MENU_NET_CONTROL,// Fork: EMCOM net control (roster, QSO log)
 	MENU_WAYPOINTS,// Fork: saved waypoints
 	MENU_SKED,// Fork: comms schedule reminders
+#endif
+#if defined(HAS_SSTV_MENU)
 	MENU_DECODERS,// Fork: DTMF / CW / STQC decoders
 	MENU_DMR_SMS,// Fork: DMR SMS inbox
 #endif
@@ -528,7 +537,6 @@ menuStatus_t menuFirmwareInfoScreen(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuNumericalEntry(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuTxScreen(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuRSSIScreen(uiEvent_t *event, bool isFirstRun);
-#if defined(HAS_SSTV_MENU)
 menuStatus_t menuSSTV(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuAPRSRx(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuEventLog(uiEvent_t *event, bool isFirstRun);
@@ -541,7 +549,6 @@ menuStatus_t menuWaypoints(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuSked(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuDecoders(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuDmrSms(uiEvent_t *event, bool isFirstRun);
-#endif
 menuStatus_t menuLastHeard(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuGeneralOptions(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuRadioOptions(uiEvent_t *event, bool isFirstRun);
@@ -562,9 +569,9 @@ menuStatus_t uiMessageBox(uiEvent_t *event, bool isFirstRun);
 menuStatus_t menuSatelliteScreen(uiEvent_t *ev, bool isFirstRun);
 #if defined(HAS_GPS)
 menuStatus_t menuGPS(uiEvent_t *event, bool isFirstRun);
-#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
 bool gpsWaypointGet(double *lat, double *lon); // Fork: GPS waypoint page target
 void gpsWaypointSet(double lat, double lon);
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
 // Fork: keypad lat / lon entry (GPS waypoint page '#', saved waypoints '#'), one screen at a time
 typedef enum
 {
