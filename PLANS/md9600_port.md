@@ -1,6 +1,6 @@
 # SP7TEAM EMCOM on the TYT MD-9600 / Retevis RT90 (HW V5, GPS)
 
-Status 2026-11-23: stage 0 done, screens waiting for the owner's approval.
+Status 2026-11-25: stages 0-1 done (vanilla V5 build flashed on the owner's radio, RX/TX FM+DMR, GPS and keys work). Decisions taken.
 
 ## Target
 
@@ -31,10 +31,10 @@ Pixel-exact mockups drawn with the firmware fonts: `MD9600_firmware/tools/mockup
 (`python3 screens.py` writes `out/*.png`). Review page with IDs E1-E8, A1-A4, M1-M3,
 G1-G5, S1-S2, P1-P2, N1-N7, R1-R4.
 
-Open decisions for the owner:
-1. Menu: list (M1, recommended default) or tiles (M2).
+Owner decisions (2026-11-25):
+1. Menu: list (M1).
 2. Front keys: P1 blackout, P2 position, P3 radio check, P4 PACE next, ALARM SOS.
-3. Key hint bar in tools (yes), not on the main screen.
+3. Key hint bar in tools only, not on the main screen.
 
 ## Stages
 
