@@ -41,7 +41,10 @@ Owner decisions (2026-11-25):
 0. Done: upstream R20260131 MD9600 sources imported, container build, V5 binary.
 1. Web flasher page on sp7tq.pl (own menu item); flash the vanilla build on the
    owner's radio and check RX / TX / GPS / mic keypad / front keys.
-2. Shared application code (see `unify_sourcecodes.md`, phase 1 (a) + phase 3):
+2. Shared application code (see `unify_sourcecodes.md`, phase 1 (a) + phase 3).
+   2026-11-25: done in ebe5351 (MD9600_firmware/application links to the MDUV380 tree;
+   upstream differences under PLATFORM_MD9600; fork features still RT3S only in the
+   hardware files, enabled for MD-9600 in stage 3). Was:
    per-platform `Core/`, one `application/` tree, display drivers selected by
    platform. Fork features then reach both radios.
 3. Non-UI features: GPS rework, APRS RX + messages, event log, PACE, net control,
