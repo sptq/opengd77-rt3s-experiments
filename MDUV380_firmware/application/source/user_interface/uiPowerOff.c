@@ -71,7 +71,19 @@ static void updateScreen(void)
 
 	displayClearBuf();
 
-#if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+	if (emcomStyleEnabled())
+	{
+		// Fork: SP7TEAM good-bye screen, 128 x 64 mono
+		displayDrawRect(0, 0, DISPLAY_SIZE_X, DISPLAY_SIZE_Y, true);
+		displayPrintCentered(6, "73", FONT_SIZE_3);
+		displayPrintCentered(24, "SP7TEAM", FONT_SIZE_1_BOLD);
+		displayFillRect(30, 34, 68, 1, false);
+		displayPrintCentered(40, currentLanguage->power_off, FONT_SIZE_1);
+		displayRender();
+		return;
+	}
+#elif defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
 		// Fork: SP7TEAM good-bye screen

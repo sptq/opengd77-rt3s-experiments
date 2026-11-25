@@ -41,6 +41,8 @@
 #else
 #define MENU_MAX_DISPLAYED_ENTRIES 7
 #endif
+#elif defined(PLATFORM_MD9600)
+#define MENU_MAX_DISPLAYED_ENTRIES 5 // Fork: 6x8 font rows (menuDisplayEntry, EMCOM_UI_MONO)
 #else
 // Black and white smaller height screeens (MD9600 and GD77 etc)
 #define MENU_MAX_DISPLAYED_ENTRIES 3

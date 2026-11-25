@@ -795,7 +795,22 @@ void menuDisplayTitle(const char *title)
 
 	displayThemeGetForegroundAndBackgroundItems(&fgItem, &bgItem);
 
-#if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+	// Fork: 128 x 64: inverse title bar (rows 0..8), capitals on the left, list position on the right
+	{
+		char pos[12];
+
+		pos[0] = 0;
+		if (menuDataGlobal.numItems > 1)
+		{
+			snprintf(pos, sizeof(pos), "%d/%d", (int)(menuDataGlobal.currentItemIndex + 1), (int)menuDataGlobal.numItems);
+		}
+		emcomUiTitle(title, (pos[0] ? pos : NULL));
+		UNUSED_PARAMETER(fgItem);
+		UNUSED_PARAMETER(bgItem);
+		return;
+	}
+#elif defined(HAS_EMCOM_UI)
 	// Fork: EMCOM style title bar: left aligned capitals, list position on the right
 	if (emcomStyleEnabled())
 	{
@@ -860,6 +875,49 @@ void menuDisplayTitle(const char *title)
 void menuDisplayEntry(int loopOffset, int focusedItem, const char *entryText, int32_t optStart, themeItem_t fgItem, themeItem_t fgOptItem, themeItem_t bgItem)
 {
 	bool focused = (focusedItem == menuDataGlobal.currentItemIndex);
+
+#if defined(EMCOM_UI_MONO)
+	// Fork: 128 x 64: five 9 px rows in the 6x8 font under the title, the selected one inverse,
+	// option values right aligned
+	{
+		int16_t y = (int16_t)(10 + ((loopOffset - MENU_START_ITERATION_VALUE) * 9));
+		char label[SCREEN_LINE_BUFFER_SIZE + 1];
+		const char *value = NULL;
+
+		UNUSED_PARAMETER(fgItem);
+		UNUSED_PARAMETER(fgOptItem);
+		UNUSED_PARAMETER(bgItem);
+
+		if ((optStart > 0) && ((size_t)optStart <= strlen(entryText)))
+		{
+			snprintf(label, ((optStart < (int32_t)sizeof(label)) ? (size_t)optStart : sizeof(label)), "%s", entryText); // drops the ':'
+			value = (entryText + optStart);
+			while (*value == ' ')
+			{
+				value++;
+			}
+		}
+		else
+		{
+			snprintf(label, sizeof(label), "%s", entryText);
+		}
+
+		displayFillRect(0, y, DISPLAY_SIZE_X, 9, (focused == false));
+		int16_t valueW = (int16_t)((value ? strlen(value) : 0) * 6);
+		size_t maxChars = (size_t)((DISPLAY_SIZE_X - 2 - (valueW ? (valueW + 6) : 0)) / 6);
+
+		if (strlen(label) > maxChars)
+		{
+			label[maxChars] = 0;
+		}
+		displayPrintCore(1, (y + 1), label, FONT_SIZE_1, TEXT_ALIGN_LEFT, focused);
+		if (value)
+		{
+			displayPrintCore((DISPLAY_SIZE_X - 1 - valueW), (y + 1), value, (focused ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, focused);
+		}
+		return;
+	}
+#endif
 
 	if (focused
 #if defined(HAS_EMCOM_UI)

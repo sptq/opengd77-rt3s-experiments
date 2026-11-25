@@ -85,7 +85,60 @@ menuStatus_t menuDisplayMenuList(uiEvent_t *ev, bool isFirstRun)
 	return menuDisplayListExitCode;
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+// Fork: 128 x 64 list (mockup M1): title with the position, five rows "n Name" (1..9, 0 = the
+// number key that opens the entry), scroll bar on the right, key bar at the bottom
+#define LIST_ROWS 5
+
+static void updateMonoListScreen(const char *title)
+{
+	int sel = menuDataGlobal.currentItemIndex;
+	int n = menuDataGlobal.numItems;
+	int top = CLAMP((sel - (LIST_ROWS / 2)), 0, MAX(0, (n - LIST_ROWS)));
+	char buf[SCREEN_LINE_BUFFER_SIZE + 4];
+
+	displayClearBuf();
+	menuDisplayTitle(title);
+
+	for (int i = 0; i < LIST_ROWS; i++)
+	{
+		int k = (top + i);
+		int16_t y = (int16_t)(10 + (i * 9));
+
+		if (k >= n)
+		{
+			break;
+		}
+
+		const char *name = menuItemName(&menuDataGlobal.currentMenuList[k]);
+		char num = ((k < 10) ? ((k == 9) ? '0' : (char)('1' + k)) : ' ');
+
+		snprintf(buf, sizeof(buf), "%c %s", num, (name ? name : ""));
+		buf[20] = 0;
+		if (k == sel)
+		{
+			displayFillRect(0, y, (DISPLAY_SIZE_X - 4), 9, false);
+		}
+		displayPrintCore(2, (y + 1), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, (k == sel));
+	}
+
+	// scroll bar
+	if (n > LIST_ROWS)
+	{
+		int16_t trackH = (LIST_ROWS * 9);
+		int16_t thumbH = (int16_t)MAX(4, ((trackH * LIST_ROWS) / n));
+		int16_t thumbY = (int16_t)(10 + (((trackH - thumbH) * top) / (n - LIST_ROWS)));
+
+		displayFillRect((DISPLAY_SIZE_X - 2), 10, 1, trackH, false);
+		displayFillRect((DISPLAY_SIZE_X - 3), thumbY, 3, thumbH, false);
+	}
+
+	emcomUiKeyBar("GRN open  RED back");
+	displayRender();
+}
+#endif
+
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: EMCOM style launcher: 4 x 3 tiles with an icon and the key number (1..9, 0),
 // the full name of the selected entry in the bottom bar.
 #define GRID_COLS      4
@@ -248,7 +301,11 @@ static void updateScreen(bool isFirstRun)
 #if defined(HAS_EMCOM_UI)
 	if (emcomStyleEnabled())
 	{
+#if defined(EMCOM_UI_MONO)
+		updateMonoListScreen(mName);
+#else
 		updateGridScreen(mName);
+#endif
 
 		if ((menuDataGlobal.currentItemIndex < menuDataGlobal.numItems) && (menuItemName(&menuDataGlobal.currentMenuList[menuDataGlobal.currentItemIndex]) != NULL))
 		{

@@ -153,7 +153,20 @@ static void updateScreen(bool isFirstRun)
 #endif
 	}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(EMCOM_UI_MONO)
+	if ((customDataHasImage == false) && emcomStyleEnabled())
+	{
+		// Fork: SP7TEAM boot screen, 128 x 64 mono
+		displayClearBuf();
+		displayDrawRect(0, 0, DISPLAY_SIZE_X, DISPLAY_SIZE_Y, true);
+		displayPrintCentered(8, "SP7TEAM", FONT_SIZE_3);
+		displayPrintCentered(26, "EMCOM", FONT_SIZE_1_BOLD);
+		displayFillRect(30, 36, 68, 1, false);
+		displayPrintCentered(40, "MD-9600", FONT_SIZE_1);
+		displayPrintCentered(50, "OpenGD77 " GITVERSION, FONT_SIZE_1);
+	}
+	else
+#elif defined(HAS_EMCOM_UI)
 	if ((customDataHasImage == false) && emcomStyleEnabled())
 	{
 		// Fork: SP7TEAM boot screen (emblem: antenna mast with radio waves)

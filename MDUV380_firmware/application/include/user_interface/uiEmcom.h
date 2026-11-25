@@ -26,6 +26,11 @@
 
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
 #define HAS_EMCOM_UI
+#define HAS_EMCOM_COLOUR_UI   // uiEmcom.c, 160 x 128 colour: every EMCOM screen
+#elif defined(PLATFORM_MD9600)
+#define HAS_EMCOM_UI
+#define EMCOM_UI_MONO         // uiEmcomMono.c, 128 x 64 mono: main screens, alerts, menus; the other
+                              // screens keep their classic look until they get a mono layout
 #endif
 
 #if defined(HAS_EMCOM_UI)
@@ -93,11 +98,19 @@ void emcomDrawLevelAlert(const char *title, const char *value, int percent);
 // Drawn with the menu theme items (emcomThemePreset()), as the GPS / satellite / APRS screens:
 // title bar (menuDisplayTitle) with a counter on the right, a status strip of chips, the body and
 // a key bar with the real keys. No render, no static data.
+#if defined(EMCOM_UI_MONO)
+#define EMCOM_UI_STRIP_Y    9
+#define EMCOM_UI_STRIP_H    9
+#define EMCOM_UI_BODY_Y     (EMCOM_UI_STRIP_Y + EMCOM_UI_STRIP_H + 1)
+#define EMCOM_UI_KEYBAR_H   8
+#define EMCOM_UI_KEYBAR_Y   (DISPLAY_SIZE_Y - EMCOM_UI_KEYBAR_H)
+#else
 #define EMCOM_UI_STRIP_Y    MENU_HEADER_HEIGHT
 #define EMCOM_UI_STRIP_H    11
 #define EMCOM_UI_BODY_Y     (EMCOM_UI_STRIP_Y + EMCOM_UI_STRIP_H + 2)
 #define EMCOM_UI_KEYBAR_H   11
 #define EMCOM_UI_KEYBAR_Y   (DISPLAY_SIZE_Y - EMCOM_UI_KEYBAR_H)
+#endif
 
 typedef enum
 {

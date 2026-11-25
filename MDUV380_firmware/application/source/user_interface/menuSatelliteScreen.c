@@ -104,7 +104,7 @@ static bool hasRecalculated;
 static bool hasSelectedSatellite = false;
 satelliteFreq_t currentSatelliteFreqIndex = SATELLITE_VOICE_FREQ;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: EMCOM style of the four views (title bar, status strip, key bar), by Marcin SP7TQ.
 // Drawing only: the predictions, the keys, the voice prompts and the Doppler retune are shared
 // with the classic screen. No static data: everything is built on the stack.
@@ -677,7 +677,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			voicePromptsAppendLanguageString(currentLanguage->list_empty);
 			voicePromptsPlay();
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcomStyleEnabled())
 			{
 				emKeyBar("RED EXIT");
@@ -703,12 +703,12 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			announceVP = false;
 		}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		const bool emcom = emcomStyleEnabled();
 #endif
 
 		if (firstRun
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				&& (emcom == false) // every EMCOM view draws its whole screen
 #endif
 		)
@@ -728,7 +728,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 		if (numTotalSatellitesPredicted != numSatellitesLoaded)
 		{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcom)
 			{
 				emPredicting();
@@ -784,7 +784,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			{
 				const char *freqNames[] = { currentLanguage->voice_prompt_level_1, currentLanguage->APRS, "CW Rx" };// Temporary hard coded names, will eventually need new language strings
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					if (firstRun || hasRecalculated || announceVP)
@@ -896,7 +896,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 				int polarCX = (POLAR_GRAPHICS_X_OFFSET + (DISPLAY_SIZE_X / 2));
 				int polarCY = (DISPLAY_SIZE_Y / 2);
 				int polarR = MAX_RADIUS;
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					polarCX = EM_POLAR_CX;
@@ -919,7 +919,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							gmtime_r_Custom(&displayedPassTimeDiff, &dispTimeAndDate);
 						}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 						if (emcom)
 						{
 							emPolarFrame();
@@ -939,7 +939,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							voicePromptsAppendString(currentActiveSatellite->name);
 						}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 						if (emcom == false)
 #endif
 						{
@@ -959,7 +959,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 						{
 							startTime = displayedPredictionPass->satelliteAOS;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 							if (emcom)
 							{
 								bool before = (uiDataGlobal.dateTimeSecs < displayedPredictionPass->satelliteAOS);
@@ -1042,7 +1042,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 						else
 						{
 							startTime = uiDataGlobal.dateTimeSecs;
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 							if (emcom)
 							{
 								snprintf(buffer, SCREEN_LINE_BUFFER_SIZE, "%d%c", currentSatelliteResults.azimuthAsInteger, 176);
@@ -1064,7 +1064,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 								voicePromptsAppendString(buffer);
 							}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 							if (emcom == false)
 #endif
 							{
@@ -1113,7 +1113,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 						}
 					}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						emPolarLive();
@@ -1140,7 +1140,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 					char buf[SCREEN_LINE_BUFFER_SIZE];
 
 					snprintf(buf, SCREEN_LINE_BUFFER_SIZE, "%s: %s", currentLanguage->pass, currentLanguage->none);
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						displayClearBuf();
@@ -1181,7 +1181,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 			{
 				satellitePass_t *displayedPredictionPass  = &currentActiveSatellite->predictions.passes[currentActiveSatellite->predictions.selectedPassNumber];
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				const bool classicDraw = (emcom == false);
 #else
 				const bool classicDraw = true;
@@ -1275,7 +1275,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 				}
 
 				menuSatelliteScreenNextUpdateTime = 0;// Don't do time based update
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emcom)
 				{
 					emPrediction(displayedPredictionPass);
@@ -1303,7 +1303,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 					predictionsListNumSatellitePassesDisplayed = 0;
 					predictionsListSelectedSatellite = 0;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom)
 					{
 						emListFrame();
@@ -1356,7 +1356,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 
 								snprintf(passTimeBuffer, SCREEN_LINE_BUFFER_SIZE, "%02u:%02u:%02u%s", passDateTime.tm_hour, passDateTime.tm_min, passDateTime.tm_sec, ((nonVolatileSettings.timezone & 0x80) ? "" : "UTC"));
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 								if (emcom)
 								{
 									emListRow(predictionsListNumSatellitePassesDisplayed, foundSat, foundPassNumber, &passDateTime);
@@ -1411,7 +1411,7 @@ static void updateScreen(uiEvent_t *ev, bool firstRun, bool announceVP)
 							numSatellitesFound++;
 						}
 					}
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 					if (emcom && (predictionsListNumSatellitePassesDisplayed == 0))
 					{
 						emText(4, (EM_LIST_Y + 14), currentLanguage->list_empty, FONT_SIZE_3, THEME_ITEM_FG_DEFAULT, THEME_ITEM_BG);
@@ -2073,7 +2073,7 @@ static void selectSatellite(uint32_t selectedSatellite)
 
 bool menuSatelliteIsDisplayingHeader(void)
 {
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled())
 	{
 		return false; // the EMCOM view has a title bar, not the radio header

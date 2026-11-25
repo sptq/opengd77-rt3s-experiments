@@ -227,7 +227,7 @@ static void drawMeterGraticule(int16_t vOffset)
 	}
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 #if defined(FOX_HUNT_SUPPORTED)
 static bool foxHuntGetPosition(double *lat, double *lon);
 #endif
@@ -426,7 +426,7 @@ static void updateScreen(bool forceRedraw, bool isFirstRun)
 		updateVoicePrompts(false, true);
 	}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled())
 	{
 		emcomRssiScreen();

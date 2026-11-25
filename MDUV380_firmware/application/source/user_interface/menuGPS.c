@@ -253,7 +253,7 @@ static bool displayTrip(bool isFirstRun, bool forceRedraw);
 
 typedef enum
 {
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	PAGE_STATUS = 0, // Fork: EMCOM style only (overview); the classic style starts at PAGE_COORDS
 	PAGE_COORDS,
 #else
@@ -309,7 +309,7 @@ static uint32_t updateTick = 0;
 static uint16_t prevSatsInView = 0xFFFF;
 static char directions[16][4];
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 static void emDrawPage(void);
 static bool emIsEmcomPage(void);
 #endif
@@ -317,7 +317,7 @@ static bool emIsEmcomPage(void);
 // First page of the current style (the EMCOM style has the status page first)
 static int gpsFirstPage(void)
 {
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled() == false)
 	{
 		return PAGE_COORDS;
@@ -391,7 +391,7 @@ menuStatus_t menuGPS(uiEvent_t *ev, bool isFirstRun)
 					((gpsData.Status & (GPS_STATUS_FIX_UPDATED | GPS_STATUS_FIXTYPE_UPDATED | GPS_STATUS_POSITION_UPDATED |
 							GPS_STATUS_HDOP_UPDATED | GPS_STATUS_COURSE_UPDATED | GPS_STATUS_SPEED_UPDATED | GPS_STATUS_HEIGHT_UPDATED |
 							GPS_STATUS_GPS_SATS_UPDATED | GPS_STATUS_BD_SATS_UPDATED))
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 							// Fork: the EMCOM status page has a clock and the search timer, redrawn every second
 							|| (emcomStyleEnabled() && (menuDataGlobal.currentItemIndex == PAGE_STATUS) &&
 									(SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF))
@@ -1073,7 +1073,7 @@ static bool displayCoords(bool isFirstRun, bool forceRedraw)
 	return false;
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 //
 // Fork: EMCOM style pages: status (overview), signal (one bar per satellite) and sky plot.
 // They redraw their whole screen into the frame buffer (rendered once, no flicker). The classic
@@ -1922,7 +1922,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 
 	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
 	{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		if (emIsEmcomPage())
 		{
 			// Fork: status, signal and sky pages in the EMCOM style draw their whole screen
@@ -1933,7 +1933,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 #endif
 		switch(menuDataGlobal.currentItemIndex)
 		{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			case PAGE_STATUS: // EMCOM style only, drawn above
 				break;
 #endif
@@ -2048,7 +2048,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 				if (menuDataGlobal.currentItemIndex < PAGE_RSSI)   // Do not display anything on RSSI, Polar and Direction* screens
 #else
 				if ((menuDataGlobal.currentItemIndex < PAGE_POLAR)  // Do not display anything on Polar and Direction* screens
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 						&& (emIsEmcomPage() == false) // the EMCOM pages show the search state themselves
 #endif
 						)
@@ -2098,7 +2098,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 	{
 		if (isFirstRun || forceRedraw || (prevGPSState != SETTINGS_GPS_MODE_GET(nonVolatileSettings)))
 		{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			const bool emPage = emIsEmcomPage();
 
 			if (emPage)
@@ -2114,7 +2114,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 
 			if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) == GPS_MODE_OFF)
 			{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emPage == false)
 #endif
 				{
@@ -2132,7 +2132,7 @@ static bool displayGPSData(bool isFirstRun, bool forceRedraw)
 			}
 			else
 			{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emPage == false)
 #endif
 				{
@@ -2173,7 +2173,7 @@ static void updateScreen(bool isFirstRun, bool forceRedraw)
 		displayClearBuf();
 		menuDisplayTitle(currentLanguage->gps);
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		if (emcomStyleEnabled() == false) // the EMCOM title bar shows the page number itself
 #endif
 		{

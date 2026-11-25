@@ -241,7 +241,7 @@ menuStatus_t menuRadioInfos(uiEvent_t *ev, bool isFirstRun)
 	return menuRadioInfosExitCode;
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: EMCOM style key hints of the time / date pages: typing sets the clock (local time when the
 // clock is set to local in Options > Display, else UTC)
 static void timeKeyBar(bool date)
@@ -294,7 +294,7 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 	const bool dblHeight = false;
 #endif
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	// The EMCOM title bar shows the page number ("4/6") from the menu position
 	if (displayMode < NUM_RADIO_INFOS_MENU_ITEMS)
 	{
@@ -511,7 +511,7 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 				displayPrintCenteredDoubleHeight((((DISPLAY_SIZE_Y >> 1) + MENU_HEADER_HEIGHT) - (dblHeight ? FONT_SIZE_4_HEIGHT : (FONT_SIZE_4_HEIGHT >> 1)) - DOUBLE_ARROW_HEIGHT), buffer, FONT_SIZE_4, dblHeight);
 				renderArrowOnly = false;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 				if (emcomStyleEnabled())
 				{
 					timeKeyBar(false);
@@ -561,7 +561,7 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 			displayPrintCenteredDoubleHeight((((DISPLAY_SIZE_Y >> 1) + MENU_HEADER_HEIGHT) - (dblHeight ? FONT_SIZE_3_HEIGHT : (FONT_SIZE_3_HEIGHT >> 1)) - DOUBLE_ARROW_HEIGHT), buffer, FONT_SIZE_3, dblHeight);
 			renderArrowOnly = false;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcomStyleEnabled())
 			{
 				timeKeyBar(true);
@@ -644,7 +644,7 @@ static void updateScreen(uiEvent_t *ev, bool forceRedraw)
 			}
 			renderArrowOnly = false;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcomStyleEnabled())
 			{
 				locationKeyBar(dblHeight);

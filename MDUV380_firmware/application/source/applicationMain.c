@@ -470,7 +470,7 @@ void applicationMainTask(void)
 		settingsEraseCustomContent();
 #if !defined(PLATFORM_MD9600)
 		themeInit(true);
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		displaySetFlatStyle(emcomStyleEnabled()); // Fork: EMCOM style for the whole UI
 #endif
 #endif
@@ -485,7 +485,7 @@ void applicationMainTask(void)
 	{
 #if !defined(PLATFORM_MD9600)
 		themeInit(false);
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		displaySetFlatStyle(emcomStyleEnabled());
 #endif
 #endif

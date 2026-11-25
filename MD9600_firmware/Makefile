@@ -79,7 +79,7 @@ C_SRCS := $(shell find -H $(SRC_ROOTS) -name '*.c')
 # Exclusion from .cproject
 C_SRCS := $(filter-out application/include/user_interface/languages/src/languages_builder.c,$(C_SRCS))
 # RT3S / MDUV380 only sources
-C_SRCS := $(filter-out application/source/hardware/AT1846S.c application/source/hardware/HX8353E_display.c application/source/user_interface/menuThemeOptions.c,$(C_SRCS))
+C_SRCS := $(filter-out application/source/hardware/AT1846S.c application/source/hardware/HX8353E_display.c application/source/user_interface/menuThemeOptions.c application/source/user_interface/uiEmcom.c,$(C_SRCS))
 
 S_SRCS := $(shell find -H $(SRC_ROOTS) -name '*.s' -o -name '*.S')
 

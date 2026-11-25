@@ -130,7 +130,7 @@ static void updateCursor(void)
 
 		if ((m - lastBlink) > CURSOR_UPDATE_TIMEOUT)
 		{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcomStyleEnabled())
 			{
 				// Fork: EMCOM input field, left aligned, big digits when they fit
@@ -160,7 +160,7 @@ static void updateCursor(void)
 	}
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 
 // Fork: EMCOM style: title bar, mode tabs, input field, contact name, key bar
 static void emcomEntryScreen(void)
@@ -282,7 +282,7 @@ static void updateScreen(bool inputModeHasChanged)
 		promptsPlayNotAfterTx();
 	}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled())
 	{
 		emcomEntryScreen();

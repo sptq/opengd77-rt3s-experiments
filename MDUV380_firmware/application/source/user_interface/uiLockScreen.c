@@ -74,7 +74,7 @@ menuStatus_t menuLockScreen(uiEvent_t *ev, bool isFirstRun)
 	return MENU_STATUS_SUCCESS;
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: EMCOM style lock screen: title bar, big padlock (16x16 icon drawn x3), the locked items, the unlock keys in the footer
 static void emcomLockScreen(bool unlocked, const char *what)
 {
@@ -115,7 +115,7 @@ static void emcomLockScreen(bool unlocked, const char *what)
 
 static void redrawScreen(bool update, bool state)
 {
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	// Fork: the EMCOM lock screen clears and draws the whole screen in emcomLockScreen(); only the
 	// classic frame is skipped here. The rest of this function (text, voice prompts, render and
 	// lockDisplayed, which lets menuLockScreen() pop back) must still run.
@@ -162,7 +162,7 @@ static void redrawScreen(bool update, bool state)
 		}
 		buf[bufferLen - 1] = 0;
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		if (emcomStyleEnabled())
 		{
 			emcomLockScreen(false, buf);
@@ -218,7 +218,7 @@ static void redrawScreen(bool update, bool state)
 	}
 	else
 	{
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 		if (emcomStyleEnabled())
 		{
 			emcomLockScreen(true, NULL);

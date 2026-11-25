@@ -43,7 +43,7 @@ static const int DISPLAYED_LINES_BASE = 7;
 static const int DISPLAYED_LINES_BASE = 3;
 #endif
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: the EMCOM style keeps the bottom rows for the key bar
 #define EMCOM_LINES_MAX ((EMCOM_UI_KEYBAR_Y - 16) / MENU_ENTRY_HEIGHT)
 #define DISPLAYED_LINES_MAX ((emcomStyleEnabled() && (DISPLAYED_LINES_BASE > EMCOM_LINES_MAX)) ? EMCOM_LINES_MAX : DISPLAYED_LINES_BASE)
@@ -129,7 +129,7 @@ menuStatus_t menuLastHeard(uiEvent_t *ev, bool isFirstRun)
 	return menuLastHeardExitCode;
 }
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 // Fork: EMCOM style row: callsign (8x16) on the left, TG / PC and age on the right, two small lines;
 // details: rest of the alias and the DMR ID. The classic row is drawn off-screen first for its voice prompts.
 static void emcomLastHeardRow(int16_t y, const char *text, LinkItem_t *item, uint32_t now, bool displayDetails, bool selected)
@@ -285,7 +285,7 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 					break;
 			}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			bool emcomRow = (emcomStyleEnabled() && (uiNotificationScratchBuffer() != NULL));
 			if (emcomRow)
 			{
@@ -300,7 +300,7 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 			{
 				displayTalkerAlias(16 + (numDisplayed * MENU_ENTRY_HEIGHT) + LH_ENTRY_V_OFFSET, item->contact, item->time, now, item->talkGroupOrPcId, MAX_DMR_ID_CONTACT_TEXT_LENGTH, displayDetails, invertColour, isFirstRun, item);
 			}
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 			if (emcomRow)
 			{
 				displayRestorePrimaryScreenBuffer();
@@ -319,7 +319,7 @@ void menuLastHeardUpdateScreen(bool showTitleOrHeader, bool displayDetails, bool
 		promptsPlayNotAfterTx();
 	}
 
-#if defined(HAS_EMCOM_UI)
+#if defined(HAS_EMCOM_COLOUR_UI)
 	if (emcomStyleEnabled() && showTitleOrHeader && (confirmClear == false))
 	{
 #if defined(HAS_NET_CONTROL)
