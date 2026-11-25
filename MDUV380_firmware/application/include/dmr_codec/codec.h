@@ -29,6 +29,7 @@
 #ifndef _OPENGD77_CODEC_H_
 #define _OPENGD77_CODEC_H_
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include "hardware/HR-C6000.h"
 
 #include "functions/sound.h"
@@ -56,6 +57,35 @@
 #define AMBE_ENCODE 0x00054F94;
 #define AMBE_ENCODE_ECC 0x0005534C;
 #endif
+#else // PLATFORM_MD9600
+#include "hardware/HR-C6000.h"
+
+#include "functions/sound.h"
+
+
+#if defined(PLATFORM_MD9600)
+#define CODEC_LOCATION_1 0x807537C
+#else
+#define CODEC_LOCATION_1 0x4400
+#define CODEC_LOCATION_2 0x54000
+#endif
+#define CODEC_DECODE_CONFIG_DATA_LENGTH 0x7ec
+#define CODEC_ENCODE_CONFIG_DATA_LENGTH 0x2000
+#define CODEC_ECC_CONFIG_DATA_LENGTH 0x100
+
+#define QUAUX(X) #X
+#define QU(X) QUAUX(X)
+
+#if defined(PLATFORM_MD9600)
+#define AMBE_DECODE 0x08075954;
+#define AMBE_ENCODE 0x080754ac;
+#define AMBE_ENCODE_ECC 0x08075864;
+#else
+#define AMBE_DECODE 0x0005543D;
+#define AMBE_ENCODE 0x00054F94;
+#define AMBE_ENCODE_ECC 0x0005534C;
+#endif
+#endif // PLATFORM_MD9600
 extern uint8_t ambebuffer_decode[CODEC_DECODE_CONFIG_DATA_LENGTH];
 extern uint8_t ambebuffer_encode[CODEC_ENCODE_CONFIG_DATA_LENGTH];
 extern uint8_t ambebuffer_encode_ecc[CODEC_ECC_CONFIG_DATA_LENGTH];

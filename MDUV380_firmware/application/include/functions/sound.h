@@ -32,7 +32,9 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include "main.h"
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include "functions/dmrRxAgc.h"
+#endif // PLATFORM_MD9600
 #include "interfaces/wdog.h"
 
 extern Task_t beepTask;
@@ -59,20 +61,32 @@ extern const int16_t MELODY_RX_BEEP_CALLER_BEGIN_BEEP[];
 extern const int16_t MELODY_RX_BEEP_CALLER_END_BEEP[];
 extern const int16_t MELODY_1750[];
 extern const int16_t MELODY_DTMF[];
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //extern const int16_t MELODY_SK2_BEEP[];
 //extern const int16_t MELODY_NSK2_BEEP[];
+#else // PLATFORM_MD9600
+extern const int16_t MELODY_SK2_BEEP[];
+extern const int16_t MELODY_NSK2_BEEP[];
+#endif // PLATFORM_MD9600
 extern const int16_t MELODY_BEEP_LOW_SHORT[];
 
 extern volatile int16_t *melody_play;
 extern volatile int16_t melody_idx;
 extern volatile int micAudioSamplesTotal;
 extern int soundBeepVolumeDivider;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+extern volatile float dmrRxAGCrxPeakAverage;
+#endif // PLATFORM_MD9600
 
 #define WAV_BUFFER_SIZE                          160
 #define WAV_BUFFER_COUNT                          30 // 5 DMR frames, was 24
 #define WAV_BUFFER_AMBE_PREBUFFERING_COUNT        12 // 2 DMR frames, 6 buffers each
 #define HOTSPOT_BUFFER_SIZE                      50U
 #define HOTSPOT_BUFFER_COUNT                     48U
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#define DMR_RX_AGC_DEFAULT_PEAK_SAMPLES			4000.0f
+#endif // PLATFORM_MD9600
 
 extern union sharedDataBuffer
 {
@@ -108,6 +122,9 @@ bool soundRefillData(uint32_t bufNum);
 bool soundReceiveData(void);
 void soundReceiveRefillData(uint32_t bufNum);
 bool soundMelodyIsPlaying(void);
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+void soundResetDMRRxAGCGain(void);
+#endif // PLATFORM_MD9600
 void soundStartDMA(void);
 void soundDMRRxAGCSetStationLevel(const void *station, uint32_t stationId, uint32_t stationToken, uint16_t rememberedPeak);
 void soundDMRRxAGCInvalidateStation(void);

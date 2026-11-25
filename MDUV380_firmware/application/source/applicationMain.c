@@ -1,3 +1,4 @@
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 /*
  * Copyright (C) 2021-2025 Roger Clark, VK3KYY / G4KYF
  *                         Colin Durbridge, G4EML
@@ -703,10 +704,661 @@ void applicationMainTask(void)
 			}
 		}
 #endif
+#else // PLATFORM_MD9600
+/*
+ * Copyright (C) 2021-2025 Roger Clark, VK3KYY / G4KYF
+ *                         Colin Durbridge, G4EML
+ *                         Daniel Caujolle-Bert, F1RMB
+ *
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+ *    in the documentation and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * 4. Use of this source code or binary releases for commercial purposes is strictly forbidden. This includes, without limitation,
+ *    incorporation in a commercial product or incorporation into a product or project which allows commercial use.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#include <stdbool.h>
+#include <memory.h>
+#include <malloc.h>
+#include <stdio.h>
+
+#include "hardware/ST7567.h"
+#include "interfaces/adc.h"
+#include "interfaces/batteryRAM.h"
+#include "hardware/SPI_Flash.h"
+#include "interfaces/adc.h"
+#include "hardware/radioHardwareInterface.h"
+
+#include "io/buttons.h"
+#include "usb/usb_com.h"
+#include "usb_device.h"
+#include "user_interface/menuSystem.h"
+#include "user_interface/uiUtilities.h"
+#include "user_interface/uiLocalisation.h"
+#include "functions/ticks.h"
+#include "interfaces/batteryAndPowerManagement.h"
+#include "interfaces/gps.h"
+#include "interfaces/settingsStorage.h"
+#include "interfaces/remoteHead.h"
+
+#if defined(USING_EXTERNAL_DEBUGGER)
+#include "SeggerRTT/RTT/SEGGER_RTT.h"
+#endif
+
+// Couldn't declare into aprs.h, due to header cross-dependence.
+void aprsBeaconingTick(uiEvent_t *ev);
+
+volatile bool mainIsRunning = true;
+static bool updateMessageOnScreen = false;
+char globalFailureMessage[SCREEN_LINE_BUFFER_SIZE] = { 0 };
+bool spiFlashInitHasFailed = false;
+
+#if ! defined(PLATFORM_GD77S)
+ticksTimer_t autolockTimer;
+#endif
+
+
+#if (__NVIC_PRIO_BITS != 3)
+#error Files need to be manually after regernation using the STM32Cube configuration tool to support the non-genuine CPU
+
+/*
+ * To support the Non-genuine CPU in newer radios, the following changes must be made
+ *
+ * stm32f405xx.h line 49 needs to be changed to
+ * #define __NVIC_PRIO_BITS          3U       // VK3KYY changed this to 3 to fix problem with clone CPU. Genuine STM32F4XX uses 4 Bits for the Priority Levels
+ *
+ * FreeRTOS
+ *
+ * FreeRTOSConfig.h
+ *
+ * line 132
+ *
+ *  #define configPRIO_BITS         3
+ *
+ *  port.c
+ *
+ *  line 346
+ *
+ * 	configASSERT( ( portMAX_PRIGROUP_BITS - ulMaxPRIGROUPValue ) >= configPRIO_BITS );
+ *
+ * Also     HAL_NVIC_SetPriority(PendSV_IRQn, 15, 0);  has to be changed to HAL_NVIC_SetPriority(PendSV_IRQn, 7, 0); in stm32f4xx_hal_msp.h
+ *
+ */
+
+#endif
+
+
+#if false
+static void hexDump(uint8_t *ptr, int len)
+{
+	char buf[8];
+	char msg[128];
+
+	msg[0] = 0;
+	for (int i = 0; i < len; i++)
+	{
+		if ((i != 0) && (i%16 == 0))
+		{
+			strcat(msg,"\n");
+			CDC_Transmit_FS((uint8_t *)msg,strlen(msg));
+			msg[0] = 0;
+		}
+		else
+		{
+			sprintf(buf,"%02x ",*ptr);
+			strcat(msg,buf);
+		}
+		ptr++;
+		osDelay(1);
+	}
+}
+#endif
+
+
+static void keyBeepHandler(uiEvent_t *ev, bool ptttoggleddown)
+{
+	bool isScanning = (uiVFOModeIsScanning() || uiChannelModeIsScanning()) && !uiVFOModeSweepScanning(false);
+
+	// Do not send any beep while scanning, otherwise enabling the AMP will be handled as a valid signal detection.
+	if (((ev->keys.event & (KEY_MOD_LONG | KEY_MOD_PRESS)) == (KEY_MOD_LONG | KEY_MOD_PRESS)) ||
+			((ev->keys.event & KEY_MOD_UP) == KEY_MOD_UP))
+	{
+
+		if ((ptttoggleddown == false) && (isScanning == false))
+		{
+			if (nonVolatileSettings.audioPromptMode >= AUDIO_PROMPT_MODE_BEEP)
+			{
+				soundSetMelody(nextKeyBeepMelody);
+			}
+			else
+			{
+				soundSetMelody(MELODY_KEY_BEEP);
+			}
+			nextKeyBeepMelody = (int16_t *)MELODY_KEY_BEEP;// set back to the default beep
+		}
+		else
+		{ 	// Reset the beep sound if we are scanning, otherwise the AudioAssist
+			// beep will be played instead of the normal one.
+
+			if (isScanning)
+			{
+				if (melody_play != NULL)
+				{
+					soundStopMelody();
+				}
+			}
+			else
+			{
+				soundSetMelody(MELODY_KEY_BEEP);
+			}
+		}
+	}
+	else
+	{
+		if ((ev->keys.event & (KEY_MOD_LONG | KEY_MOD_DOWN)) == (KEY_MOD_LONG | KEY_MOD_DOWN))
+		{
+			if ((ptttoggleddown == false) && (isScanning == false))
+			{
+				if (nextKeyBeepMelody != MELODY_KEY_BEEP)
+				{
+					soundSetMelody(nextKeyBeepMelody);
+					nextKeyBeepMelody = (int16_t *)MELODY_KEY_BEEP;
+				}
+				else
+				{
+					soundSetMelody(MELODY_KEY_LONG_BEEP);
+				}
+			}
+		}
+	}
+}
+
+static bool rxBeepsMustPlayMelody(uint8_t rxBitOption)
+{
+	return ((nonVolatileSettings.beepOptions & rxBitOption) && (settingsUsbMode != USB_MODE_HOTSPOT) &&
+			((uiDataGlobal.Scan.active == false) || (uiDataGlobal.Scan.active && (uiDataGlobal.Scan.state == SCAN_STATE_PAUSED))) &&
+			(nonVolatileSettings.audioPromptMode != AUDIO_PROMPT_MODE_SILENT) && (voicePromptsIsPlaying() == false));
+}
+
+static void rxBeepsCarrierEndCallback(void)
+{
+	soundSetMelody(MELODY_RX_BEEP_END_BEEP);
+}
+
+static bool rxBeepsHandler(void)
+{
+	if (uiDataGlobal.rxBeepState & RX_BEEP_CARRIER_HAS_STARTED_EXEC)
+	{
+		// Don't clear the RF start beep when scanning, it has to be played, so wait the scan has paused.
+		if ((uiDataGlobal.Scan.active &&
+				((uiDataGlobal.Scan.state == SCAN_STATE_SCANNING) || (uiDataGlobal.Scan.state == SCAN_STATE_SHORT_PAUSED))) == false)
+		{
+			uiDataGlobal.rxBeepState &= ~RX_BEEP_CARRIER_HAS_STARTED_EXEC;
+		}
+
+		if (rxBeepsMustPlayMelody(BEEP_RX_CARRIER))
+		{
+			// Cancel queued rx end beep, if any. In this case, there is no
+			// need to play another start beep, as the previous one has already
+			// been heard.
+			if (cancelTimerCallback(rxBeepsCarrierEndCallback, MENU_ANY) == false)
+			{
+				soundSetMelody(MELODY_RX_BEEP_BEGIN_BEEP);
+			}
+
+			return true;
+		}
+	}
+	else if (uiDataGlobal.rxBeepState & RX_BEEP_TALKER_HAS_STARTED_EXEC)
+	{
+		uiDataGlobal.rxBeepState &= ~(RX_BEEP_TALKER_HAS_STARTED_EXEC | RX_BEEP_TALKER_HAS_ENDED | RX_BEEP_TALKER_HAS_ENDED_EXEC);
+
+		if ((nonVolatileSettings.beepOptions & BEEP_RX_TALKER_BEGIN) && rxBeepsMustPlayMelody(BEEP_RX_TALKER))
+		{
+			soundSetMelody(MELODY_RX_BEEP_CALLER_BEGIN_BEEP);
+
+			return true;
+		}
+	}
+	else if (uiDataGlobal.rxBeepState & RX_BEEP_TALKER_HAS_ENDED_EXEC)
+	{
+		// FM: Replace Carrier beeps with Talker beeps if Caller beep option is selected.
+		if ((trxGetMode() == RADIO_MODE_ANALOG) && ((nonVolatileSettings.beepOptions & BEEP_RX_CARRIER) == 0) && (nonVolatileSettings.beepOptions & BEEP_RX_TALKER))
+		{
+			uiDataGlobal.rxBeepState = RX_BEEP_UNSET;
+		}
+		else
+		{
+			uiDataGlobal.rxBeepState &= ~(RX_BEEP_TALKER_HAS_ENDED_EXEC | RX_BEEP_TALKER_HAS_STARTED | RX_BEEP_TALKER_HAS_STARTED_EXEC | RX_BEEP_TALKER_IDENTIFIED);
+		}
+
+		if (rxBeepsMustPlayMelody(BEEP_RX_TALKER))
+		{
+			soundSetMelody(MELODY_RX_BEEP_CALLER_END_BEEP);
+
+			return true;
+		}
+	}
+	else if (uiDataGlobal.rxBeepState & RX_BEEP_CARRIER_HAS_ENDED)
+	{
+		uiDataGlobal.rxBeepState = RX_BEEP_UNSET;
+
+		if (rxBeepsMustPlayMelody(BEEP_RX_CARRIER))
+		{
+			// Delays end beep tone by 100ms, as it could played immediately after CALLER_END_BEEP on some conditions
+			(void)addTimerCallback(rxBeepsCarrierEndCallback, 150, MENU_ANY, false);
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool validateUpdateCallback(void)
+{
+	if (uiDataGlobal.MessageBox.keyPressed == KEY_GREEN)
+	{
+		updateMessageOnScreen = false;
+		settingsSetOptionBit(BIT_SETTINGS_UPDATED, false);
+
+		// G4EML added for remote front panel support because it currently can't power down the radio.
+		if(remoteHeadActive)
+		{
+			settingsSaveSettings(false, false);
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+static void settingsUpdateAudioAlert(void)
+{
+	if (nonVolatileSettings.audioPromptMode >= AUDIO_PROMPT_MODE_VOICE_THRESHOLD)
+	{
+		voicePromptsInit();
+		voicePromptsAppendPrompt(PROMPT_SETTINGS_UPDATE);
+		voicePromptsPlay();
+	}
+	else
+	{
+		soundSetMelody(MELODY_ACK_BEEP);
+	}
+}
+
+static void latchedSk2Callback(void)
+{
+	if(uiDataGlobal.sk2latched)
+	{
+		uiDataGlobal.sk2latched = false;
+		soundSetMelody(MELODY_NSK2_BEEP);
+	}
+}
+
+void applicationMainTask(void)
+{
+	keyboardCode_t keys;
+	int key_event = EVENT_KEY_NONE;
+	//  int keyFunction = 0;
+	uint32_t buttons = 0;
+	int button_event = EVENT_BUTTON_NONE;
+	uint32_t rotary = 0;
+	int rotary_event = EVENT_ROTARY_NONE;
+	int function_event = 0;
+	bool keyOrButtonChanged = false;
+	int16_t *quickkeyPushedMenuMelody = NULL;
+	int keyFunction;
+	bool wasRestoringDefaultsettings = false;
+	uiEvent_t ev = { .buttons = 0, .keys = NO_KEYCODE, .rotary = 0, .function = 0, .events = NO_EVENT, .hasEvent = false, .time = ticksGetMillis() };
+	ticksTimer_t updateClockTimer = { 0, 0 };
+	bool safeBootMode = false;
+	bool forceSafeBootMode = false;
+
+	remoteHeadInit();
+
+	gpsPower(true);				//Turn on the power to the Microphone and GPS module
+	HAL_GPIO_WritePin(SPI_Flash_CS_GPIO_Port, SPI_Flash_CS_Pin, GPIO_PIN_SET);// disable the Flash
+
+#if defined(USING_EXTERNAL_DEBUGGER)
+	SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+	SEGGER_RTT_printf(0,"Segger RTT initialised\n");
+#endif
+
+	buttonsFrontPanelInit();
+	buttonsInit();
+	keyboardInit();
+
+	/*
+	 HAL_TIM_Base_Start_IT(&htim6);
+	 uint32_t count = 5;
+	 aprsIsrFlag=false;
+	 while (!aprsIsrFlag && count>0)
+	 {
+		 vTaskDelay((1000 / portTICK_PERIOD_MS));
+		 count--;
+	 }
+	 */
+
+	// Operator asked for settings reset.
+	// With the modified frontpanel button Col/Row, it's not
+	// possible to use anything else than P3 if the transceiver was
+	// powered off using the power button.
+	if(remoteHeadActive)
+	{
+		remoteHeadRestartIP();			//rescan and resend the key state
+		vTaskDelay(10);			//allow time for this to complete.
+	}
+
+	wasRestoringDefaultsettings = settingsLoadSettings((((buttonsFrontPanelRead() & FRONT_KEY_P3) == FRONT_KEY_P3) && (micButtonsRead() == 0x00)));
+
+	radioPowerOn();
+
+	displayInit((settingsIsOptionBitSet(BIT_AUTO_NIGHT_OVERRIDE) ?
+			((uiDataGlobal.daytimeOverridden == NIGHT) ^ settingsIsOptionBitSet(BIT_INVERSE_VIDEO)) : settingsIsOptionBitSet(BIT_INVERSE_VIDEO)));
+	displaySetContrast(nonVolatileSettings.displayContrast);
+
+	uiDataGlobal.dmrDisabled = !codecIsAvailable();  // Check if DMR codec is available
+
+	spiFlashInitHasFailed = !SPI_Flash_init();
+	if (spiFlashInitHasFailed)
+	{
+		safeBootBranching:
+
+		if (spiFlashInitHasFailed)
+		{
+			nonVolatileSettings.batteryCalibration = (0x05) + (0x07 << 4); // needed to get a correct default voltage reading
+		}
+
+		displayEnableBacklight(true, 100);
+		
+		// Since the settings weren't read from the Flash, set backlight percentage
+		nonVolatileSettings.displayBacklightPercentage[DAY] = 100;
+		displayEnableBacklight(true, -1);
+ 		gpioSetDisplayBacklightIntensityPercentage(100);
+ 
+		menuDataGlobal.controlData.stack[0] = MENU_EMPTY;
+		menuDataGlobal.currentItemIndex = 0;
+
+		snprintf(globalFailureMessage, SCREEN_LINE_BUFFER_SIZE, "%s", (safeBootMode ? "SAFE BOOT" : "FLASH MEM ERROR"));
+		showErrorMessage(globalFailureMessage);
+		
+		die(true, false, false, safeBootMode);
+	}
+
+	radioInit();
+
+	calibrationInit();
+
+	HRC6000Init();
+
+	radioPostinit();
+
+	HAL_ADC_Start_IT(&hadc1);
+
+	HRC6000InitTask();
+
+	voxInit();
+
+	menuRadioInfosInit();
+	batteryUpdate();
+
+	soundInitBeepTask();
+
+	// Clear boot melody and image
+#if defined(PLATFORM_MD9600)
+	if ((buttonsFrontPanelRead() & (FRONT_KEY_P3 | FRONT_KEY_DOWN)) == (FRONT_KEY_P3 | FRONT_KEY_DOWN))
+#else
+	if ((buttons & BUTTON_SK2) && (keyboardRead() == KEY_FRONT_DOWN))
+#endif
+	{
+		settingsEraseCustomContent();
+#if !defined(PLATFORM_MD9600)
+		themeInit(true);
+#endif
+	}
+
+	// Safe boot mode
+#if defined(PLATFORM_MD9600)
+	if (forceSafeBootMode || (((buttonsFrontPanelRead() & FRONT_KEY_P3) == FRONT_KEY_P3) && (micButtonsRead() == KEY_0)))
+#else
+	if (forceSafeBootMode || ((buttons & BUTTON_SK1) && (keyboardRead() == KEY_0)))
+#endif
+	{
+#if !defined(PLATFORM_MD9600)
+		themeInit(false);
+#endif
+		safeBootMode = true;
+
+		goto safeBootBranching;
+	}
+
+
+
+	lastHeardInitList();
+	codeplugInitCaches();
+	dmrIDCacheInit();
+	voicePromptsCacheInit();
+
+	if (wasRestoringDefaultsettings || (micButtonsRead() == KEY_HASH))
+	{
+		enableVoicePromptsIfLoaded((micButtonsRead() == KEY_HASH));
+	}
+
+	// Need to take care if the user has already been fully notified about the settings update
+	wasRestoringDefaultsettings = settingsIsOptionBitSet(BIT_SETTINGS_UPDATED);
+
+	// Should be initialized before the splash screen, as we don't want melodies when VOX is enabled
+	voxSetParameters(nonVolatileSettings.voxThreshold, nonVolatileSettings.voxTailUnits);
+
+	codeplugGetSignallingDTMFDurations(&uiDataGlobal.DTMFContactList.durations);
+
+#if !defined(PLATFORM_MD9600)
+	if (settingsIsOptionBitSet(BIT_SAFE_POWER_ON) && ((buttons & BUTTON_SK1) != BUTTON_SK1))
+	{
+		powerOffFinalStage(false, true);
+	}
+#endif
+
+	menuSystemInit(getRtcTime_custom());
+
+#if defined(HAS_GPS)
+	gpsInit();
+
+#if defined(LOG_GPS_DATA)
+	if ((micButtonsRead() == KEY_5) && ((buttonsFrontPanelRead() & FRONT_KEY_DOWN) == FRONT_KEY_DOWN))
+	{
+		uiNotificationShow(NOTIFICATION_TYPE_MESSAGE, NOTIFICATION_ID_MESSAGE, 1500, "NMEA Clearing", true);
+		gpsLoggingClear();
+		settingsSet(nonVolatileSettings.gpsLogMemOffset, 0U);
+	}
+#endif
+
+	if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) != GPS_MODE_OFF)
+	{
+		gpsOn();
+#if defined(LOG_GPS_DATA)
+		gpsLoggingStart();
+#endif
+	}
+
+#endif
+
+	ticksTimerStart(&apoTimer, ((nonVolatileSettings.apo * 30) * 60000U));
+	ticksTimerStart(&autolockTimer, (nonVolatileSettings.autolockTimer * 30000U));
+
+	aprsBeaconingInit();
+	aprsBeaconingStart();
+
+	/* Infinite loop */
+	for(;;)
+	{
+		uint16_t frontPanelButtons = FRONT_KEY_NONE;
+		uint32_t startTime = ticksGetMillis();
+		bool syntheticEvent = false; // used to not trigger the backlight on faked key/button events
+
+		mainIsRunning = true;
+		keyOrButtonChanged = false;
+
+		tick_com_request();
+		handleTimerCallbacks();
+		batteryUpdate();
+
+		// Ignore any input when APRS is TXing (avoiding changing the channel in the middle of a packet).
+		if ((currentChannelData->aprsConfigIndex == 0) ||
+				((currentChannelData->aprsConfigIndex != 0) && (aprsBeaconingIsTransmitting() == false)))
+		{
+			// Hack so that keypad is not read at all once a CPS transfer is initiated, as reading the mic keypad seems to cause delays which
+			// delay the CPS processing and cause and error to be sent to the CPS
+			frontPanelButtons = buttonsFrontPanelRead();
+			keyboardCheckKeyEvent(&keys, &key_event, frontPanelButtons); // Read keyboard state and event
+			// frontPanelButtons variable will have ALARM, P1 and P2 states cleared, as they will
+			// become ORANGE, SK2 and SK1 buttons, after calling buttonsCheckButtonsEvent()
+			buttonsCheckButtonsEvent(&buttons, &button_event, (keys.key != 0), uiDataGlobal.sk2latched, &frontPanelButtons); // Read button state and event
+		}
+		else
+		{
+			if (aprsTxProgress == APRS_TX_FINAL_STAGE)
+			{
+				// Force the UI to handle the button release.
+				button_event = EVENT_BUTTON_CHANGE;
+				key_event = EVENT_KEY_CHANGE;
+				keyboardReset();
+				syntheticEvent = true;
+			}
+			else
+			{
+				button_event = EVENT_BUTTON_NONE;
+				key_event = EVENT_KEY_NONE;
+				keyboardReset();
+			}
+		}
+
+		// Clear PTT button event when TX Inhibit is turned on.
+		if (settingsIsOptionBitSet(BIT_TX_INHIBIT) && (buttons & BUTTON_PTT))
+		{
+			if (buttons == BUTTON_PTT)
+			{
+				button_event = EVENT_BUTTON_NONE;
+			}
+
+			buttons &= ~BUTTON_PTT;
+
+			(void) txInhibitCheckAndWarn();
+		}
+
+		// Lockscreen shouldn't be called on KEY_POWER down event,
+		// otherwise it won't be possible to turn the transceiver OFF without
+		// unlocking the keypad first, pretty annoying.
+		if (keypadLocked && KEYCHECK_DOWN(keys, KEY_POWER))
+		{
+			syntheticEvent = true;
+		}
+
+		// Handle UP and not PRESS to avoid ON->OFF cycles.
+		// Hence, the operator has to release the button to turn the radio ON or OFF
+		if (KEYCHECK_UP(keys, KEY_POWER))
+		{
+			powerDown((buttons & (BUTTON_ORANGE | BUTTON_SK2)) == (BUTTON_ORANGE | BUTTON_SK2));
+		}
+#endif // PLATFORM_MD9600
 
 		if (((key_event != EVENT_KEY_NONE) && (keys.key != 0)) || (button_event != EVENT_BUTTON_NONE) || (rotary_event != EVENT_ROTARY_NONE))
 		{
 			keyOrButtonChanged = true;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+			if((!trxIsTransmitting) & (menuSystemGetCurrentMenuNumber() != MENU_NUMERICAL_ENTRY))
+			{
+				if ((uiDataGlobal.sk2latched == false) && KEYCHECK_LONGDOWN(keys, KEY_D))
+				{
+					keys.key = 0;
+					key_event = EVENT_KEY_NONE;
+					uiDataGlobal.sk2latched = true;
+					soundSetMelody(MELODY_SK2_BEEP);
+				}
+
+				if (uiDataGlobal.sk2latched && KEYCHECK_UP(keys, KEY_D)) //dont send a beep when D key released
+				{
+					keys.key = 0;
+					key_event = EVENT_KEY_NONE;
+				}
+
+				if ((uiDataGlobal.sk2latched == false) && KEYCHECK_SHORTUP(keys, KEY_D))
+				{
+					buttons |= BUTTON_SK2_SHORT_UP;
+					button_event = EVENT_BUTTON_CHANGE;
+					// pretend this is not a key event
+					keys.key = 0;
+					keys.event = 0;
+					key_event = EVENT_KEY_NONE;
+					soundSetMelody(MELODY_KEY_BEEP);
+				}
+				else if (KEYCHECK_UP(keys, KEY_ORANGE))
+				{
+					buttons |= BUTTON_ORANGE_SHORT_UP;
+					button_event = EVENT_BUTTON_CHANGE;
+					// pretend this is not a key event
+					keys.key = 0;
+					keys.event = 0;
+					key_event = EVENT_KEY_NONE;
+				}
+				else if (uiDataGlobal.sk2latched && KEYCHECK_SHORTUP(keys, KEY_A))
+				{
+					uiDataGlobal.sk2latched = false;
+					keys.key = 0;
+					keys.event = 0;
+					key_event = EVENT_KEY_NONE;
+					soundSetMelody(MELODY_NSK2_BEEP);
+				}
+
+				// Once the keypad is locked, clear any LONG/REPEAT events
+				if (keypadLocked && ((keys.key == KEY_D) && (keys.event & (KEY_MOD_DOWN | KEY_MOD_LONG | KEY_MOD_PRESS))))
+				{
+					keys.key = 0;
+					key_event = EVENT_KEY_NONE;
+					button_event = EVENT_BUTTON_NONE;
+					buttons &= ~BUTTON_SK2;
+				}
+
+				if (uiDataGlobal.sk2latched && (keys.key != KEY_D))
+				{
+					// if keypad is locked, only set SK2 modifier while pressing a key
+					if ((keypadLocked == false) || (keypadLocked && (keys.key != 0)))
+					{
+						button_event = EVENT_BUTTON_CHANGE;
+						buttons |= BUTTON_SK2;
+					}
+
+					(void)addTimerCallback(latchedSk2Callback, 3000, MENU_ANY, true);
+				}
+			}
+
+		}
+
+		// Just to trigger the backlight ATM
+		if ((frontPanelButtons & FRONT_KEY_P3) == FRONT_KEY_P3)
+		{
+			button_event = EVENT_BUTTON_CHANGE;
+#endif // PLATFORM_MD9600
 		}
 
 		// Settings reset information screen
@@ -983,16 +1635,27 @@ void applicationMainTask(void)
 			}
 		}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		hasSignal = false;
 
+#endif // PLATFORM_MD9600
 		if(trxGetMode() == RADIO_MODE_ANALOG)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			hasSignal = trxCheckAnalogSquelch();
+#else // PLATFORM_MD9600
+			trxCheckAnalogSquelch();
+#endif // PLATFORM_MD9600
 		}
 		else
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			if (slotState == DMR_STATE_IDLE)
+#else // PLATFORM_MD9600
+			if (ticksTimerHasExpired((ticksTimer_t *)&readDMRRSSITimer))
+#endif // PLATFORM_MD9600
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				trxReadRSSIAndNoise(false);
 
 				hasSignal = trxCheckDigitalSquelch(RADIO_DEVICE_PRIMARY);
@@ -1005,6 +1668,10 @@ void applicationMainTask(void)
 					ticksTimerStart((ticksTimer_t *)&readDMRRSSITimer, 10000); // hold of for a very long time
 				}
 				hasSignal = true;
+#else // PLATFORM_MD9600
+				ticksTimerStart((ticksTimer_t *)&readDMRRSSITimer, 100); // hold off for a while (this will be changed by HRC6000.c if we are receiving a signal)
+				trxReadRSSIAndNoise(true);
+#endif // PLATFORM_MD9600
 			}
 		}
 
@@ -1120,8 +1787,10 @@ void applicationMainTask(void)
 						{
 							if (currentChannelData->txFreq != 0)
 							{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 								rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE);
 
+#endif // PLATFORM_MD9600
 								menuSystemPushNewMenu(UI_TX_SCREEN);
 							}
 							else
@@ -1398,8 +2067,10 @@ void applicationMainTask(void)
 			uiNotificationHide(true);
 		}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		batteryChecking(&ev);
 
+#endif // PLATFORM_MD9600
 #if !defined(PLATFORM_GD77S)
 		// APO checkings
 		apoTick((keyOrButtonChanged || (function_event != NO_EVENT) ||
@@ -1480,25 +2151,48 @@ void applicationMainTask(void)
 		{
 #if ! defined(PLATFORM_GD77S)
 			// We got a position fix now, start daytime timer
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			if (currentMenu != MENU_DISPLAY)
+#else // PLATFORM_MD9600
+			if (settingsIsOptionBitSet(BIT_AUTO_NIGHT) &&
+					(ticksTimerIsEnabled(&daytimeThemeTimer) == false) && settingsLocationIsValid())
+#endif // PLATFORM_MD9600
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				if (settingsIsOptionBitSet(BIT_AUTO_NIGHT) &&
 						(ticksTimerIsEnabled(&daytimeThemeTimer) == false) && settingsLocationIsValid())
 				{
 					daytimeThemeChangeUpdate(false);
 				}
+#else // PLATFORM_MD9600
+				daytimeThemeChangeUpdate(false);
+			}
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				if (ticksTimerIsEnabled(&daytimeThemeTimer) && ticksTimerHasExpired(&daytimeThemeTimer))
 				{
 					daytimeThemeTick();
+#else // PLATFORM_MD9600
+			if (ticksTimerIsEnabled(&daytimeThemeTimer) && ticksTimerHasExpired(&daytimeThemeTimer))
+			{
+				daytimeThemeTick();
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					ticksTimerStart(&daytimeThemeTimer, DAYTIME_THEME_TIMER_INTERVAL);
 				}
+#else // PLATFORM_MD9600
+				ticksTimerStart(&daytimeThemeTimer, DAYTIME_THEME_TIMER_INTERVAL);
+#endif // PLATFORM_MD9600
 			}
 #endif
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 			rxPowerSavingTick(&ev, hasSignal);
+#endif // PLATFORM_MD9600
 		}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 		int8_t latestVolume = getVolumeControl();
 		if (latestVolume != lastVolume)
@@ -1520,9 +2214,85 @@ void applicationMainTask(void)
 			updateVolumeGain(currentMenu);
 		}
 
+#else // PLATFORM_MD9600
+		
+#endif // PLATFORM_MD9600
 		while(ticksGetMillis() < startTime + 1)				// ensure this Task runs at 1ms intervals. Regardless of clock speed.
 		{
 			vTaskDelay(0U);
 		}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 	}
 }
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+void applicationStandbyPowerLoop(void)
+{
+	uint16_t radioPowerState;
+
+	batteryRAM_Init();
+
+	batteryRAM_Read(0, (uint8_t *)&radioPowerState, 2U);
+
+	if (radioPowerState == RADIO_POWER_STATE_STANDBY_FLAG)
+	{
+		GPIO_InitTypeDef GPIO_InitStruct = {0};
+		RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+		gpsPower(false);  // Turn off the power to the Microphone and GPS
+
+		radioPowerState = RADIO_POWER_STATE_RUNNING_FLAG;// do this while the processor is still running at high clock speed
+
+		/* GPIO Ports Clock Enable */
+		__HAL_RCC_GPIOD_CLK_ENABLE();
+		__HAL_RCC_GPIOE_CLK_ENABLE();
+
+		GPIO_InitStruct.Pin = KEYPAD_COL0_K6_Pin;
+		GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+		GPIO_InitStruct.Pull = GPIO_PULLUP;
+		HAL_GPIO_Init(KEYPAD_COL0_K6_GPIO_Port, &GPIO_InitStruct);
+
+		GPIO_InitStruct.Pin = KEYPAD_ROW0_K0_Pin;
+		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		HAL_GPIO_Init(KEYPAD_ROW0_K0_GPIO_Port, &GPIO_InitStruct);
+
+		HAL_GPIO_WritePin(KEYPAD_ROW0_K0_GPIO_Port, KEYPAD_ROW0_K0_Pin, GPIO_PIN_RESET);
+
+		RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+		RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;// Direct HSE
+
+		RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV512;// reduce the clock speed as low as possible
+		RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV16;
+		RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV16;
+
+		HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0);
+		__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
+
+		__HAL_RCC_GPIOE_CLK_DISABLE();
+
+		while((HAL_GPIO_ReadPin(KEYPAD_COL0_K6_GPIO_Port, KEYPAD_COL0_K6_Pin) == GPIO_PIN_SET));
+
+		// wait for button to be released
+		int upCount = 0;
+		const int DEBOUNCE_COUNT = 10;// Arbitrary value to define how long the button must be released for, to overcome debounce.
+		do
+		{
+			upCount = 0;
+			for (int i = 0; i < DEBOUNCE_COUNT; i++)
+			{
+				upCount += ((HAL_GPIO_ReadPin(KEYPAD_COL0_K6_GPIO_Port, KEYPAD_COL0_K6_Pin) == GPIO_PIN_SET) ? 1 : 0);
+			}
+		} while (upCount != DEBOUNCE_COUNT);
+
+		batteryRAM_Write(0, (uint8_t *)&radioPowerState, 2U);
+
+		NVIC_SystemReset();
+
+		while(true);// wait for reboot
+	}
+}
+#endif // PLATFORM_MD9600

@@ -61,8 +61,13 @@ typedef struct
 
 typedef struct calibrationPowerValues
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	uint32_t veryLowPower;
+#endif // PLATFORM_MD9600
 	uint32_t lowPower;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	uint32_t midLowPower;
+#endif // PLATFORM_MD9600
 	uint32_t midPower;
 	uint32_t highPower;
 } calibrationPowerValues_t;
@@ -78,7 +83,11 @@ extern const int MAX_PA_DAC_VALUE;
 
 
 void calibrationInit(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void calibrationReadFactory(bool applyConversion);
+#else // PLATFORM_MD9600
+void calibrationReadFactory(void);
+#endif // PLATFORM_MD9600
 void calibrationSaveLocal(void);
 void calibrationReadLocal(void);
 void calibrationGetPowerForFrequency(int freq, calibrationPowerValues_t *powerSettings);
@@ -93,6 +102,10 @@ bool calibrationGetRSSIMeterParams(calibrationRSSIMeter_t *rssiMeterValues);
 int interpolate(int lowerpoint, int upperpoint, int numerator, int denominator);
 uint8_t calibrationGetPower(int freqindex, int powerindex);
 void calibrationPutPower(int freqindex, int powerindex, uint8_t val);
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+uint8_t calibrationGetRxTune(int freqindex);
+void calibrationPutRxTune(int freqindex, int val);
+#endif // PLATFORM_MD9600
 uint8_t *calibrationGetLocalDataPointer(void);
 
 #endif

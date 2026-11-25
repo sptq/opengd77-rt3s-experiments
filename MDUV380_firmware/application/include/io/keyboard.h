@@ -36,10 +36,48 @@
 #include "interfaces/gpio.h"
 #include "main.h"
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+#define MIC_BUTTON_1                            0
+#define MIC_BUTTON_2                            1
+#define MIC_BUTTON_3                            2
+#define MIC_BUTTON_A                            3
+#define MIC_BUTTON_4                            4
+#define MIC_BUTTON_5                            5
+#define MIC_BUTTON_6                            6
+#define MIC_BUTTON_B                            7
+#define MIC_BUTTON_7                            8
+#define MIC_BUTTON_8                            9
+#define MIC_BUTTON_9                           10
+#define MIC_BUTTON_C                           11
+#define MIC_BUTTON_STAR                        12
+#define MIC_BUTTON_0                           13
+#define MIC_BUTTON_HASH                        14
+#define MIC_BUTTON_D                           15
+#define MIC_BUTTON_UNKNOWN                     16
+#define MIC_BUTTON_AB                          17
+#define MIC_BUTTON_UP                          18
+#define MIC_BUTTON_DOWN                        19
+
+
+#define FRONT_KEY_NONE         0x00
+#define FRONT_KEY_POWER     (1 << 0)
+#define FRONT_KEY_ALARM     (1 << 1)
+#define FRONT_KEY_P1        (1 << 2)
+#define FRONT_KEY_P2        (1 << 3)
+#define FRONT_KEY_P3        (1 << 4)
+#define FRONT_KEY_P4        (1 << 5)
+#define FRONT_KEY_BACK      (1 << 6)
+#define FRONT_KEY_DOWN      (1 << 7)
+#define FRONT_KEY_ENT       (1 << 8)
+#define FRONT_KEY_UP        (1 << 9)
+
+#endif // PLATFORM_MD9600
 
 #define KEY_GREENSTAR   '+'    // GREEN + STAR
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define KEY_NONE         0
+#endif // PLATFORM_MD9600
 #define KEY_UP           1
 #define KEY_DOWN         2
 #define KEY_LEFT         3
@@ -70,10 +108,17 @@
 #define KEY_7           '7'
 #define KEY_8           '8'
 #define KEY_9           '9'
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define KEY_A           'A'
 #define KEY_B           'B'
 #define KEY_C           'C'
 #define KEY_D           'D'
+#else // PLATFORM_MD9600
+#define KEY_A           14
+#define KEY_B           15
+#define KEY_C           16
+#define KEY_D           17
+#endif // PLATFORM_MD9600
 #define KEY_STAR        '*'
 #define KEY_HASH        '#'
 
@@ -136,7 +181,11 @@ typedef struct keyboardCode
 
 typedef struct
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	GPIO_PinState lastB;
+#else // PLATFORM_MD9600
+	GPIO_PinState lastA;
+#endif // PLATFORM_MD9600
 	int32_t       Count;
 	int8_t        Direction;
 } rotaryData_t;
@@ -145,14 +194,26 @@ extern volatile rotaryData_t rotaryData;
 
 void keyboardInit(void);
 void keyboardReset(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 uint32_t keyboardRead(void);
+#endif // PLATFORM_MD9600
 bool keyboardKeyIsDTMFKey(char key);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void keyboardCheckKeyEvent(keyboardCode_t *keys, int *event);
+#else // PLATFORM_MD9600
+void keyboardCheckKeyEvent(keyboardCode_t *keys, int *event, uint16_t frontPanelButtons);
+#endif // PLATFORM_MD9600
 bool keyboardScanKey(uint32_t scancode, char *keycode);
 
 void rotaryEncoderISR(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 
+#else // PLATFORM_MD9600
+uint8_t micButtonsRead(void);
+void buttonsFrontPanelInit(void);
+uint16_t buttonsFrontPanelRead(void);
+#endif // PLATFORM_MD9600
 
 
 #endif /* _OPENGD77_KEYBOARD_H_ */

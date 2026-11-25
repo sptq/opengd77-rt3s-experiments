@@ -42,6 +42,7 @@ typedef struct
 } timerCallbackbackStruct_t;
 
 #define MAX_NUM_TIMER_CALLBACKS 8U
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static timerCallbackbackStruct_t callbacksArray[MAX_NUM_TIMER_CALLBACKS];// As a global this will get cleared by the compiler
 
 inline uint32_t ticksGetMillis(void)
@@ -51,6 +52,17 @@ inline uint32_t ticksGetMillis(void)
 #else
 	return PITCounter;
 #endif
+#else // PLATFORM_MD9600
+static timerCallbackbackStruct_t callbacksArray[MAX_NUM_TIMER_CALLBACKS];// As a global this will get cleared by the compiler
+
+inline uint32_t ticksGetMillis(void)
+{
+#if defined(PLATFORM_MD9600)
+	return uwTick;
+#else
+	return PITCounter;
+#endif
+#endif // PLATFORM_MD9600
 }
 
 void handleTimerCallbacks(void)
@@ -89,6 +101,7 @@ void handleTimerCallbacks(void)
 		}
 	}
 }
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 bool addTimerCallback(timerCallback_t funPtr, uint32_t delayIn_mS, int menuDest, bool updateExistingCallbackTime)
 {
@@ -98,6 +111,17 @@ bool addTimerCallback(timerCallback_t funPtr, uint32_t delayIn_mS, int menuDest,
 #else
 			(delayIn_mS * PIT_COUNTS_PER_MS);
 #endif
+#else // PLATFORM_MD9600
+
+bool addTimerCallback(timerCallback_t funPtr, uint32_t delayIn_mS, int menuDest, bool updateExistingCallbackTime)
+{
+	uint32_t callBackTime =
+#if defined(PLATFORM_MD9600)
+			delayIn_mS;
+#else
+			(delayIn_mS * PIT_COUNTS_PER_MS);
+#endif
+#endif // PLATFORM_MD9600
 
 	for (uint32_t i = 0; i < MAX_NUM_TIMER_CALLBACKS; i++)
 	{

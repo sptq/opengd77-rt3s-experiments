@@ -1702,6 +1702,7 @@ void codeplugSetTATxForTS(CodeplugChannel_t *channelBuf, uint8_t ts, CodeplugTAT
 {
 	bool isTS1 = (ts == 0);
 	channelBuf->flag1 &= (isTS1 ? 0xFC : 0xF3);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	channelBuf->flag1 |= (taTx << (isTS1 ? 0 : 2));
 }
 
@@ -1723,7 +1724,31 @@ void codeplugInitLastUsedChannelInZone(void)
 	}
 	else
 #endif
+#else // PLATFORM_MD9600
+	channelBuf->flag1 |= (taTx << (isTS1 ? 0 : 2));
+}
+
+CodeplugTATxDestination_t codeplugGetTATxForTS(CodeplugChannel_t *channelBuf, uint8_t ts)
+{
+	return (channelBuf->flag1 >> ((ts == 0) ? 0 : 2)) & 0x03;
+}
+
+void codeplugInitLastUsedChannelInZone(void)
+{
+#if !( defined(PLATFORM_RD5R) || defined(PLATFORM_MD9600))
+	uint8_t tmpBuf[4];
+
+	EEPROM_Read(CODEPLUG_ADDR_LUCZ, tmpBuf, 4);
+
+	if (memcmp("LUCZ", tmpBuf, 4) == 0) // Check for the header tag
 	{
+		EEPROM_Read((CODEPLUG_ADDR_LUCZ + 4), (uint8_t *)&lastUsedChannelInZoneData, sizeof(lastUsedChannelInZoneData));
+	}
+	else
+#endif
+#endif // PLATFORM_MD9600
+	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		// There is no CustomData available, set all last channels to 0
 		memset(&lastUsedChannelInZoneData, 0, sizeof(lastUsedChannelInZoneData));
 
@@ -1731,6 +1756,15 @@ void codeplugInitLastUsedChannelInZone(void)
 		codeplugSetLastUsedChannelInZone(-1, nonVolatileSettings.currentChannelIndexInAllZone);
 		codeplugSetLastUsedChannelInZone(nonVolatileSettings.currentZone, nonVolatileSettings.currentChannelIndexInZone);
 #endif
+#else // PLATFORM_MD9600
+		// There is no CustomData available, set all last channels to 0
+		memset(&lastUsedChannelInZoneData, 0, sizeof(lastUsedChannelInZoneData));
+
+#if defined(PLATFORM_RD5R) || defined(PLATFORM_MD9600)
+		codeplugSetLastUsedChannelInZone(-1, nonVolatileSettings.currentChannelIndexInAllZone);
+		codeplugSetLastUsedChannelInZone(nonVolatileSettings.currentZone, nonVolatileSettings.currentChannelIndexInZone);
+#endif
+#endif // PLATFORM_MD9600
 	}
 }
 
@@ -1770,21 +1804,38 @@ int16_t codeplugSetLastUsedChannelInZone(int zoneNum, int16_t channelNum)
 	uint8_t *p = (uint8_t *)&lastUsedChannelInZoneData[offset];
 
 	if (zoneNum >= 0) // Channels 0..79
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	{
 		*p = (uint8_t)channelNum;
 #if defined(PLATFORM_RD5R)
 		settingsSet(nonVolatileSettings.currentChannelIndexInZone, (int16_t) channelNum);
 #endif
+#else // PLATFORM_MD9600
+	{
+		*p = (uint8_t)channelNum;
+#if defined(PLATFORM_RD5R) || defined(PLATFORM_MD9600)
+		settingsSet(nonVolatileSettings.currentChannelIndexInZone, (int16_t) channelNum);
+#endif
+#endif // PLATFORM_MD9600
 	}
 	else // AllChannels (channels 1..1024)
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	{
 		*((int16_t *)p) = (channelNum - 1);
 #if defined(PLATFORM_RD5R)
 		settingsSet(nonVolatileSettings.currentChannelIndexInAllZone, (int16_t) channelNum);
 #endif
+#else // PLATFORM_MD9600
+	{
+		*((int16_t *)p) = (channelNum - 1);
+#if defined(PLATFORM_RD5R) || defined(PLATFORM_MD9600)
+		settingsSet(nonVolatileSettings.currentChannelIndexInAllZone, (int16_t) channelNum);
+#endif
+#endif // PLATFORM_MD9600
 	}
 
 	lastUsedChannelInZoneHasChanged = true;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 	return channelNum;
 }
@@ -1808,6 +1859,31 @@ bool codeplugSaveLastUsedChannelInZone(void)
 		return !lastUsedChannelInZoneHasChanged;
 	}
 #endif
+#else // PLATFORM_MD9600
+
+	return channelNum;
+}
+
+int16_t codeplugSetLastUsedChannelInCurrentZone(int16_t channelNum)
+{
+	return (codeplugSetLastUsedChannelInZone(currentZone.NOT_IN_CODEPLUGDATA_indexNumber, channelNum));
+}
+
+bool codeplugSaveLastUsedChannelInZone(void)
+{
+#if ! (defined(PLATFORM_RD5R) || defined(PLATFORM_MD9600))
+	if (lastUsedChannelInZoneHasChanged)
+	{
+		uint8_t header[4] = { 'L', 'U', 'C', 'Z' };
+
+		lastUsedChannelInZoneHasChanged = ! (EEPROM_Write(CODEPLUG_ADDR_LUCZ, (uint8_t *)&header, 4) &&
+				EEPROM_Write(CODEPLUG_ADDR_LUCZ + 4,
+						(uint8_t *)&lastUsedChannelInZoneData, sizeof(lastUsedChannelInZoneData)));
+
+		return !lastUsedChannelInZoneHasChanged;
+	}
+#endif
+#endif // PLATFORM_MD9600
 
 	return true;
 }

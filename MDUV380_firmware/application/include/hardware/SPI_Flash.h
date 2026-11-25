@@ -72,6 +72,8 @@ uint32_t SPI_Flash_readPartID(void);// Should be 4014 for 1M or 4017 for 8M
 uint32_t SPI_Flash_readStatusRegisters(void);// May come in handy
 bool SPI_Flash_readSecurityRegisters(int startBlock, uint8_t *dataBuf, int size);   // Used to read the calibration Data. Must read in blocks of 256 bytes. Blocks 0,1 or 2
 uint8_t SPI_Flash_readSingleSecurityRegister(int addr);                                 // Used to read a single security register. Used for Display Type
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //bool SPI_Flash_StateIsBusy(void);
+#endif // PLATFORM_MD9600
 
 #endif /* _OPENGD77_SPI_FLASH_H_ */

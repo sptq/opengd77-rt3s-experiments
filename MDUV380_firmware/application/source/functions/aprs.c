@@ -521,7 +521,11 @@ static void aprsTxEnded(void)
 	trxDTMFoff(true);
 	trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_MIC);
 #else // PLATFORM_MD9600
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	AT1846sWriteTone1Reg(0);
+#else // PLATFORM_MD9600
+	radioWriteTone1Reg(0);
+#endif // PLATFORM_MD9600
 
 	audioAmpDisable(AUDIO_AMP_CHANNEL_RF);
 	HAL_GPIO_WritePin(RX_AUDIO_MUX_GPIO_Port, RX_AUDIO_MUX_Pin, GPIO_PIN_SET);
@@ -796,7 +800,12 @@ static bool aprsSendPacket(CodeplugAPRSConfig_t *config, aprsBeaconingLocation_t
 	{
 		audioAmpEnable(AUDIO_AMP_CHANNEL_RF);
 	}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	AT1846sWriteTone1Reg(lastTone);
+#else // PLATFORM_MD9600
+
+	radioWriteTone1Reg(lastTone);
+#endif // PLATFORM_MD9600
 	trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_TONE1);
 
 	aprsTxProgress = APRS_TX_IN_PROGRESS;
@@ -835,7 +844,11 @@ static bool aprsSendPacket(CodeplugAPRSConfig_t *config, aprsBeaconingLocation_t
 	trxSetTone1(lastTone);
 #else // PLATFORM_MD9600
 	uint32_t lastTone = 0;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	AT1846sWriteTone1Reg(lastTone);
+#else // PLATFORM_MD9600
+	radioWriteTone1Reg(lastTone);
+#endif // PLATFORM_MD9600
 	trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_TONE1);
 
 	int volume = getVolumeControl() + 30;
@@ -879,7 +892,11 @@ void aprsBitStreamSender(void)
 
 		if (bytePos == lenBytes)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //			AT1846SWriteTone1Reg(0);
+#else // PLATFORM_MD9600
+//			radioWriteTone1Reg(0);
+#endif // PLATFORM_MD9600
 			// just stop the ISR and flag that the data has been sent.
 
 #if defined(CPU_MK22FN512VLL12)
@@ -899,7 +916,11 @@ void aprsBitStreamSender(void)
 
 	if (newTone != lastTone)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		AT1846sWriteTone1Reg(newTone);
+#else // PLATFORM_MD9600
+		radioWriteTone1Reg(newTone);
+#endif // PLATFORM_MD9600
 	}
 #else // CPU_MK22FN512VLL12
 #if defined(PLATFORM_MD9600)
@@ -921,7 +942,11 @@ void aprsBitStreamSender(void)
 	newTone = (encoderData.baudIs300 ? 16000 : 12000) + ((dataByte & 0x01) ? (encoderData.baudIs300 ? 2000 : 10000) : 0);
 	if (newTone != lastTone)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		AT1846sWriteTone1Reg(newTone);
+#else // PLATFORM_MD9600
+		radioWriteTone1Reg(newTone);
+#endif // PLATFORM_MD9600
 		lastTone = newTone;
 	}
 #endif // PLATFORM_MD9600

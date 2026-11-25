@@ -32,8 +32,13 @@
 
 #include <stdbool.h>
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define BACKLIGHT_MIN_USABLE_VALUE 1
+#else // PLATFORM_MD9600
+#define BACKLIGHT_MIN_USABLE_VALUE 0
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define DIPLAYLCD_TYPE_RGB         (1 << 7)
 #define DISPLAYLCD_GET_TYPE(x)     (x & ~DIPLAYLCD_TYPE_RGB)
 #define DISPLAYLCD_TYPE_IS_RGB(x)  (x & DIPLAYLCD_TYPE_RGB)
@@ -42,10 +47,15 @@ extern uint8_t displayLCD_Type;
 
 void displayInit(bool isInverted, bool SPIFlashAvailable);
 void displaySetInvertedState(bool isInverted);
+#else // PLATFORM_MD9600
+void displayInit(bool isInverseColour);
+#endif // PLATFORM_MD9600
 void displayEnableBacklight(bool enable, int displayBacklightPercentageOff);
 bool displayIsBacklightLit(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void displayWriteCmd(uint8_t cmd);
 void displayWriteData(uint8_t val);
 void displayWriteCmds(uint8_t cmd, size_t len, uint8_t opts[]);
+#endif // PLATFORM_MD9600
 
 #endif /* _OPENGD77_DISPLAY_H_ */

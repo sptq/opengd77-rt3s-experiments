@@ -17,7 +17,11 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#if defined(PLATFORM_MD9600)
+#include "hardware/ST7567.h"
+#else
 #include "hardware/HX8353E.h"
+#endif
 #include "user_interface/uiGlobals.h"
 
 #if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)

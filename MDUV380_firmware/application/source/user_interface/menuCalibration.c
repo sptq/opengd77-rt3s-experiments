@@ -39,7 +39,11 @@ static void handleEvent(uiEvent_t *ev);
 static void setRefOscTemp(int8_t cal);
 static void setDACTemp(uint8_t freqIndex, uint8_t powerIndex);
 static void terminateTransmission(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static void applySettings(bool sk2Down, bool sk1Down);
+#else // PLATFORM_MD9600
+static void applySettings(bool sk2Down);
+#endif // PLATFORM_MD9600
 static void exitCallback(void *data);
 
 
@@ -47,7 +51,11 @@ static void exitCallback(void *data);
 static uint8_t freqIndex = 0;
 static uint32_t calFreq[NO_OF_CAL_FREQS] =
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		13500000, 14500000, 15500000, 16500000, 17500000,
+#else // PLATFORM_MD9600
+		13600000, 14550000, 15500000, 16450000, 17400000,
+#endif // PLATFORM_MD9600
 		40000000, 41000000, 42000000, 43000000, 44000000,
 		45000000, 46000000, 47000000, 48000000
 };
@@ -139,7 +147,11 @@ static void dumpCalibrationTable(void)
 
 		for (int p = 0; p < NO_OF_POWER_LEVELS; p++)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			USB_DEBUG_printf("\t%u%s: %u\n", getCalPower(p), ((p == 0) ? "mW" : "W"), powerSetting[f][p]);
+#else // PLATFORM_MD9600
+			USB_DEBUG_printf("\t%uW: %u\n", getCalPower(p), powerSetting[f][p]);
+#endif // PLATFORM_MD9600
 		}
 
 		osDelay(100U);
@@ -461,7 +473,11 @@ static void handleEvent(uiEvent_t *ev)
 			menuDataGlobal.menuOptionsTimeout--;
 			if (menuDataGlobal.menuOptionsTimeout == 0)
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				applySettings(false, false);
+#else // PLATFORM_MD9600
+				applySettings(false);
+#endif // PLATFORM_MD9600
 				menuSystemPopPreviousMenu();
 				return;
 			}
@@ -537,7 +553,11 @@ static void handleEvent(uiEvent_t *ev)
 		}
 		else if (KEYCHECK_SHORTUP(ev->keys, KEY_GREEN))
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			applySettings((BUTTONCHECK_DOWN(ev, BUTTON_SK2) != 0), (BUTTONCHECK_DOWN(ev, BUTTON_SK1) != 0));
+#else // PLATFORM_MD9600
+			applySettings((BUTTONCHECK_DOWN(ev, BUTTON_SK2) != 0));
+#endif // PLATFORM_MD9600
 			menuSystemPopAllAndDisplayRootMenu();
 			return;
 		}
@@ -727,7 +747,11 @@ static void terminateTransmission(void)
 	trxTransmissionEnabled = false;
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static void applySettings(bool sk2Down, bool sk1Down)
+#else // PLATFORM_MD9600
+static void applySettings(bool sk2Down)
+#endif // PLATFORM_MD9600
 {
 	//copy the new calibration values to calibration table
 
@@ -749,7 +773,13 @@ static void applySettings(bool sk2Down, bool sk1Down)
 	{
 		if (pageNumber == CALIBRATION_MENU_PAGE_FACTORY_RESET)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			calibrationReadFactory(!sk1Down);//restore the factory values
+#else // PLATFORM_MD9600
+//					calibrationCheckAndCopyToCommonLocation(true);
+
+			calibrationReadFactory();        //restore the factory values
+#endif // PLATFORM_MD9600
 			calibrationSaveLocal();	        // save as the local copy
 
 			pageNumber = CALIBRATION_MENU_PAGE_POWER;

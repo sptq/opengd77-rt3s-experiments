@@ -31,7 +31,11 @@
 #include "hardware/SPI_Flash.h"
 #include "functions/codeplug.h"
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define MDUV380_EMULATED_EEPROM_ADDRESS_OFFSET  0x000000
+#else // PLATFORM_MD9600
+#define MD9600_EMULATED_EEPROM_ADDRESS_OFFSET  0x000000
+#endif // PLATFORM_MD9600
 
 const uint8_t EEPROM_ADDRESS 	= 0x50;
 const uint8_t EEPROM_PAGE_SIZE 	= 128;
@@ -39,10 +43,18 @@ const uint8_t EEPROM_PAGE_SIZE 	= 128;
 
 bool EEPROM_Write(int address, uint8_t *buf, int size)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	return SPI_Flash_write(address + MDUV380_EMULATED_EEPROM_ADDRESS_OFFSET, buf, size);
+#else // PLATFORM_MD9600
+	return SPI_Flash_write(address + MD9600_EMULATED_EEPROM_ADDRESS_OFFSET, buf, size);
+#endif // PLATFORM_MD9600
 }
 
 bool EEPROM_Read(int address, uint8_t *buf, int size)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	return SPI_Flash_read(address + MDUV380_EMULATED_EEPROM_ADDRESS_OFFSET, buf, size);
+#else // PLATFORM_MD9600
+	return SPI_Flash_read(address + MD9600_EMULATED_EEPROM_ADDRESS_OFFSET, buf, size);
+#endif // PLATFORM_MD9600
 }

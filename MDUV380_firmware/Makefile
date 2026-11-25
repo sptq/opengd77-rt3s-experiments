@@ -83,6 +83,8 @@ SRC_ROOTS := SeggerRTT application Core Middlewares Drivers USB_DEVICE
 C_SRCS := $(shell find $(SRC_ROOTS) -name '*.c')
 # Exclusion from .cproject
 C_SRCS := $(filter-out application/include/user_interface/languages/src/languages_builder.c,$(C_SRCS))
+# MD-9600 only sources (shared application tree, see MD9600_firmware/Makefile)
+C_SRCS := $(filter-out application/source/hardware/ST7567_%.c application/source/interfaces/remoteHead.c,$(C_SRCS))
 
 S_SRCS := $(shell find $(SRC_ROOTS) -name '*.s' -o -name '*.S')
 

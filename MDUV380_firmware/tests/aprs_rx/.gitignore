@@ -4,3 +4,5 @@ test_text
 test_sked
 test_dmr_rx_agc
 test_stqc
+test_dmr_sms
+test_emcom_distance

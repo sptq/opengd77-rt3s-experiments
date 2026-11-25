@@ -62,8 +62,12 @@
 
 typedef struct
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	int calPowerTableMinFreq;
 	int calIQTableMinFreq;
+#else // PLATFORM_MD9600
+	int calTableMinFreq;
+#endif // PLATFORM_MD9600
 	uint32_t minFreq;
 	uint32_t maxFreq;
 } frequencyHardwareBand_t;
@@ -80,7 +84,11 @@ enum DMR_ADMIT_CRITERIA { ADMIT_CRITERIA_ALWAYS, ADMIT_CRITERIA_CHANNEL_FREE, AD
 enum DMR_MODE { DMR_MODE_AUTO, DMR_MODE_DMO, DMR_MODE_RMO, DMR_MODE_SFR };
 
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 enum RADIO_FREQUENCY_BAND_NAMES { RADIO_BAND_VHF = 0, RADIO_BAND_220MHz, RADIO_BAND_UHF, RADIO_BANDS_TOTAL_NUM };
+#else // PLATFORM_MD9600
+enum RADIO_FREQUENCY_BAND_NAMES { RADIO_BAND_VHF = 0, RADIO_BAND_UHF, RADIO_BANDS_TOTAL_NUM };
+#endif // PLATFORM_MD9600
 
 
 
@@ -109,6 +117,10 @@ extern volatile bool txPAEnabled;
 extern volatile bool trxDMRSynchronisedRSSIReadPending;
 
 extern volatile uint16_t txDACDrivePower;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+extern volatile uint16_t UHFRxTuningVolts;
+extern volatile uint16_t VHFRxTuningVolts;
+#endif // PLATFORM_MD9600
 extern volatile uint8_t analogIGain;
 extern volatile uint8_t analogQGain;
 extern volatile uint8_t digitalIGain;
@@ -162,7 +174,11 @@ void trxSetMicGainFM(uint8_t gain);
 
 void trxEnableTransmission(void);
 void trxDisableTransmission(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool trxPowerUpDownRxAndC6000(bool powerUp, bool includeC6000, bool includeMic);
+#else // PLATFORM_MD9600
+bool trxPowerUpDownRxAndC6000(bool powerUp, bool includeC6000);
+#endif // PLATFORM_MD9600
 uint8_t trxGetAnalogFilterLevel(void);
 void trxSetAnalogFilterLevel(uint8_t newFilterLevel);
 void trxTerminateCheckAnalogSquelch(RadioDevice_t deviceId);
@@ -175,7 +191,11 @@ int trxGetNoisedBm(RadioDevice_t deviceId);
 int trxGetSNRMargindBm(RadioDevice_t deviceId);
 uint8_t trxGetSignalRaw(RadioDevice_t deviceId);
 uint8_t trxGetNoiseRaw(RadioDevice_t deviceId);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void trxSelectVoiceChannel(uint8_t channel);
+#else // PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 void trxConfigurePA_DAC_ForFrequencyBand(void);
 
 #endif /* _OPENGD77_TRX_H_ */

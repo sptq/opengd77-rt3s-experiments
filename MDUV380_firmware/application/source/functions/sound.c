@@ -34,11 +34,13 @@
 #include "functions/voicePrompts.h"
 #include "functions/rxPowerSaving.h"
 #include "interfaces/interrupts.h"
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include "interfaces/i2s.h"
 #include "functions/blackout.h"
 #include "user_interface/uiGlobals.h"
 #include "usb/usb_com.h"
 
+#endif // PLATFORM_MD9600
 
 
 #define MIC_AVERAGE_COUNTER_RELOAD     10
@@ -46,16 +48,27 @@
 
 static void soundBeepTaskFunction(void *data);
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 typedef union byteSwap16
+#else // PLATFORM_MD9600
+typedef union
+#endif // PLATFORM_MD9600
 {
 	int16_t byte16;
 	uint8_t bytes8[2];
 } byteSwap16_t;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+byteSwap16_t swapper;
+#endif // PLATFORM_MD9600
 
 Task_t beepTask;
 
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 __attribute__((section(".ccmram"))) union sharedDataBuffer audioAndHotspotDataBuffer;
+#else // PLATFORM_MD9600
+__attribute__((section(".data.$RAM2"))) union sharedDataBuffer audioAndHotspotDataBuffer;
+#endif // PLATFORM_MD9600
 volatile int16_t  wavbuffer_read_idx;
 volatile int16_t  wavbuffer_write_idx;
 volatile int16_t wavbuffer_count;
@@ -69,10 +82,18 @@ volatile int micAudioSamplesTotal;
 static volatile uint32_t runningMaxValue = 0;
 static volatile int micAudioAverageCounter = MIC_AVERAGE_COUNTER_RELOAD;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 __attribute__((section(".ccmram"))) int16_t melody_generic[512];// Note. As we don't play long melodies, I think this value can be made smaller.
+#else // PLATFORM_MD9600
+__attribute__((section(".data.$RAM2"))) int16_t melody_generic[512];// Note. As we don't play long melodies, I think this value can be made smaller.
+#endif // PLATFORM_MD9600
 #define DIT_LENGTH  60
 #define DAH_LENGTH  3 * DIT_LENGTH
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //const int melody_poweron[] = { 440, 300, 466, 300, 494, 300, -1, -1 };
+#else // PLATFORM_MD9600
+//const int16_t melody_poweron[] = { 440, 300, 466, 300, 494, 300, -1, -1 };
+#endif // PLATFORM_MD9600
 const int16_t MELODY_POWER_ON[] = { 880, DAH_LENGTH,
 								0, DIT_LENGTH,
 								880, DIT_LENGTH,
@@ -124,10 +145,17 @@ const int16_t MELODY_RX_BEEP_BEGIN_BEEP[] = { 1397, 60, -1, -1 };
 const int16_t MELODY_RX_BEEP_END_BEEP[] = { 698, 60, -1, -1 };
 const int16_t MELODY_RX_BEEP_CALLER_BEGIN_BEEP[] = { 660, 30, 1200, 30, -1, -1 };
 const int16_t MELODY_RX_BEEP_CALLER_END_BEEP[] = { 880, 30, 660, 30, -1, -1 };
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 const int16_t MELODY_1750[] = { 1750, 10000, -1, -1 };
 const int16_t MELODY_DTMF[] = { 1209, 10000, -1, -1 };
 //const int16_t MELODY_SK2_BEEP[] = { 392, 120, 784, 120, -1, -1 };
 //const int16_t MELODY_NSK2_BEEP[] = { 784, 120, 392, 120 , -1, -1 };
+#else // PLATFORM_MD9600
+const int16_t MELODY_1750[] = { 1750, 3000, -1, -1 };
+const int16_t MELODY_DTMF[] = { 1209, 3000, -1, -1 };
+const int16_t MELODY_SK2_BEEP[] = { 392, 120, 784, 120, -1, -1 };
+const int16_t MELODY_NSK2_BEEP[] = { 784, 120, 392, 120 , -1, -1 };
+#endif // PLATFORM_MD9600
 const int16_t MELODY_BEEP_LOW_SHORT[] = { 400, 60, -1, -1 };
 
 // To calculate the pitch use a spreadsheet etc   =ROUND(98*POWER(2, (NOTE_NUMBER/12)),0)
@@ -145,6 +173,7 @@ static const uint32_t DELAYED_BEEP_DURATION_MS = 0;
 static bool isInDelayedStart = false;
 static uint32_t delayedStartCounter = 0;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static volatile dmrRxAgcState_t dmrRxAgcState =
 {
 	DMR_RX_AGC_DEFAULT_PEAK_SAMPLES, 1.0f, 1.0f, { 0U, 0U, 0U }
@@ -156,6 +185,13 @@ static volatile dmrRxAgcState_t dmrRxAgcTransitionState =
 static volatile dmrRxAgcOwner_t dmrRxAgcOwner;
 static volatile uint32_t dmrRxAgcTransitionBuffers;
 static volatile uint32_t melodyGeneration;
+#else // PLATFORM_MD9600
+volatile float dmrRxAGCrxPeakAverage = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES;
+static volatile uint32_t dmrRxAGCpeakRx = 0;
+static volatile int8_t lastDMRRxAGCGain = -99;// use initial out of range value for force reload
+static const uint32_t DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE = 100;
+static int8_t I2S_DAC_GAIN_LOOPUP[100] = { 29,23,18,14,11,9,7,6,4,2,2,1,1,1,0,0,0,0,0,0,-1,-1,-1,-1,-1,-1,-1,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-3,-3,-3,-3,-3,-3,-3,-3,-4,-4,-4,-4,-4,-4,-5,-5,-5,-5,-5,-5,-6,-6,-6,-6,-6,-6,-6,-6,-7,-7,-7,-7,-7,-7,-7,-7,-8,-8,-8,-8,-8,-8,-8,-8,-8,-8,-8,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9,-9 };
+#endif // PLATFORM_MD9600
 
 uint8_t audioAmpGetStatus(void)
 {
@@ -218,12 +254,14 @@ void soundSetMelody(const int16_t *melody)
 		voicePromptsTerminate();
 	}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	// Fork: blackout, no local beeps (the 1750 Hz burst and DTMF are transmitted)
 	if (blackoutActive() && (melody != NULL) && (melody != MELODY_1750) && (melody != MELODY_DTMF))
 	{
 		return;
 	}
 
+#endif // PLATFORM_MD9600
 	if ((melody == NULL) ||
 			((codeplugChannelGetFlag(currentChannelData, CHANNEL_FLAG_NO_BEEP) == 0) &&
 					(((nonVolatileSettings.audioPromptMode == AUDIO_PROMPT_MODE_NO_KEY_BEEP) && // no keypad beeps
@@ -232,11 +270,16 @@ void soundSetMelody(const int16_t *melody)
 		taskENTER_CRITICAL();
 		if ((voicePromptsIsPlaying() == false) || (melody == NULL))
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			melodyGeneration++;
+#endif // PLATFORM_MD9600
 			sine_beep_freq = 0;
 			sine_beep_duration = 0;
 			melody_play = (int16_t *)melody;
 			melody_idx = 0;
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+			soundResetDMRRxAGCGain();
+#endif // PLATFORM_MD9600
 			isInDelayedStart = false;
 		}
 		taskEXIT_CRITICAL();
@@ -272,7 +315,9 @@ void soundInitBeepTask(void)
 	sine_beep_freq = 0;
 	sine_beep_duration = 0;
 	taskEXIT_CRITICAL();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	soundDMRRxAGCSettingsChanged();
+#endif // PLATFORM_MD9600
 
 	xTaskCreate(soundBeepTaskFunction,           /* pointer to the task */
 			"beepTask",                          /* task name for kernel awareness debugging */
@@ -292,6 +337,7 @@ void soundInit(void)
 	wavbuffer_read_idx = 0;
 	wavbuffer_write_idx = 0;
 	wavbuffer_count = 0;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	dmrRxAgcTransitionBuffers = 0U;
 }
 
@@ -305,6 +351,7 @@ void soundResetBufferQueue(void)
 	wavbuffer_count = 0;
 	dmrRxAgcTransitionBuffers = 0U;
 	taskEXIT_CRITICAL();
+#endif // PLATFORM_MD9600
 }
 
 void soundTerminateSound(void)
@@ -338,8 +385,10 @@ void soundRetrieveBuffer(void)
 		currentWaveBuffer = (uint8_t *)audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx];// cast just to prevent compiler warning
 		wavbuffer_read_idx = ((wavbuffer_read_idx + 1) % WAV_BUFFER_COUNT);
 		wavbuffer_count--;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		dmrRxAgcTransitionBuffers = dmrRxAgcTransitionBuffersAfterConsume(dmrRxAgcTransitionBuffers,
 				(uint32_t)wavbuffer_count);
+#endif // PLATFORM_MD9600
 	}
 	taskEXIT_CRITICAL();
 }
@@ -348,10 +397,12 @@ void soundRetrieveBuffer(void)
 // Subsequent data fills are done using soundRefillData()
 bool soundFillData(void)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	#if defined(I2S_APRS_RX)
 	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
 	#endif
 
+#endif // PLATFORM_MD9600
 	for(int i = 0; i < 2; i++)
 	{
 		soundRefillData(i);
@@ -362,6 +413,7 @@ bool soundFillData(void)
 	return true;
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static void soundDMRRxAGCSetHardwareGain(int8_t gain)
 {
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
@@ -428,38 +480,107 @@ void soundDMRRxAGCSettingsChanged(void)
 	}
 }
 
+#endif // PLATFORM_MD9600
 bool soundRefillData(uint32_t bufNum)
 {
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	uint32_t samp;
+
+#endif // PLATFORM_MD9600
 	if (wavbuffer_count >= 2)
 	{
 		for(int j = 0; j < 2; j++)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			uint8_t setting = nonVolatileSettings.dmrRxAGC;
 			uint32_t peak = 0;
 			bool transitionBuffer = (dmrRxAgcTransitionBuffers > 0U);
-
-			if ((setting == 0U) || voicePromptsIsPlaying())
+#else // PLATFORM_MD9600
+			if (((wavbuffer_read_idx % 16) == 0) &&
+					(voicePromptsIsPlaying() == false) && (soundMelodyIsPlaying() == false))
 			{
+				if ((nonVolatileSettings.dmrRxAGC != 0) && (dmrRxAGCrxPeakAverage != 0))
+				{
+					int32_t gain = dmrRxAGCrxPeakAverage / 250;
+#endif // PLATFORM_MD9600
+
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+			if ((setting == 0U) || voicePromptsIsPlaying())
+#else // PLATFORM_MD9600
+					if (gain > 99)
+					{
+						gain = 99;
+					}
+#if 0
+#if defined(USING_EXTERNAL_DEBUGGER)
+				SEGGER_RTT_printf(0, "%d\t%d\t%d\n",(int)dmrRxAGCrxPeakAverage, gain, I2S_DAC_GAIN_LOOPUP[gain]);
+#endif
+#endif
+					if (lastDMRRxAGCGain != (int8_t)gain)
+					{
+						lastDMRRxAGCGain = (int8_t)gain;
+						HRC6000SetDmrRxGain(I2S_DAC_GAIN_LOOPUP[gain] + ((nonVolatileSettings.dmrRxAGC - 1) * 2));// 2 = 3dB
+					}
+				}
+			}
+
+			dmrRxAGCpeakRx = 0;
+
+			for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
+#endif // PLATFORM_MD9600
+			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				// Bypass is a bit-for-bit PCM copy. In particular, do not use
 				// abs(INT16_MIN), gain interpolation, or saturation here.
 				for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
+#else // PLATFORM_MD9600
+				swapper.bytes8[0] = audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx][2 * i];
+				swapper.bytes8[1] = audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx][(2 * i) + 1];
+				i2s_Tx_Buffer[bufNum][j][2 * i] = swapper.byte16;				// Only fill the Left Channel. Right Channel is not used by the HRC6000
+
+				samp = abs(swapper.byte16);
+
+				if (samp > dmrRxAGCpeakRx)
+#endif // PLATFORM_MD9600
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					i2s_Tx_Buffer[bufNum][j][2 * i] = (uint16_t)dmrRxAgcReadPcmSample(audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx], i);
+#else // PLATFORM_MD9600
+					dmrRxAGCpeakRx = samp;
+#endif // PLATFORM_MD9600
 				}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				dmrRxAgcSetBypass(&dmrRxAgcState);
 				dmrRxAgcSetBypass(&dmrRxAgcTransitionState);
+#endif // PLATFORM_MD9600
 			}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			else
+#else // PLATFORM_MD9600
+
+			// filter out some but not all kerchunkers
+			if ((dmrRxAGCpeakRx > 200) && (voicePromptsIsPlaying() == false) && (soundMelodyIsPlaying() == false))
+#endif // PLATFORM_MD9600
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				dmrRxAgcState_t processingState;
 				dmrRxAgcOwnerSnapshot_t ownerSnapshot;
 				bool ownerValid = dmrRxAgcOwnerSnapshot(&dmrRxAgcOwner, &ownerSnapshot);
+#else // PLATFORM_MD9600
+				dmrRxAGCrxPeakAverage -= dmrRxAGCrxPeakAverage / DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE;
+				dmrRxAGCrxPeakAverage += ((float)dmrRxAGCpeakRx) / DMR_RX_AGC_PEAK_SAMPLES_WINDOW_AVERAGE_SIZE;
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				// Only a coherent owner may update the persistent AGC state. A
 				// transition or list reset uses an isolated state so its bounded
 				// limiter output remains audible without learning across stations.
 				if (ownerValid && !transitionBuffer)
+#else // PLATFORM_MD9600
+				if (dmrRxAGCpeakRx > 500)
+#endif // PLATFORM_MD9600
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					dmrRxAgcStateCopy(&processingState, &dmrRxAgcState);
 				}
 				else if (transitionBuffer)
@@ -488,24 +609,46 @@ bool soundRefillData(uint32_t bufNum)
 					{
 						((LinkItem_t *)ownerSnapshot.entry)->rxAGCGain = (uint16_t)processingState.peakAverage;
 					}
+#else // PLATFORM_MD9600
+					LinkHead->rxAGCGain = (uint16_t)dmrRxAGCrxPeakAverage;
+#endif // PLATFORM_MD9600
 				}
 			}
 
 			wavbuffer_read_idx = ((wavbuffer_read_idx + 1) % WAV_BUFFER_COUNT);
 			wavbuffer_count--;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			dmrRxAgcTransitionBuffers = dmrRxAgcTransitionBuffersAfterConsume(dmrRxAgcTransitionBuffers,
 					(uint32_t)wavbuffer_count);
+#endif // PLATFORM_MD9600
 		}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+		if (wavbuffer_count == 0)
+		{
+			soundResetDMRRxAGCGain();
+		}
+
+#endif // PLATFORM_MD9600
 		return (wavbuffer_count > 0);
 	}
 	else
 	{
 		memset(i2s_Tx_Buffer[bufNum], 0x00, (2 * (WAV_BUFFER_SIZE * sizeof(uint16_t))));
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		// The level is kept: this happens mid-over as well as at the end, and a
 		// new caller's level is set by uiUtilities. Only the click filter starts
 		// over, since the next buffers may belong to someone else.
 		dmrRxAgcClearHistory(&dmrRxAgcState);
+#else // PLATFORM_MD9600
+		soundResetDMRRxAGCGain();
+#if 0
+#if defined(USING_EXTERNAL_DEBUGGER)
+		SEGGER_RTT_printf(0, "END %d\n",LinkHead->rxAGCGain);
+#endif
+#endif
+#endif // PLATFORM_MD9600
 	}
 
 	return false;
@@ -534,9 +677,11 @@ bool soundReceiveData(void)
 	{
 		return false;
 	}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	#if defined(I2S_APRS_RX)
 	i2sAprsRxStop(); // sound / DMR audio takes the I2S over
 	#endif
+#endif // PLATFORM_MD9600
     isSending = false;
     isReceiving = true;
 	soundStartDMA();
@@ -549,16 +694,30 @@ void soundReceiveRefillData(uint32_t bufNum)
 	{
 		for(int j = 0; j < 2; j++)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			byteSwap16_t sample;
 
+#endif // PLATFORM_MD9600
 			for (int i = 0; i < (WAV_BUFFER_SIZE / 2); i++)
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				sample.byte16 = i2s_Rx_Buffer[bufNum][j][i * 2];             // only use the Left Channel of the Mic Audio. Right Channel contains a duplicate.
 				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][(2 * i) + 1] = sample.bytes8[1];
 				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][2 * i] = sample.bytes8[0];
 				if (abs(sample.byte16) > runningMaxValue)
+#else // PLATFORM_MD9600
+				swapper.byte16 = i2s_Rx_Buffer[bufNum][j][i * 2];             // only use the Left Channel of the Mic Audio. Right Channel contains a duplicate.
+				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][(2 * i) + 1] = swapper.bytes8[1];
+				audioAndHotspotDataBuffer.wavbuffer[wavbuffer_write_idx][2 * i] = swapper.bytes8[0];
+
+				if (abs(swapper.byte16) > runningMaxValue)
+#endif // PLATFORM_MD9600
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					runningMaxValue = abs(sample.byte16);
+#else // PLATFORM_MD9600
+					runningMaxValue = abs(swapper.byte16);
+#endif // PLATFORM_MD9600
 				}
 			}
 
@@ -608,7 +767,11 @@ void soundStopMelody(void)
 		 */
 		if (audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			HRC6000MuteFmAudio(false);					// Unmute the FM audio
+#else // PLATFORM_MD9600
+			radioSetAudioPath(true);					// Set the audio path to FM -> audio amp.
+#endif // PLATFORM_MD9600
 		}
 	}
 
@@ -621,17 +784,35 @@ bool soundMelodyIsPlaying(void)
 	return (melody_play != NULL);
 }
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+void soundResetDMRRxAGCGain(void)
+{
+	dmrRxAGCrxPeakAverage = DMR_RX_AGC_DEFAULT_PEAK_SAMPLES;
+	dmrRxAGCpeakRx = 0U;
+	lastDMRRxAGCGain = -99;
+#if defined(CPU_MK22FN512VLL12) || defined(PLATFORM_MD9600)
+	HRC6000SetDmrRxGain(0);
+#else
+	HRC6000SetDmrAGCGain(0);
+#endif
+}
+
+#endif // PLATFORM_MD9600
 void soundTickMelody(void)
 {
 	taskENTER_CRITICAL();
 	if (melody_play != NULL)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		// <= rather than ==: soundSetMelody() can zero the duration from another
 		// task in between the beep task's "> 0" test and its decrement, which
 		// leaves it at -1. On == that never matches again, so the melody never
 		// advances, soundStopMelody() never runs, and the audio path stays stuck
 		// in beep mode until the radio is power cycled.
 		if (sine_beep_duration <= 0)
+#else // PLATFORM_MD9600
+		if (sine_beep_duration == 0)
+#endif // PLATFORM_MD9600
 		{
 			if (melody_play[melody_idx] == -1)
 			{
@@ -641,11 +822,18 @@ void soundTickMelody(void)
 			{
 				if ((melody_idx == 0) && (!isInDelayedStart))
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					HRC6000MuteFmAudio(true);			          //disables the FM audio
+#else // PLATFORM_MD9600
+					radioSetAudioPath(false);			          // set the audio path to HR-C6000 -> audio amp (Actually this is always on, this call just disables the FM audio)
+#endif // PLATFORM_MD9600
 					audioAmpEnable(AUDIO_AMP_CHANNEL_BEEP);
 					isInDelayedStart = true;
 					delayedStartCounter = DELAYED_BEEP_DURATION_MS;
 				}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 				if (delayedStartCounter == 0)
 				{
 					sine_beep_freq = melody_play[melody_idx];
@@ -662,6 +850,7 @@ void soundTickMelody(void)
 	taskEXIT_CRITICAL();
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static bool soundBeepGenerationIsCurrent(uint32_t generation)
 {
 	bool current;
@@ -673,25 +862,31 @@ static bool soundBeepGenerationIsCurrent(uint32_t generation)
 	return current;
 }
 
+#endif // PLATFORM_MD9600
 static void soundBeepTaskFunction(void *data)
 {
 	const int WAIT_TIMEOUT_COUNT = 10;
 	uint8_t tmp_val;
 	int beep_idx = 0;
 	bool beep = false;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	uint32_t beepGeneration = 0;
+#endif // PLATFORM_MD9600
 	uint8_t task_spi_sound[32];
 	int waitTimeout;
 
 	while (1U)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		bool durationActive;
 		uint32_t activeGeneration;
 		int16_t activeFrequency;
 		int activeVolumeDivider;
 
+#endif // PLATFORM_MD9600
 			beepTask.AliveCount = TASK_FLAGGED_ALIVE;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			// Take a coherent snapshot. The SPI operations below may block and
 			// must not run inside this critical section.
 			taskENTER_CRITICAL();
@@ -702,7 +897,11 @@ static void soundBeepTaskFunction(void *data)
 			taskEXIT_CRITICAL();
 
 			if (durationActive)
+#else // PLATFORM_MD9600
+			if (sine_beep_duration > 0)
+#endif // PLATFORM_MD9600
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				if (activeGeneration != beepGeneration)
 				{
 					beep = false;
@@ -710,6 +909,7 @@ static void soundBeepTaskFunction(void *data)
 					beepGeneration = activeGeneration;
 				}
 
+#endif // PLATFORM_MD9600
 				if (rxPowerSavingIsRxOn() == false)
 				{
 					rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE);
@@ -724,7 +924,11 @@ static void soundBeepTaskFunction(void *data)
 
 					while ((SPI0ClearPageRegByteWithMask(0x04, 0x06, 0xFD, 0x02) == -1) &&  ((waitTimeout--) > 0))
 					{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						vTaskDelay((1 / portTICK_PERIOD_MS));
+#else // PLATFORM_MD9600
+						vTaskDelay((1U / portTICK_PERIOD_MS));
+#endif // PLATFORM_MD9600
 					}
 
 					interruptsEnableC6000Interrupts();
@@ -738,7 +942,11 @@ static void soundBeepTaskFunction(void *data)
 
 				while ((SPI0ReadPageRegByte(0x04, 0x88, &tmp_val) == -1) &&  ((waitTimeout--) > 0))
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					vTaskDelay((1 / portTICK_PERIOD_MS));
+#else // PLATFORM_MD9600
+					vTaskDelay((1U / portTICK_PERIOD_MS));
+#endif // PLATFORM_MD9600
 				}
 
 				interruptsEnableC6000Interrupts();
@@ -748,15 +956,29 @@ static void soundBeepTaskFunction(void *data)
 				{
 					for (int i = 0; i < 16; i++)
 					{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						byteSwap16_t beepSample;
+#else // PLATFORM_MD9600
+						swapper.byte16 = ((int)sine_beep16[beep_idx]) >> soundBeepVolumeDivider;
+						task_spi_sound[(2 * i) + 1] = swapper.bytes8[0];// low byte
+						task_spi_sound[2 * i] = swapper.bytes8[1];// high byte
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						beepSample.byte16 = ((int)sine_beep16[beep_idx]) >> activeVolumeDivider;
 						task_spi_sound[(2 * i) + 1] = beepSample.bytes8[0];// low byte
 						task_spi_sound[2 * i] = beepSample.bytes8[1];// high byte
 
 						if (activeFrequency != 0)
+#else // PLATFORM_MD9600
+						if (sine_beep_freq != 0)
+#endif // PLATFORM_MD9600
 						{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 							beep_idx = beep_idx + (int)(activeFrequency / 3.915f);
+#else // PLATFORM_MD9600
+							beep_idx = beep_idx + (int)(sine_beep_freq / 3.915f);
+#endif // PLATFORM_MD9600
 
 							// Stay in sine_beep16[] boundaries.
 							while (beep_idx >= 0x0800)
@@ -765,16 +987,32 @@ static void soundBeepTaskFunction(void *data)
 							}
 						}
 					}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					bool generationCurrent = soundBeepGenerationIsCurrent(activeGeneration);
+#else // PLATFORM_MD9600
+					waitTimeout = WAIT_TIMEOUT_COUNT;
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					// The generation check is deliberately immediately before the
 					// transfer. A cancellation can still race a blocking SPI write,
 					// but stale frames are not submitted when the replacement is
 					// already visible to the task.
 					if (generationCurrent)
-					{
-						int spiStatus;
+#else // PLATFORM_MD9600
+					interruptsDisableC6000Interrupts();
 
+					while ((SPI0WritePageRegByteArray(0x03, 0x00, task_spi_sound, 0x20) == -1) &&  ((waitTimeout--) > 0))
+#endif // PLATFORM_MD9600
+					{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+						int spiStatus;
+#else // PLATFORM_MD9600
+						vTaskDelay((1U / portTICK_PERIOD_MS));
+					}
+#endif // PLATFORM_MD9600
+
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						waitTimeout = WAIT_TIMEOUT_COUNT;
 
 						interruptsDisableC6000Interrupts();
@@ -800,8 +1038,12 @@ static void soundBeepTaskFunction(void *data)
 
 						interruptsEnableC6000Interrupts();
 					}
+#else // PLATFORM_MD9600
+					interruptsEnableC6000Interrupts();
+#endif // PLATFORM_MD9600
 				}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				// Only the melody whose frame we rendered may be decremented.
 				// soundSetMelody() can replace it while the SPI transfer is busy.
 				taskENTER_CRITICAL();
@@ -810,6 +1052,9 @@ static void soundBeepTaskFunction(void *data)
 					sine_beep_duration--;
 				}
 				taskEXIT_CRITICAL();
+#else // PLATFORM_MD9600
+				sine_beep_duration--;
+#endif // PLATFORM_MD9600
 			}
 			else
 			{
@@ -821,7 +1066,11 @@ static void soundBeepTaskFunction(void *data)
 
 					while ((SPI0ClearPageRegByteWithMask(0x04, 0x06, 0xFD, 0x00) == -1) &&  ((waitTimeout--) >> 0))
 					{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						vTaskDelay((1 / portTICK_PERIOD_MS));
+#else // PLATFORM_MD9600
+						vTaskDelay((1U / portTICK_PERIOD_MS));
+#endif // PLATFORM_MD9600
 					}
 
 					interruptsEnableC6000Interrupts();
@@ -830,6 +1079,39 @@ static void soundBeepTaskFunction(void *data)
 				}
 			}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		vTaskDelay((1 / portTICK_PERIOD_MS));
+#else // PLATFORM_MD9600
+		vTaskDelay((1U / portTICK_PERIOD_MS));
+#endif // PLATFORM_MD9600
 	}
 }
+
+#if defined(PLATFORM_MD9600)
+// Shared application code (hotspot, USB, PR #23 AGC hooks) calls these; the MD-9600
+// keeps the upstream AGC for now, so the station level hooks do nothing.
+void soundResetBufferQueue(void)
+{
+	taskENTER_CRITICAL();
+	wavbuffer_read_idx = 0;
+	wavbuffer_write_idx = 0;
+	wavbuffer_count = 0;
+	taskEXIT_CRITICAL();
+}
+
+void soundDMRRxAGCSetStationLevel(const void *station, uint32_t stationId, uint32_t stationToken, uint16_t rememberedPeak)
+{
+	(void)station;
+	(void)stationId;
+	(void)stationToken;
+	(void)rememberedPeak;
+}
+
+void soundDMRRxAGCInvalidateStation(void)
+{
+}
+
+void soundDMRRxAGCSettingsChanged(void)
+{
+}
+#endif

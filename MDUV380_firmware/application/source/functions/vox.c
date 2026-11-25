@@ -31,11 +31,22 @@
 #include "functions/sound.h"
 #include "functions/settings.h"
 #include "functions/ticks.h"
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include "interfaces/batteryAndPowerManagement.h" // for micLevel decl
+#else // PLATFORM_MD9600
+#include "functions/voicePrompts.h"
+#endif // PLATFORM_MD9600
 #include "utils.h"
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 #define VOX_UPDATE_MS                 4U
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define VOX_TAIL_TIME_UNIT           (PIT_COUNTS_PER_MS * 500U) // 500ms tail unit
+#else // PLATFORM_MD9600
+#define VOX_TAIL_TIME_UNIT           (PIT_COUNTS_PER_MS * 500) // 500ms tail unit
+#endif // PLATFORM_MD9600
 #define VOX_SETTLE_TIME              (6000U / VOX_UPDATE_MS) // Countdown before doing first real sampling;
 #define VOX_TAIL_GET_MILLISECONDS(x) (((x) > 1U) ? (((x) - 1U) * VOX_TAIL_TIME_UNIT) : 1U)
 
@@ -115,7 +126,11 @@ void voxTick(void)
 			}
 			else
 			{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				uint16_t sample = micLevel; // NOTE: not using adcGetVOX(), but direct (and valid) ADC value.
+#else // PLATFORM_MD9600
+				uint16_t sample = adcGetVOX();
+#endif // PLATFORM_MD9600
 
 				if (vox.settleCount > 0)
 				{

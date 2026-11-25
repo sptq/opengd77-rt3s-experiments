@@ -29,16 +29,26 @@
 #include "functions/rxPowerSaving.h"
 #include "functions/trx.h"
 #include "functions/ticks.h"
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include <interfaces/clockManager.h>
+#endif // PLATFORM_MD9600
 #include "usb/usb_com.h"
 
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define LOW_SPEED_CLOCK_ECO_THRESHOLD 2
+#endif // PLATFORM_MD9600
 static ecoPhase_t rxPowerSavingState = ECOPHASE_POWERSAVE_INACTIVE;
 static ticksTimer_t ecoPhaseTimer = { 0, 0 };
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 volatile static int powerSavingLevel = 1;
+#else // PLATFORM_MD9600
+static int powerSavingLevel = 1;
+#endif // PLATFORM_MD9600
 static bool hrc6000IsPoweredOff = false;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 
 
 bool rxPowerSavingIsRxOn(void)
@@ -64,6 +74,7 @@ int rxPowerSavingGetLevel(void)
 	return powerSavingLevel;
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static void resumeBeepAndC6000Tasks(void)
 {
 	vTaskResume(hrc6000Task.Handle);
@@ -83,13 +94,18 @@ static void suspendBeepAndC6000Tasks(void)
 	hrc6000Task.Running = false;
 }
 
+#endif // PLATFORM_MD9600
 void rxPowerSavingSetState(ecoPhase_t newState)
 {
 	if (rxPowerSavingState != newState)
 	{
 		if (rxPowerSavingState == ECOPHASE_POWERSAVE_ACTIVE___RX_IS_OFF)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff, false);
+#else // PLATFORM_MD9600
+			hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff);
+#endif // PLATFORM_MD9600
 		}
 
 		rxPowerSavingState = newState;
@@ -97,12 +113,14 @@ void rxPowerSavingSetState(ecoPhase_t newState)
 		// Avoid to instantly jump to power saving mode
 		if (rxPowerSavingState == ECOPHASE_POWERSAVE_INACTIVE)
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			if (powerSavingLevel >= LOW_SPEED_CLOCK_ECO_THRESHOLD)
 			{
 				clockManagerSetRunMode(kAPP_PowerModeRun, CLOCK_MANAGER_SPEED_RUN);
 				resumeBeepAndC6000Tasks();
 			}
 
+#endif // PLATFORM_MD9600
 			ticksTimerStart(&ecoPhaseTimer, ((12 - (MIN(powerSavingLevel, 4) * 2)) * 1000));
 		}
 	}
@@ -112,7 +130,11 @@ void rxPowerSavingTick(uiEvent_t *ev, bool hasSignal)
 {
 	if ((settingsUsbMode != USB_MODE_HOTSPOT) || (rxPowerSavingState != ECOPHASE_POWERSAVE_INACTIVE))
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		if (USB_DeviceIsResetting() || isCompressingAMBE || hasSignal || trxTransmissionEnabled || trxIsTransmitting ||
+#else // PLATFORM_MD9600
+		if (isCompressingAMBE || hasSignal || trxTransmissionEnabled || trxIsTransmitting ||
+#endif // PLATFORM_MD9600
 				(menuSystemGetCurrentMenuNumber() == UI_TX_SCREEN) || (menuSystemGetCurrentMenuNumber() == UI_CPS) ||
 				(uiDataGlobal.Scan.active && uiDataGlobal.Scan.scanType == SCAN_TYPE_NORMAL_STEP) || ev->hasEvent)
 		{
@@ -120,6 +142,7 @@ void rxPowerSavingTick(uiEvent_t *ev, bool hasSignal)
 			{
 				if (rxPowerSavingState == ECOPHASE_POWERSAVE_ACTIVE___RX_IS_OFF)
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff, false);// Power up AT1846S, C6000 and preamp
 				}
 
@@ -127,6 +150,9 @@ void rxPowerSavingTick(uiEvent_t *ev, bool hasSignal)
 				{
 					clockManagerSetRunMode(kAPP_PowerModeRun, CLOCK_MANAGER_SPEED_RUN);
 					resumeBeepAndC6000Tasks();
+#else // PLATFORM_MD9600
+					hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff);// Power up AT1846S, C6000 and preamp
+#endif // PLATFORM_MD9600
 				}
 
 				rxPowerSavingState = ECOPHASE_POWERSAVE_INACTIVE;
@@ -146,15 +172,24 @@ void rxPowerSavingTick(uiEvent_t *ev, bool hasSignal)
 			)
 			{
 				int rxDuration = (130 - (10 * powerSavingLevel));
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 				switch(rxPowerSavingState)
 				{
 					case ECOPHASE_POWERSAVE_INACTIVE:// wait before shutting down
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 						ticksTimerStart(&ecoPhaseTimer, ((12 - (MIN(powerSavingLevel, 4) * 2)) * 1000));
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						rxPowerSavingState = ECOPHASE_POWERSAVE_WAIT_START;
+#else // PLATFORM_MD9600
+						rxPowerSavingState = ECOPHASE_POWERSAVE_ACTIVE___RX_IS_ON;
+#endif // PLATFORM_MD9600
 						break;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					case ECOPHASE_POWERSAVE_WAIT_START:
 						if ((powerSavingLevel >= LOW_SPEED_CLOCK_ECO_THRESHOLD) && (SETTINGS_GPS_MODE_GET(nonVolatileSettings) <= GPS_MODE_OFF))
 						{
@@ -165,15 +200,24 @@ void rxPowerSavingTick(uiEvent_t *ev, bool hasSignal)
 						rxPowerSavingState = ECOPHASE_POWERSAVE_ACTIVE___RX_IS_ON;
 						// drop through
 
+#endif // PLATFORM_MD9600
 					case ECOPHASE_POWERSAVE_ACTIVE___RX_IS_ON:
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(false, (powerSavingLevel > 1), false);// Power down AT1846S, C6000 and preamp
+#else // PLATFORM_MD9600
+						hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(false, (powerSavingLevel > 1));// Power down AT1846S, C6000 and preamp
+#endif // PLATFORM_MD9600
 						ticksTimerStart(&ecoPhaseTimer, (rxDuration * (1 << (powerSavingLevel - 1))));
 						rxPowerSavingState = ECOPHASE_POWERSAVE_ACTIVE___RX_IS_OFF;
 						break;
 
 					case ECOPHASE_POWERSAVE_ACTIVE___RX_IS_OFF:
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						//USB_DEBUG_printf("ECOPHASE_POWERSAVE_ACTIVE___RX_IS_ON\n");
 						hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff, false);// Power up AT1846S, C6000 and preamps
+#else // PLATFORM_MD9600
+						hrc6000IsPoweredOff = trxPowerUpDownRxAndC6000(true, hrc6000IsPoweredOff);// Power up AT1846S, C6000 and preamps
+#endif // PLATFORM_MD9600
 						ticksTimerStart(&ecoPhaseTimer, (rxDuration * 1));
 						trxPostponeReadRSSIAndNoise(0); // Give it a bit of time, after powering up, before checking the RSSI and Noise values
 						rxPowerSavingState = ECOPHASE_POWERSAVE_ACTIVE___RX_IS_ON;

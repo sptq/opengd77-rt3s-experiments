@@ -1,3 +1,4 @@
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 /*
  * Copyright (C) 2019      Kai Ludwig, DG4KLU
  * Copyright (C) 2019-2025 Roger Clark, VK3KYY / G4KYF
@@ -235,6 +236,230 @@ static void cpsHandleReadCommand(void)
 #else
 			memcpy((uint8_t *)&usbComSendBuf[3], (uint8_t *)displayGetPrimaryScreenBuffer() + address, length);
 #endif
+#else // PLATFORM_MD9600
+/*
+ * Copyright (C) 2019      Kai Ludwig, DG4KLU
+ * Copyright (C) 2019-2025 Roger Clark, VK3KYY / G4KYF
+ *                         Daniel Caujolle-Bert, F1RMB
+ *
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+ *    in the documentation and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * 4. Use of this source code or binary releases for commercial purposes is strictly forbidden. This includes, without limitation,
+ *    incorporation in a commercial product or incorporation into a product or project which allows commercial use.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+#include <stdarg.h>
+#include "functions/hotspot.h"
+#include "functions/settings.h"
+#include "user_interface/uiUtilities.h"
+#include "user_interface/menuSystem.h"
+#include "usb/usb_com.h"
+#include "functions/ticks.h"
+#include "interfaces/wdog.h"
+#include "hardware/HR-C6000.h"
+#include "functions/sound.h"
+#include "hardware/SPI_Flash.h"
+#include "user_interface/uiLocalisation.h"
+#include "functions/rxPowerSaving.h"
+#include "main.h"
+#include "interfaces/settingsStorage.h"
+#include "interfaces/gps.h"
+
+//#define DEBUG_POSITION 1
+
+
+#define GITVERSIONREV GITVERSION
+
+enum CPS_ACCESS_AREA
+{
+	CPS_ACCESS_FLASH = 1,
+	CPS_ACCESS_EEPROM = 2,
+	CPS_ACCESS_MCU_ROM = 5,
+	CPS_ACCESS_DISPLAY_BUFFER = 6,
+	CPS_ACCESS_WAV_BUFFER = 7,
+	CPS_COMPRESS_AND_ACCESS_AMBE_BUFFER = 8,
+	CPS_ACCESS_RADIO_INFO = 9,
+#if ! defined(CPU_MK22FN512VLL12)
+	CPS_ACCESS_FLASH_SECURITY_REGISTERS = 10,
+#endif
+};
+
+
+#if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
+#define TASK_LOCK_WRITE()	  do { } while(0)
+#define TASK_UNLOCK_WRITE()	  do { } while(0)
+#elif defined(PLATFORM_MD9600) || defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
+#define TASK_LOCK_WRITE()	  do { taskENTER_CRITICAL(); } while(0)
+#define TASK_UNLOCK_WRITE()	  do { taskEXIT_CRITICAL(); } while(0)
+#else
+#error configure this platform about tasks locking
+#endif
+
+
+static void handleCPSRequest(void);
+
+volatile int com_request = 0;
+volatile uint8_t com_requestbuffer[COM_REQUESTBUFFER_SIZE];
+volatile uint8_t usbComSendBuf[COM_BUFFER_SIZE];
+
+static int sector = -1;
+volatile int comRecvMMDVMIndexIn = 0;
+volatile int comRecvMMDVMIndexOut = 0;
+volatile int comRecvMMDVMFrameCount = 0;
+static bool flashingDMRIDs = false;
+static bool channelsRewritten = false;
+static bool luczRewritten = false;
+#if defined(HAS_GPS)
+static gpsMode_t previousGPSState = GPS_NOT_DETECTED;
+#endif
+
+bool isCompressingAMBE = false;
+
+volatile static bool hasToReply = false;
+volatile static uint32_t replyLength = 0;
+
+/*
+static void hexDump2(uint8_t *ptr, int len,char *msg)
+{
+	char buf[8];
+    msg[0] = 0;
+    for (int i = 0; i < len; i++)
+    {
+		sprintf(buf,"%02x",*ptr);
+		strcat(msg,buf);
+	    ptr++;
+    }
+}*/
+
+static bool addressInSegment(uint32_t address, uint32_t length, uint32_t segmentStart, uint32_t segmentSize)
+{
+	return ((address >= segmentStart) && ((address + length) <= (segmentStart + segmentSize)));
+}
+
+void tick_com_request(void)
+{
+	switch (settingsUsbMode)
+	{
+		case USB_MODE_CPS:
+			if (com_request == 1)
+			{
+				TASK_LOCK_WRITE();
+				handleCPSRequest();
+				com_request = 0;
+				if (hasToReply)
+				{
+					CDC_Transmit_FS((uint8_t *) usbComSendBuf, replyLength);
+					hasToReply = false;
+					replyLength = 0;
+				}
+				TASK_UNLOCK_WRITE();
+			}
+			break;
+
+		case USB_MODE_HOTSPOT:
+			// That will happen once when MMDVMHost send the first frame
+			// out of the Hotspot mode.
+			if (com_request == 1)
+			{
+				com_request = 0;
+
+				if ((nonVolatileSettings.hotspotType != HOTSPOT_TYPE_OFF) &&
+						((comRecvMMDVMFrameCount >= 1) && (com_requestbuffer[1] == MMDVM_FRAME_START)) &&
+						(uiDataGlobal.dmrDisabled == false)) // DMR (digital) is disabled.
+				{
+					if (menuSystemGetCurrentMenuNumber() != UI_HOTSPOT_MODE)
+					{
+						menuSystemPushNewMenu(UI_HOTSPOT_MODE);
+					}
+				}
+			}
+			break;
+	}
+}
+
+static void cpsHandleReadCommand(void)
+{
+	uint32_t address = (com_requestbuffer[2] << 24) + (com_requestbuffer[3] << 16) + (com_requestbuffer[4] << 8) + (com_requestbuffer[5] << 0);
+	uint32_t length = (com_requestbuffer[6] << 8) + (com_requestbuffer[7] << 0);
+	bool result = false;
+
+	if (length > (COM_REQUESTBUFFER_SIZE - 3))
+	{
+		length = (COM_REQUESTBUFFER_SIZE - 3);
+	}
+
+	switch(com_requestbuffer[1])
+	{
+		case CPS_ACCESS_FLASH:
+		{
+			// Calibration register, returns local copy
+			if (addressInSegment(address, length, 0x10000, 0x200))
+			{
+				uint8_t *p = calibrationGetLocalDataPointer();
+				memcpy((uint8_t *)&usbComSendBuf[3], (p + (address - 0x10000)), length);
+				result = true;
+			}
+			else
+			{
+				TASK_UNLOCK_WRITE();
+				result = SPI_Flash_read(address, (uint8_t *)&usbComSendBuf[3], length);
+				uint32_t end = address + length - 1;
+				const uint32_t VFOs_END = CODEPLUG_ADDR_VFO_A_CHANNEL + (sizeof(CodeplugChannel_t) * 2);
+
+				// if CPS is writing the second part of the EEPROM (emulated in Flash) then the VFO's are being updated.
+				if ((address <= CODEPLUG_ADDR_VFO_A_CHANNEL) && (end  >= VFOs_END))
+				{
+					uint32_t offset = CODEPLUG_ADDR_VFO_A_CHANNEL - address;
+
+					CodeplugChannel_t * destPtr = (CodeplugChannel_t *)&usbComSendBuf[3 + offset];
+
+					memcpy((uint8_t *)destPtr, (uint8_t *)&settingsVFOChannel[0], CODEPLUG_CHANNEL_DATA_STRUCT_SIZE);
+					codeplugConvertChannelInternalToCodeplug(destPtr, destPtr);
+
+					destPtr = (CodeplugChannel_t *)&usbComSendBuf[3 + offset + CODEPLUG_CHANNEL_DATA_STRUCT_SIZE];
+
+					memcpy((uint8_t *)destPtr, (uint8_t *)&settingsVFOChannel[1], CODEPLUG_CHANNEL_DATA_STRUCT_SIZE);
+					codeplugConvertChannelInternalToCodeplug(destPtr, destPtr);
+				}
+
+				TASK_LOCK_WRITE();
+			}
+			}
+			break;
+
+		case CPS_ACCESS_EEPROM:
+			TASK_UNLOCK_WRITE();
+			result = EEPROM_Read(address, (uint8_t *)&usbComSendBuf[3], length);
+			TASK_LOCK_WRITE();
+			break;
+
+		case CPS_ACCESS_MCU_ROM:
+			// Base address of MCU ROM on the STM32 is 0x8000000 not 0x00000000
+			memcpy((uint8_t *)&usbComSendBuf[3], (uint8_t *)address + 0x8000000, length);
+			result = true;
+			break;
+
+		case CPS_ACCESS_DISPLAY_BUFFER:
+			rxPowerSavingSetState(ECOPHASE_POWERSAVE_INACTIVE); // Avoiding going into a state that USB doesn't work.
+			memcpy((uint8_t *)&usbComSendBuf[3], (uint8_t *)displayGetPrimaryScreenBuffer() + address, length);
+#endif // PLATFORM_MD9600
 			result = true;
 			break;
 
@@ -774,7 +999,11 @@ static void cpsHandleCommand(void)
 						// save current settings and reboot
 						m = ticksGetMillis();
 						TASK_UNLOCK_WRITE();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						settingsSaveSettings(false);// Need to save these channels prior to reboot, as reboot does not save
+#else // PLATFORM_MD9600
+						settingsSaveSettings(false, true);// Need to save these channels prior to reboot, as reboot does not save
+#endif // PLATFORM_MD9600
 						TASK_LOCK_WRITE();
 
 						if (! luczRewritten)
@@ -818,7 +1047,11 @@ static void cpsHandleCommand(void)
 #endif
 						// Save settings VFO's to codeplug
 						TASK_UNLOCK_WRITE();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 						settingsSaveSettings(true);
+#else // PLATFORM_MD9600
+						settingsSaveSettings(true, true);
+#endif // PLATFORM_MD9600
 						TASK_LOCK_WRITE();
 
 #if defined(HAS_GPS)
@@ -948,7 +1181,9 @@ static void handleCPSRequest(void)
 			cpsHandleDebugCommand();
 			break;
 #endif
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 #if 0 // has to be rewritten
 		case '$':// NMEA
 			{
@@ -982,7 +1217,11 @@ static void handleCPSRequest(void)
 	}
 }
 #if 0
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 __attribute__((section(".ccmram"))) volatile uint8_t com_buffer[COM_BUFFER_SIZE];
+#else // PLATFORM_MD9600
+__attribute__((section(".data.$RAM2"))) volatile uint8_t com_buffer[COM_BUFFER_SIZE];
+#endif // PLATFORM_MD9600
 int com_buffer_write_idx = 0;
 int com_buffer_read_idx = 0;
 volatile int com_buffer_cnt = 0;
@@ -1066,6 +1305,7 @@ void USB_DEBUG_printf(const char *format, ...)
 	va_end(params);
 	USB_DEBUG_PRINT(buf);
 }
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -1079,3 +1319,4 @@ bool USB_DeviceIsResetting(void)
 
 	return usbIsResetting;
 }
+#endif // PLATFORM_MD9600

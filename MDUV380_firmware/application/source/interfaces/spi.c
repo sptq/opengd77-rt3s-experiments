@@ -59,9 +59,14 @@ int SPI0WritePageRegByte(uint8_t page, uint8_t reg, uint8_t val)
 	{
 		return -1;
 	}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0inUse = true;
+#endif // PLATFORM_MD9600
 	SavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0inUse = true;
 
+#endif // PLATFORM_MD9600
 	txBuf[0] = page;
 	txBuf[1] = reg;
 	txBuf[2] = val;
@@ -78,14 +83,21 @@ int SPI0WritePageRegByteExtended(uint8_t page, uint16_t reg, uint8_t val)
 {
 	uint8_t txBuf[4];
 	UBaseType_t SavedInterruptStatus;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 	if (SPI0inUse)
 	{
 		return -1;
 	}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0inUse = true;
+#endif // PLATFORM_MD9600
 	SavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0inUse = true;
 
+#endif // PLATFORM_MD9600
 	txBuf[0] = page | 0x40;
 	txBuf[2] = (reg >> 8) & 0x07;
 	txBuf[1] = reg & 0xFF;
@@ -106,14 +118,21 @@ int SPI0ReadPageRegByte(uint8_t page, uint8_t reg, volatile uint8_t *val)
 	uint8_t rxBuf[3];
 	uint8_t txBuf[3];
 	UBaseType_t SavedInterruptStatus;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 	if (SPI0inUse)
 	{
 		return -1;
 	}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0inUse = true;
+#endif // PLATFORM_MD9600
 	SavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0inUse = true;
 
+#endif // PLATFORM_MD9600
 	txBuf[0] = page | 0x80;
 	txBuf[1] = reg;
 	txBuf[2] = 0xFF;
@@ -124,7 +143,9 @@ int SPI0ReadPageRegByte(uint8_t page, uint8_t reg, volatile uint8_t *val)
 
 	SPI0inUse = false;
 	taskEXIT_CRITICAL_FROM_ISR(SavedInterruptStatus);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 	return 0;
 }
 
@@ -159,7 +180,9 @@ int SPI0WritePageRegByteArray(uint8_t page, uint8_t reg, const uint8_t *values, 
 	{
 		return -1;
 	}
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 	SavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
 	SPI0inUse = true;
 
@@ -171,6 +194,9 @@ int SPI0WritePageRegByteArray(uint8_t page, uint8_t reg, const uint8_t *values, 
 
 	SPI0inUse = false;
 	taskEXIT_CRITICAL_FROM_ISR(SavedInterruptStatus);
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 	return 0;
 }
 
@@ -179,7 +205,9 @@ int SPI0ReadPageRegByteArray(uint8_t page, uint8_t reg, volatile uint8_t *values
 	uint8_t rxBuf[0x60 + 2];
 	uint8_t txBuf[0x60 + 2];
 	UBaseType_t SavedInterruptStatus;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 	if (length > 0x60)
 	{
 		return kStatus_InvalidArgument;
@@ -205,6 +233,9 @@ int SPI0ReadPageRegByteArray(uint8_t page, uint8_t reg, volatile uint8_t *values
 
 	SPI0inUse = false;
 	taskEXIT_CRITICAL_FROM_ISR(SavedInterruptStatus);
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 	return 0;
 }
 
@@ -220,22 +251,28 @@ void SPI0Write(uint8_t *txBuf, uint8_t length)
 		for (register int i = 0; i < 8; i++)
 		{
 			HAL_GPIO_WritePin(DMR_SPI_MOSI_GPIO_Port, DMR_SPI_MOSI_Pin, ((val & 0x80) != 0));
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 #ifdef SPI_0_DELAYS
 			for(volatile int x=0;x<1;x++);
 #endif
 
+#endif // PLATFORM_MD9600
 			HAL_GPIO_WritePin(DMR_SPI_CLK_GPIO_Port, DMR_SPI_CLK_Pin, GPIO_PIN_RESET);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #ifdef SPI_0_DELAYS
 			for(volatile int x=0;x<1;x++);
 #endif
 
+#endif // PLATFORM_MD9600
 			val = val << 1;
 			HAL_GPIO_WritePin(DMR_SPI_CLK_GPIO_Port, DMR_SPI_CLK_Pin, GPIO_PIN_SET);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 #ifdef SPI_0_DELAYS
 			for(volatile int x=0;x<1;x++);
 #endif
+#endif // PLATFORM_MD9600
 		}
 	}
 
@@ -294,9 +331,15 @@ int SPI1WritePageRegByteArray(uint8_t page, uint8_t reg, const uint8_t *values, 
 	txBuf[1] = reg;
 	memcpy(txBuf + 2, values, length);
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	HAL_GPIO_WritePin(V_SPI_CS_GPIO_Port, V_SPI_CS_Pin, GPIO_PIN_RESET);
 	status = HAL_SPI_Transmit(&hspi2, txBuf, length + 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(V_SPI_CS_GPIO_Port, V_SPI_CS_Pin, GPIO_PIN_SET);
+#else // PLATFORM_MD9600
+	HAL_GPIO_WritePin(GPIOD, V_SPI_CS_Pin, GPIO_PIN_RESET);
+	status = HAL_SPI_Transmit(&hspi1, txBuf, length + 2, HAL_MAX_DELAY);
+	HAL_GPIO_WritePin(GPIOD, V_SPI_CS_Pin, GPIO_PIN_SET);
+#endif // PLATFORM_MD9600
 
 	SPI1inUse = false;
 
@@ -325,9 +368,15 @@ int SPI1ReadPageRegByteArray(uint8_t page, uint8_t reg, volatile uint8_t *values
 	txBuf[0] = page | 0x80;
 	txBuf[1] = reg;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	HAL_GPIO_WritePin(V_SPI_CS_GPIO_Port, V_SPI_CS_Pin, GPIO_PIN_RESET);
 	status = HAL_SPI_TransmitReceive(&hspi2, txBuf, rxBuf, length + 2, HAL_MAX_DELAY);
 	HAL_GPIO_WritePin(V_SPI_CS_GPIO_Port, V_SPI_CS_Pin, GPIO_PIN_SET);
+#else // PLATFORM_MD9600
+	HAL_GPIO_WritePin(GPIOD, V_SPI_CS_Pin, GPIO_PIN_RESET);
+	status = HAL_SPI_TransmitReceive(&hspi1, txBuf, rxBuf, length + 2, HAL_MAX_DELAY);
+	HAL_GPIO_WritePin(GPIOD, V_SPI_CS_Pin, GPIO_PIN_SET);
+#endif // PLATFORM_MD9600
 
 	if (status == HAL_OK)
 	{

@@ -29,25 +29,59 @@
 #include "interfaces/settingsStorage.h"
 
 #define STORAGE_BASE_ADDRESS         (0x6000 + 0x4B /* After "Last Used Channel In Zone" */)
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define USE_PERMANENT_STORAGE
+#else // PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 #if defined(STM32F405xx)
 #define SETTINGS_START_ADDRESS        0x02
 #endif
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool settingsStorageRead(uint8_t *buf, uint32_t size)
+#else // PLATFORM_MD9600
+bool settingsStorageRead(uint8_t *buf, uint32_t size, bool usePermanentStoage)
+#endif // PLATFORM_MD9600
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #if !defined(STM32F405xx) || defined(USE_PERMANENT_STORAGE)
 	return EEPROM_Read(STORAGE_BASE_ADDRESS, buf, size);
 #else
 	return batteryRAM_Read(SETTINGS_START_ADDRESS, buf, size);
 #endif
+#else // PLATFORM_MD9600
+	if (usePermanentStoage)
+	{
+		return EEPROM_Read(STORAGE_BASE_ADDRESS, buf, size);
+	}
+	else
+	{
+		return batteryRAM_Read(SETTINGS_START_ADDRESS, buf, size);
+	}
+#endif // PLATFORM_MD9600
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool settingsStorageWrite(uint8_t *buf, uint32_t size)
+#else // PLATFORM_MD9600
+bool settingsStorageWrite(uint8_t *buf, uint32_t size, bool usePermanentStorage)
+#endif // PLATFORM_MD9600
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #if !defined(STM32F405xx) || defined(USE_PERMANENT_STORAGE)
 	return EEPROM_Write(STORAGE_BASE_ADDRESS, buf, size);
 #else
 	return batteryRAM_Write(SETTINGS_START_ADDRESS, buf, size);
 #endif
+#else // PLATFORM_MD9600
+	if (usePermanentStorage)
+	{
+		return EEPROM_Write(STORAGE_BASE_ADDRESS, buf, size);
+	}
+	else
+	{
+		return batteryRAM_Write(SETTINGS_START_ADDRESS, buf, size);
+	}
+#endif // PLATFORM_MD9600
 }

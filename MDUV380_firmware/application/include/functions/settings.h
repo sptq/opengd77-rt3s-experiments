@@ -416,7 +416,11 @@ bool settingsIsOptionBitSet(bitfieldOptions_t bit);
 void settingsSetDirty(void);
 void settingsSetVFODirty(void);
 void settingsSaveIfNeeded(bool immediately);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool settingsSaveSettings(bool includeVFOs);
+#else // PLATFORM_MD9600
+bool settingsSaveSettings(bool includeVFOs, bool backupToFlash);
+#endif // PLATFORM_MD9600
 bool settingsLoadSettings(bool reset);
 bool settingsRestoreDefaultSettings(void);
 void settingsEraseCustomContent(void);

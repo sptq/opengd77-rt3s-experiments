@@ -44,7 +44,11 @@ typedef enum
 #define POWER_UNSET            UINT8_MAX
 
 void radioPowerOn(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void radioPowerOff(bool invalidateFrequency, bool includeMic);
+#else // PLATFORM_MD9600
+void radioPowerOff(void);
+#endif // PLATFORM_MD9600
 void radioInit(void);
 void radioPostinit(void);
 RadioDevice_t radioSetTRxDevice(RadioDevice_t deviceId);
@@ -58,9 +62,23 @@ void radioSetTx(uint8_t band);
 void radioSetRx(uint8_t band);
 void radioReadVoxAndMicStrength(void);
 void radioReadRSSIAndNoiseForBand(uint8_t band);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void radioRxCSSOff(RadioDevice_t deviceId);
 void radioRxCTCSOn(RadioDevice_t deviceId, uint16_t tone);
 void radioRxDCSOn(RadioDevice_t deviceId, uint16_t code, bool inverted);
+#else // PLATFORM_MD9600
+#if defined(MD9600_VERSION_4)
+void SynthTransfer(bool VHF, uint8_t add, uint32_t reg);
+#else
+void SynthTransfer(bool VHF, uint8_t add, uint16_t reg);
+#endif
+#if defined(MD9600_VERSION_1) || defined (MD9600_VERSION_2) || defined (MD9600_VERSION_4)
+void IFTransfer(bool VHF, uint16_t data1);
+#endif
+void radioRxCTCSOn(uint16_t tone);
+void radioRxCSSOff(void);
+void radioRxDCSOn(uint16_t code, bool inverted);
+#endif // PLATFORM_MD9600
 void radioTxCSSOff(void);
 void radioTxCTCSOn(uint16_t tone);
 void radioTxDCSOn(uint16_t code, bool inverted);
@@ -73,7 +91,11 @@ void radioAudioAmp(bool on);
 void radioSetAudioPath(bool fromFM);
 void radioFastTx(bool tx);
 void radioSetRxLNAForDevice(RadioDevice_t deviceId);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void radioSelectVoiceChannel(uint8_t channel, uint8_t *voiceGainTx, uint16_t *deviation);
+#else // PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 
 extern RadioDevice_t currentRadioDeviceId;
 

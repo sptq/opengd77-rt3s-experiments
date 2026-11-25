@@ -40,7 +40,11 @@ volatile uint32_t timer_mbuttons[3];
 
 void pitInit(void)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	timer_mbuttons[0] = timer_mbuttons[1] = timer_mbuttons[2] = 0;
+#else // PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 }
 
 void PIT0_IRQHandler(void)

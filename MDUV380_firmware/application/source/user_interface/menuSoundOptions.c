@@ -28,7 +28,11 @@
 #if defined(PLATFORM_MD9600)
 #include "hardware/ST7567.h"
 #elif (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017))
+#if defined(PLATFORM_MD9600)
+#include "hardware/ST7567.h"
+#else
 #include "hardware/HX8353E.h"
+#endif
 #else
 #include "hardware/UC1701.h"
 #endif
@@ -39,7 +43,11 @@
 #include "user_interface/uiLocalisation.h"
 #include "user_interface/uiUtilities.h"
 
+#if defined(PLATFORM_MD9600)
+#define DMR_RX_AGC_MAX 16 // upstream MD-9600 AGC (the new AGC from PR #23 is RT3S only for now)
+#else
 #define DMR_RX_AGC_MAX DMR_RX_AGC_SETTING_COUNT
+#endif
 #if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
 #define FM_MIC_GAIN_MIN 1  // Limit to min 1, as 0: no audio
 #define FM_MIC_GAIN_MAX 31

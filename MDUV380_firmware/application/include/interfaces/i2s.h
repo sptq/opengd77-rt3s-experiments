@@ -28,6 +28,7 @@
 
 #ifndef _OPENGD77_I2S_H_
 #define _OPENGD77_I2S_H_
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 
 #include "functions/sound.h"
@@ -37,6 +38,17 @@
 #else
 	#define NUM_I2S_BUFFERS SAI_XFER_QUEUE_SIZE // was 6, but SAI_XFER_QUEUE_SIZE == 4
 #endif
+#else // PLATFORM_MD9600
+
+
+#include "functions/sound.h"
+
+#if defined(PLATFORM_MD9600)
+	#define NUM_I2S_BUFFERS 2
+#else
+	#define NUM_I2S_BUFFERS SAI_XFER_QUEUE_SIZE // was 6, but SAI_XFER_QUEUE_SIZE == 4
+#endif
+#endif // PLATFORM_MD9600
 
 #define WAV_BUFFER_SIZE                          160
 

@@ -31,7 +31,11 @@
 #if defined(PLATFORM_MD9600)
 #include "hardware/ST7567.h"
 #elif (defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017))
+#if defined(PLATFORM_MD9600)
+#include "hardware/ST7567.h"
+#else
 #include "hardware/HX8353E.h"
+#endif
 #else
 #include "hardware/UC1701.h"
 #endif

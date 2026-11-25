@@ -28,6 +28,7 @@
  */
 
 #ifndef _OPENGD77_USB_COM_H_
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define _OPENGD77_USB_COM_H_
 
 #include <FreeRTOS.h>
@@ -39,6 +40,19 @@
 #include "virtual_com.h"
 #define APP_RX_DATA_SIZE (512 * 3)
 #endif
+#else // PLATFORM_MD9600
+#define _OPENGD77_USB_COM_H_
+
+#include <FreeRTOS.h>
+#include <task.h>
+#include "main.h"
+#if defined(PLATFORM_MD9600)
+#include "usbd_cdc_if.h"
+#else
+#include "virtual_com.h"
+#define APP_RX_DATA_SIZE (512 * 3)
+#endif
+#endif // PLATFORM_MD9600
 
 #define COM_BUFFER_SIZE APP_RX_DATA_SIZE
 #define COM_REQUESTBUFFER_SIZE COM_BUFFER_SIZE
@@ -50,6 +64,7 @@ extern volatile int com_buffer_cnt;
 
 extern volatile int comRecvMMDVMIndexIn;
 extern volatile int comRecvMMDVMIndexOut;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 extern volatile int comRecvMMDVMFrameCount;
 extern volatile int com_request;
 extern volatile uint8_t com_requestbuffer[COM_REQUESTBUFFER_SIZE];
@@ -59,16 +74,31 @@ extern volatile uint8_t usbComSendBuf[COM_BUFFER_SIZE];
 #else
 extern USB_DMA_NONINIT_DATA_ALIGN(USB_DATA_ALIGN_SIZE) uint8_t usbComSendBuf[COM_BUFFER_SIZE];
 #endif
+#else // PLATFORM_MD9600
+extern volatile int comRecvMMDVMFrameCount;
+extern volatile int com_request;
+extern volatile uint8_t com_requestbuffer[COM_REQUESTBUFFER_SIZE];
+
+#if defined(PLATFORM_MD9600)
+extern volatile uint8_t usbComSendBuf[COM_BUFFER_SIZE];
+#else
+extern USB_DMA_NONINIT_DATA_ALIGN(USB_DATA_ALIGN_SIZE) uint8_t usbComSendBuf[COM_BUFFER_SIZE];
+#endif
+#endif // PLATFORM_MD9600
 extern bool isCompressingAMBE;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 extern volatile bool usbIsResetting;
 
+#endif // PLATFORM_MD9600
 void tick_com_request(void);
 void send_packet(uint8_t val_0x82, uint8_t val_0x86, int ram);
 void send_packet_big(uint8_t val_0x82, uint8_t val_0x86, int ram1, int ram2);
 void add_to_commbuffer(uint8_t value);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool USB_DeviceIsResetting(void);
 
+#endif // PLATFORM_MD9600
 void USB_DEBUG_PRINT(const char *str);
 void USB_DEBUG_printf(const char *format, ...) __attribute__((format(__printf__, 1, 2)));
 

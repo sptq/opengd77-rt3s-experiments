@@ -337,6 +337,7 @@ uint8_t SPI_Flash_readSingleSecurityRegister(int addr)
 
       return value;
 }
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 #if 0
 bool SPI_Flash_StateIsBusy(void)
@@ -349,3 +350,4 @@ bool SPI_Flash_StateIsBusy(void)
 }
 #endif
 
+#endif // PLATFORM_MD9600

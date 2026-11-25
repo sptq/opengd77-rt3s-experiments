@@ -70,7 +70,9 @@ typedef enum _app_power_mode
 
 extern app_power_mode_t clockManagerCurrentRunMode;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 /* Value of the enum is critical, and controls the clock Multipler and divider
  * External clock frequency to the MCU is 12.288Mhz
  *
@@ -85,12 +87,20 @@ typedef enum
 	CLOCK_MANAGER_SPEED_UNDEF         = 0x0000,
 	CLOCK_MANAGER_SPEED_RUN           = 0x0603,
 	CLOCK_MANAGER_SPEED_HS_RUN        = 0x0205,
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	CLOCK_MANAGER_RUN_SUSPEND_MODE    = 0x1F00,
 	CLOCK_MANAGER_RUN_ECO_POWER_MODE  = 0x1F00,
+#else // PLATFORM_MD9600
+	CLOCK_MANAGER_RUN_SUSPEND_MODE    = 0x0B00
+#endif // PLATFORM_MD9600
 } clockManagerSpeedSetting_t;
 
 void clockManagerInit(void);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void clockManagerSetRunMode(uint8_t targetConfigIndex, clockManagerSpeedSetting_t clockSpeedSetting);
 clockManagerSpeedSetting_t clockManagerGetRunMode(void);
+#else // PLATFORM_MD9600
+void clockManagerSetRunMode(uint32_t targetConfigIndex, clockManagerSpeedSetting_t clockSpeedSetting);
+#endif // PLATFORM_MD9600
 
 #endif /* _POWER_MANAGER_H_ */

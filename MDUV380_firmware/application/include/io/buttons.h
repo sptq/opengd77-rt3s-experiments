@@ -58,6 +58,9 @@ extern volatile bool   PTTLocked;
 extern volatile bool PTTLocked;
 
 void buttonsInit(void);
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+uint32_t buttonsRead(uint16_t *frontPanelButtons, bool sk2IsLatched);
+#endif // PLATFORM_MD9600
 #if defined(PLATFORM_MD9600)
 void buttonsCheckButtonsEvent(uint32_t *buttons, int *event, bool keyIsDown, bool sk2IsLatched, uint16_t *frontPanelButtons);
 #else
@@ -65,4 +68,7 @@ uint32_t buttonsRead(void);
 void buttonsCheckButtonsEvent(uint32_t *buttons, int *event, bool keyIsDown);
 #endif
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 #endif /* _OPENGD77_BUTTONS_H_ */

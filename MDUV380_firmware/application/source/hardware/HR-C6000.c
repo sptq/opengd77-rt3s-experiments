@@ -1,3 +1,4 @@
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 /*
  * Copyright (C) 2019      Kai Ludwig, DG4KLU
  * Copyright (C) 2020-2025 Roger Clark, VK3KYY / G4KYF
@@ -114,6 +115,122 @@ static const uint8_t spi_init_values_5[] = { 0x00, 0x08, 0xeb, 0x78, 0x67 };
 /* send to 0x01 0x60 (these values are not sent by the TYT firmware but retained just in case.)
 static const uint8_t spi_init_values_6[] = { 0x32, 0xef, 0x00, 0x31, 0xef, 0x00, 0x12, 0xef, 0x00, 0x13, 0xef, 0x00, 0x14, 0xef, 0x00, 0x15, 0xef, 0x00, 0x16, 0xef, 0x00, 0x17, 0xef, 0x00, 0x18, 0xef, 0x00, 0x19, 0xef, 0x00, 0x1a, 0xef, 0x00, 0x1b, 0xef, 0x00, 0x1c, 0xef, 0x00, 0x1d, 0xef, 0x00, 0x1e, 0xef, 0x00, 0x1f, 0xef, 0x00, 0x20, 0xef, 0x00, 0x21, 0xef, 0x00, 0x22, 0xef, 0x00, 0x23, 0xef, 0x00, 0x24, 0xef, 0x00, 0x25, 0xef, 0x00, 0x26, 0xef, 0x00, 0x27, 0xef, 0x00, 0x28, 0xef, 0x00, 0x29, 0xef, 0x00, 0x2a, 0xef, 0x00, 0x2b, 0xef, 0x00, 0x2c, 0xef, 0x00, 0x2d, 0xef, 0x00, 0x2e, 0xef, 0x00, 0x2f, 0xef, 0x00 };
 */
+#else // PLATFORM_MD9600
+/*
+ * Copyright (C) 2019      Kai Ludwig, DG4KLU
+ * Copyright (C) 2020-2025 Roger Clark, VK3KYY / G4KYF
+ *                         Daniel Caujolle-Bert, F1RMB
+ *
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+ *    in the documentation and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * 4. Use of this source code or binary releases for commercial purposes is strictly forbidden. This includes, without limitation,
+ *    incorporation in a commercial product or incorporation into a product or project which allows commercial use.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#include "hardware/HR-C6000.h"
+#include "functions/settings.h"
+#if defined(USING_EXTERNAL_DEBUGGER)
+#include "SeggerRTT/RTT/SEGGER_RTT.h"
+#endif
+#include "functions/trx.h"
+#include "functions/hotspot.h"
+#include "user_interface/uiUtilities.h"
+#include "functions/voicePrompts.h"
+#include "interfaces/gpio.h"
+#include "interfaces/interrupts.h"
+#include "functions/rxPowerSaving.h"
+#include "functions/ticks.h"
+#include "interfaces/gps.h"
+#if defined(PLATFORM_MD9600) || defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
+#include "hardware/radioHardwareInterface.h"
+#endif
+
+#define QSODATA_TIMER_TIMEOUT            2400
+#define QSODATA_RX_BEEP_TIMER_TIMEOUT   (QSODATA_TIMER_TIMEOUT - 1000)
+// we can't immediately use the LC data out of the chip, as it will return the header from the previous
+// reception (except in hotspot mode), and mess up all the lastheard, contact data, display QSO Info
+#define QSODATA_THRESHOLD_COUNT             2 // number of frames sequence #1 before sending data to the UI.
+#define INTERRUPT_TIMEOUT                 200
+
+#define SYS_INT_SEND_REQUEST_REJECTED    0x80
+#define SYS_INT_SEND_START               0x40
+#define SYS_INT_SEND_END                 0x20
+#define SYS_INT_POST_ACCESS              0x10
+#define SYS_INT_RECEIVED_DATA            0x08
+#define SYS_INT_RECEIVED_INFORMATION     0x04
+#define SYS_INT_ABNORMAL_EXIT            0x02
+#define SYS_INT_PHYSICAL_LAYER           0x01
+
+#define WAKEUP_RETRY_PERIOD               600 // The official firmware seems to use a 600mS retry period.
+
+#define NUM_AMBE_BLOCK_PER_DMR_FRAME        3
+#define NUM_AMBE_BUFFERS                    4
+#define LENGTH_AMBE_BLOCK                   9
+
+#define START_TICK_TIMEOUT                 20
+#define END_TICK_TIMEOUT                   13
+
+#define CC_HOLD_TIME                     5000 // 5 second
+#define TS_SYNC_STARTUP_TIMEOUT          2500 // 2.5 seconds timeout while synchronizing timeslot
+#define TS_SYNC_SCAN_TIMEOUT       (360 + 30) // 1 superframe + 1 TS timeout, for timeslot sync while scanning
+
+#define TS_DISAGREE_THRESHOLD               3
+#define TS_STABLE_THRESHOLD                 4
+#define TS_IS_LOCKED                        6
+
+#define HS_NUM_OF_SILENCE_SEQ_ON_STARTUP    1 // Hotspot: number of silence sequences (x6 frames) sent to the chip when a transmission is starting (cleaner audio result)
+
+#define SUPERFRAME_NUM_FRAMES               6
+
+#define CC_PROBE_MAX_COUNT                 (4 * 2)
+#define CC_PROBE_LOCKED                    (CC_PROBE_MAX_COUNT + 1)
+
+
+Task_t hrc6000Task;
+
+static bool sendingDCS = false;
+
+static const uint8_t SILENCE_AUDIO[AMBE_AUDIO_LENGTH] = {
+		0xB9U, 0xE8U, 0x81U, 0x52U, 0x61U, 0x73U, 0x00U, 0x2AU, 0x6BU, 0xB9U, 0xE8U, 0x81U, 0x52U,
+		0x61U, 0x73U, 0x00U, 0x2AU, 0x6BU, 0xB9U, 0xE8U, 0x81U, 0x52U, 0x61U, 0x73U, 0x00U, 0x2AU, 0x6BU
+};
+
+//ALL THE FOLLOWING INITIALISATION VALES WERE CAPTURED FROM THE OFFCIAL TYT FIRMWARE FOR THE MD-9600
+
+
+static const uint8_t MS_sync_pattern[] = { 0xd5, 0xd7, 0xf7, 0x7f, 0xd7, 0x57 };          //Mobile Station Sync Pattern for voice calls Repeater or Simplex
+//static const uint8_t TDMA1_sync_pattern[] = { 0xf7, 0xfd, 0xd5, 0xdd, 0xfd, 0x55 };       //TDMA1 Sync Pattern for voice calls TDMA Simplex
+//static const uint8_t TDMA2_sync_pattern[] = { 0xd7, 0x55, 0x7f, 0x5f, 0xf7, 0xf5 };      //TDMA2 Sync Pattern for voice calls TDMA Simplex
+
+//send to 0x01 0x10
+static const uint8_t spi_init_values_2[] = { 0x69, 0x69, 0x96, 0x96, 0x96, 0x99, 0x99, 0x99, 0xa5, 0xa5, 0xaa, 0xaa, 0xcc, 0xcc, 0x00, 0xf0, 0x01, 0xff, 0x01, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x0D, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+//send to 0x01 0x30
+static const uint8_t spi_init_values_3[] = { 0x00, 0x00, 0x20, 0x3C, 0xFF, 0xFF, 0x3F, 0x50, 0x07, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+//send to 0x01 0x40
+static const uint8_t spi_init_values_4[] = { 0x00, 0x01, 0x01, 0x02, 0x01, 0x1e, 0xf0 };
+// send to 0x01 0x50
+static const uint8_t spi_init_values_5[] = { 0x00, 0x08, 0xeb, 0x78, 0x67 };
+// send to 0x01 0x60 (these values are not sent by the TYT firmware but retained just in case.)
+static const uint8_t spi_init_values_6[] = { 0x32, 0xef, 0x00, 0x31, 0xef, 0x00, 0x12, 0xef, 0x00, 0x13, 0xef, 0x00, 0x14, 0xef, 0x00, 0x15, 0xef, 0x00, 0x16, 0xef, 0x00, 0x17, 0xef, 0x00, 0x18, 0xef, 0x00, 0x19, 0xef, 0x00, 0x1a, 0xef, 0x00, 0x1b, 0xef, 0x00, 0x1c, 0xef, 0x00, 0x1d, 0xef, 0x00, 0x1e, 0xef, 0x00, 0x1f, 0xef, 0x00, 0x20, 0xef, 0x00, 0x21, 0xef, 0x00, 0x22, 0xef, 0x00, 0x23, 0xef, 0x00, 0x24, 0xef, 0x00, 0x25, 0xef, 0x00, 0x26, 0xef, 0x00, 0x27, 0xef, 0x00, 0x28, 0xef, 0x00, 0x29, 0xef, 0x00, 0x2a, 0xef, 0x00, 0x2b, 0xef, 0x00, 0x2c, 0xef, 0x00, 0x2d, 0xef, 0x00, 0x2e, 0xef, 0x00, 0x2f, 0xef, 0x00 };
+#endif // PLATFORM_MD9600
 
 static const uint8_t spiInitReg0x04_PLL[7][2] = {
 		{0x0A, 0x80}, //internal clock
@@ -126,10 +243,19 @@ static const uint8_t spiInitReg0x04_PLL[7][2] = {
 };
 
 static const uint8_t spiInitReg0x04MultiInit1[][2] = {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0xA1, 0x80},   //Set Baseband receive mode (this overrides and IF mode selections)
 		{0x10, 0xF3},   //
+#else // PLATFORM_MD9600
+		{0xA1, 0x00},   //Set IF receive mode
+		{0xC0, 0x0A},   //Set RF Signal Advance to 1ms (10x100us)
+		{0x36, 0x00},   //Disable FM received Audio. (MD9600 uses true FM receiver not the HRC6000)
+#endif // PLATFORM_MD9600
 		{0x5F, 0xF0},   //G4EML Enable Sync detection for MS, BS , TDMA1 or TDMA2 originated signals (Was originally 0xC0)
 		{0x40, 0x43},  	//Enable DMR Rx, Passive Timing, Normal mode
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+		{0x41, 0x40},   //Receive during next timeslot
+#endif // PLATFORM_MD9600
 		{0x07, 0x0B},   //Set IF Frequency H to default 450KHz
 		{0x08, 0xB8},   //Set IF Frequency M to default 450KHz
 		{0x09, 0x00},   //Set IF Frequency L to default 450KHz
@@ -139,14 +265,21 @@ static const uint8_t spiInitReg0x04MultiInit1[][2] = {
 		{0x02, 0x00},	//zero Transmit I Offset
 		{0x03, 0x00},   //zero Receive I Offset
 		{0x04, 0x00},   //zero Transmit Q Offset
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0x05, 0x00},   //Zero Receive Q Offset
 		{0x01, 0xF8}
+#else // PLATFORM_MD9600
+		{0x05, 0x00}   //Zero Receive Q Offset
+#endif // PLATFORM_MD9600
 };
 
 // send to 0x04 0x11
 static const uint8_t spi_init_values_7[] = {0x80, 0x0C, 0x22, 0x01, 0x00, 0x00, 0x33, 0xEF, 0x00, 0xFF, 0xFF, 0xFF, 0xF0, 0xF0, 0x10, 0x00, 0x00, 0x06, 0x3B, 0xF8, 0x0E, 0xFD, 0x40, 0xFF, 0x00, 0x0B, 0x00, 0x00, 0x00, 0x06, 0x0B, 0x00, 0x17, 0x02, 0xFF, 0xE0, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static const uint8_t spiInitReg0x04MultiInit2[][2] = {
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+		{0xA1, 0x00},   //Set IF receive mode
+#endif // PLATFORM_MD9600
 		{0x00, 0x2A},   //Partial Reset
 		{0x06, 0x22}    //open music
 };
@@ -167,14 +300,24 @@ static const uint8_t spiInitReg0x04MultiInit4[][2] = {
 		{0x1D, 0xFF},	//Unaddress mask
 		{0x1E, 0xF1},	//broadcast address
 		{0xE2, 0x06},	//Configure Codec
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0xE4, 0x27},	//Mic Gain
+#else // PLATFORM_MD9600
+		{0xE0, 0xC9},	//Configure Codec
+		{0xE4, 0xE7},	//Mic Gain
+#endif // PLATFORM_MD9600
 		{0xE3, 0x52},	//Codec Default value
 		{0xE5, 0x1A},	//Codec Default value
 		{0xE1, 0x0F},	//Codec Default value
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0xD1, 0xC4},
+#else // PLATFORM_MD9600
+		{0x37, 0xC2},	//DAC Data Shift Settings
+#endif // PLATFORM_MD9600
 		{0x25, 0x0E},	//DAC power control
 		{0x26, 0xFD},	//ADC Control
 		{0x64, 0x00},	//Unknown Register
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0x10, 0x6B},	//Set DMR,Tier2,Timeslot Mode, Layer 2, Repeater, Aligned, Slot1
 		{0x81, 0x19},
 		{0x01, 0xF0},
@@ -184,11 +327,23 @@ static const uint8_t spiInitReg0x04MultiInit4[][2] = {
 		{0xE0, 0xC9},
 		{0x25, 0x0E},
 		{0x26, 0xFD},
+#else // PLATFORM_MD9600
+		{0x10, 0x6E},	//Set DMR,Tier2,Timeslot Mode, Layer 2, Repeater, Aligned, Slot1
+#endif // PLATFORM_MD9600
 		{0x48, 0x00},	//Set Offset from Ref Osc calibration value
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{0x47, 0x21},	//'''
 		{0x1F, 0x10}	//Set CC1
+#else // PLATFORM_MD9600
+		{0x47, 0x16},	//'''
+		{0x1F, 0x10},	//Set CC1
+		{0x34, 0xB8},	//Set FM Options
+		{0x37, 0x80}	//DAC shift Settings
+#endif // PLATFORM_MD9600
 };
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
+#endif // PLATFORM_MD9600
 
 enum RXSyncClass { SYNC_CLASS_HEADER = 0, SYNC_CLASS_VOICE = 1, SYNC_CLASS_DATA = 2, SYNC_CLASS_RC = 3 };
 enum RXSyncType { MS_SYNC = 0, BS_SYNC = 1, TDMA1_SYNC = 2, TDMA2_SYNC = 3 };
@@ -327,7 +482,11 @@ static void hrc6000DataAckStart(const uint8_t *hdr12);
 static void hrc6000DataTxStartBurst(void);
 #endif
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static HRC6000_Tone1Config_t savedTone1Config = { .Mode = 0, .Dev = 0, .D1 = 0 };
+#else // PLATFORM_MD9600
+static HRC6000_Tone1Config_t savedTone1Config = { .Mode = 0, .Dev = 0 };
+#endif // PLATFORM_MD9600
 
 uint8_t getCurrentTATxFlag(void)
 {
@@ -385,7 +544,11 @@ void HRC6000Init(void)
 	//reset and send open music (I think this possibly inits the vocoder)
 	hrc6000WriteSPIRegister0x04Multi(spiInitReg0x04MultiInit2, (sizeof(spiInitReg0x04MultiInit2) / sizeof(spiInitReg0x04MultiInit2[0])));
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	// send 128 0x7Fs to bank 3
+#else // PLATFORM_MD9600
+	// send 128 0xFFs to bank 33
+#endif // PLATFORM_MD9600
 	const int SIZE_OF_FILL_BUFFER = 128;
 	uint8_t spi_values[SIZE_OF_FILL_BUFFER];
 	memset(spi_values, 0x7F, SIZE_OF_FILL_BUFFER);
@@ -399,7 +562,11 @@ void HRC6000Init(void)
 	SPI0WritePageRegByteArray(0x01, 0x30, spi_init_values_3, 0x10);
 	SPI0WritePageRegByteArray(0x01, 0x40, spi_init_values_4, 0x07);
 	SPI0WritePageRegByteArray(0x01, 0x50, spi_init_values_5, 0x05);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //	SPI0WritePageRegByteArray(0x01, 0x60, spi_init_values_6, 0x60);
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByteArray(0x01, 0x60, spi_init_values_6, 0x60);
+#endif // PLATFORM_MD9600
 
 	//set a few more auxiliary config registers
 	SPI0WritePageRegByte(0x01, 0x52, 0x08);
@@ -413,7 +580,9 @@ void HRC6000Init(void)
 	hrc6000WriteSPIRegister0x04Multi(spiInitReg0x04MultiInit4, (sizeof(spiInitReg0x04MultiInit4) / sizeof(spiInitReg0x04MultiInit4[0])));
 
 	//set a few more auxiliary config registers
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x01, 0x54, 0x78);
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x01, 0x24, 0x00);
 	SPI0WritePageRegByte(0x01, 0x25, 0x00);
 	SPI0WritePageRegByte(0x01, 0x26, 0x00);
@@ -440,6 +609,7 @@ void HRC6000Init(void)
 	HRC6000InitDTMF();						// initialise the DTMF Tones/
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void HRC6000FlushMusic(void)
 {
 	// send 128 0x7Fs to bank 3
@@ -458,9 +628,14 @@ void HRC6000FlushMusic(void)
 }
 
 
+#endif // PLATFORM_MD9600
 void HRC6000SetMicGainDMR(uint8_t gain)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE4, 0x20 + gain);
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE4, 0xE0 + gain);
+#endif // PLATFORM_MD9600
 }
 
 static inline bool hrc6000CrcIsValid(void)
@@ -791,7 +966,11 @@ static void hrc6000HandleLCData(void)
 #ifdef CPU_MK22FN512VLL12
 void PORTC_IRQHandler(void)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //#warning port to MDUV380
+#else // PLATFORM_MD9600
+//#warning port to md9600
+#endif // PLATFORM_MD9600
 
 	hrc.inIRQHandler = true;
 
@@ -1550,7 +1729,11 @@ void hrc6000TxBurstCallback(void)
 void hrc6000TimeslotInterruptHandler(void)
 {
 	//this check needs to be immediately at the start of the ISR to try to keep the Tx Burst length as close as possible to 30ms.
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	if((trxIsTransmittingDMR) && ( ticksGetMillis() - trxDMRstartTime > 20 ))				// The MDUV380 doesn't have the hardware for the Rx Interrupt so we turn off the tx from here instead if it has been on for at least 20ms
+#else // PLATFORM_MD9600
+	if((trxIsTransmittingDMR) && ( ticksGetMillis() - trxDMRstartTime > 20 ))				// The MD9600 doesn't have the hardware for the Rx Interrupt so we turn off the tx from here instead if it has been on for at least 20ms
+#endif // PLATFORM_MD9600
 	{
 		hrc6000RxInterruptHandler();
 	}
@@ -2115,7 +2298,11 @@ void hrc6000TimeslotInterruptHandler(void)
 	}
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //the MDUV380 does not have the hardware for the Rx Interrupt This handler is retained for compatibility and is called from the timeslot interrupt handler.
+#else // PLATFORM_MD9600
+//the MD9600 does not have the hardware for the Rx Interrupt This handler is retained for compatibility and is called from the timeslot interrupt handler.
+#endif // PLATFORM_MD9600
 static inline void hrc6000RxInterruptHandler(void)
 {
 	if(trxIsTransmittingDMR)					//if we are currently sending DMR then just turn off the RF
@@ -2978,15 +3165,27 @@ bool HRC6000HasGotSync(void)
 
 void HRC6000SetMicGainFM(uint8_t gain)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE4, 0x20 + (gain));
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE4, 0xE0 + (gain));
+#endif // PLATFORM_MD9600
 }
 
 void HRC6000SetFMTx(void)
 {
 	SPI0WritePageRegByte(0x04, 0x10, 0x80);											//Switch to FM Mode
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //	SPI0WritePageRegByte(0x04, 0xE2, 0x00);											//configure ADC and DAc
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE2, 0x00);											//configure ADC and DAc
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE0, 0xC9);											//CPU Controls Codec, Line in 1,LineOut2, I2S Slave Mode
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE4, 0x20 + (nonVolatileSettings.micGainFM));       //Mic Gain
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE4, 0xE0 + (nonVolatileSettings.micGainFM));       //Mic Gain
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xC2, 0x00);											//Mic AGC Off
 	SPI0WritePageRegByte(0x04, 0xE5, 0x1A);											//Unknown (Default value = 0A)
 	SPI0WritePageRegByte(0x04, 0x25, 0x0E);											//Undocumented Register
@@ -3008,13 +3207,21 @@ void HRC6000SetFMTx(void)
 	{
 		if(trxGetBandwidthIs25kHz())
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x24;                                                           //FM Deviation Coefficients for UHF 25KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x34;                                                           //FM Deviation Coefficients for UHF 25KHz Channel Spacing
+#endif // PLATFORM_MD9600
 			CTCdeviation = 0x09;
 			DCSdeviation = 0x02;
 		}
 		else
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x12;															//FM Deviation Coefficients for UHF 12.5KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x1A;															//FM Deviation Coefficients for UHF 12.5KHz Channel Spacing
+#endif // PLATFORM_MD9600
 			CTCdeviation = 0x06;
 			DCSdeviation = 0x01;
 		}
@@ -3023,13 +3230,21 @@ void HRC6000SetFMTx(void)
 	{
 		if(trxGetBandwidthIs25kHz())
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x73;                                                           //FM Deviation Coefficients for VHF 25KHz Channel Spacing (Warning 0x68 seems to be the maximum before distortion)
+#else // PLATFORM_MD9600
+			deviation = 0x68;                                                           //FM Deviation Coefficients for VHF 25KHz Channel Spacing (Warning 0x68 seems to be the maximum before distortion)
+#endif // PLATFORM_MD9600
 			CTCdeviation = 0x18;
 			DCSdeviation = 0x06;
 		}
 		else
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x37;															//FM Deviation Coefficients for VHF 12.5KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x40;															//FM Deviation Coefficients for VHF 12.5KHz Channel Spacing
+#endif // PLATFORM_MD9600
 			CTCdeviation = 0x10;
 			DCSdeviation = 0x04;
 		}
@@ -3048,6 +3263,9 @@ void HRC6000SetFMTx(void)
 	SPI0WritePageRegByte(0x04, 0x3F, 0x04);											//Set FM Limiting Modulation Factor
 	SPI0WritePageRegByte(0x04, 0x34, 0x3C);											//Compressor off, Pre-Emph on 3KHz Audio Filter
 	SPI0WritePageRegByte(0x04, 0x3E, 0x08);											//Rx FM Deviation Coefficient
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0x37, 0x80);											//Set Codec DAC Gain
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x01, 0x50, 0x00);											//Aux Register 0x50 Undocumented
 	SPI0WritePageRegByte(0x01, 0x51, 0x00);											//Aux Register 0x51 Undocumented
 	SPI0WritePageRegByte(0x04, 0x60, 0x80);											//Set Tx to Analogue Voice Sending mode
@@ -3058,6 +3276,9 @@ void HRC6000SetFMRx(void)
 	SPI0WritePageRegByte(0x04, 0x60, 0x00);							//FM Voice Tx Mode Off
 	SPI0WritePageRegByte(0x04, 0xE0, 0x89);							//Turn off Microphone input
 	SPI0WritePageRegByte(0x04, 0x10, 0x80);							//Mod Mode FM
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE2, 0x06);							//configure ADC and DAc
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0x34, 0x3C);							//Compressor off, de-Emph on 3KHz Audio Filter
 	SPI0WritePageRegByte(0x04, 0x81, 0x19);							//Interrupt Masks (for DMR?)
 	SPI0WritePageRegByte(0x04, 0x85, 0x00);							//Interrupt Masks )For DMR?)
@@ -3067,9 +3288,16 @@ void HRC6000SetFMRx(void)
 //restore all important registers that may have been changed by FM mode
 void HRC6000SetDMR(void)
 {
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 	if(trxGetFrequency() > 30000000)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0x01, 0xF0);										//set 2 point Mod, receive mode IF, non inverted (for UHF)
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0x01, 0xB0);										//set 2 point Mod, receive mode IF, non inverted (for UHF)
+#endif // PLATFORM_MD9600
 	}
 	else
 	{
@@ -3079,22 +3307,40 @@ void HRC6000SetDMR(void)
 	SPI0WritePageRegByte(0x04, 0x45, digitalIGain);									//Set MOD2 Level (from cal table)
 	SPI0WritePageRegByte(0x04, 0x46, digitalQGain);									//Set MOD1 Level (from cal table)
 	SPI0WritePageRegByte(0x04, 0x10, 0x6E);											//Set mode to DMR,Tier2,Timeslot Mode, Layer 2, Repeater, Aligned, Slot1
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE2, 0x06);											//Configure DAC and ADC
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE0, 0xC9);   										//CODEC under MCU Control, LineOut2 Enabled, Mic_p Enabled,  I2S Slave Mode
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xE4, 0x20 + (nonVolatileSettings.micGainDMR));		//Mic Gain
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xE4, 0xE0 + (nonVolatileSettings.micGainDMR));		//Mic Gain
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0x26, 0xFD);											//Undocumented register believed to control IF ADC
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0x37, 0x80);											//Set Codec DAC Gain
+#endif // PLATFORM_MD9600
 }
 
 void HRC6000SetTxCTCSS(uint8_t index)
 {
 	if(index > 0)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x88);					//Enable CTCSS Mode
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x08);					//Enable CTCSS Mode
+#endif // PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA8, index);				//set the CTCSS Tone
 		sendingDCS = false;
 	}
 	else
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x80);					//Disable CTCSS and DCS Mode
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x00);					//Disable CTCSS and DCS Mode
+#endif // PLATFORM_MD9600
 		sendingDCS = false;
 	}
 }
@@ -3103,6 +3349,7 @@ void HRC6000SetTxDCS(uint16_t code, bool inverted)
 {
 	if(code > 0)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x84);					//Enable DCS Mode
 		if(inverted)
 		{
@@ -3114,11 +3361,21 @@ void HRC6000SetTxDCS(uint16_t code, bool inverted)
 		}
 		SPI0WritePageRegByte(0x04, 0xAB, code & 0xFF);			//low 8 bits of Octal Code
 		SPI0WritePageRegByte(0x04, 0xAC, (code>>8) & 0x01);		//High bit of Octal Code
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x04);                      //Enable DCS Mode
+		SPI0WritePageRegByte(0x04, 0xA2, (inverted ? 0x08 : 0x00));  //set the DCS Signaling Polarity
+		SPI0WritePageRegByte(0x04, 0xAB, code & 0xFF);               //low 8 bits of Octal Code
+		SPI0WritePageRegByte(0x04, 0xAC, (code >> 8) & 0x01);        //High bit of Octal Code
+#endif // PLATFORM_MD9600
 		sendingDCS = true;
 	}
 	else
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x80);					//Disable CTCSS and DCS Mode
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x00);                      //Disable CTCSS and DCS Mode
+#endif // PLATFORM_MD9600
 		sendingDCS = false;
 	}
 }
@@ -3127,6 +3384,7 @@ void HRC6000SetRxDCS(uint16_t code, bool inverted)
 {
 	if(code > 0)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x84);					//Enable DCS Mode
 		if(inverted)
 		{
@@ -3139,16 +3397,31 @@ void HRC6000SetRxDCS(uint16_t code, bool inverted)
 		SPI0WritePageRegByte(0x04, 0xD4, code & 0xFF);			                //low 8 bits of Octal Code to receive
 		SPI0WritePageRegByte(0x04, 0xD3, ((code>>4) & 0x10) + 0x03);		    //High bit of Octal Code to receive  plus sampling depth high nibble
 		SPI0WritePageRegByte(0x04, 0xD2, 0x20);						            //Sampling Depth Low byte to Set Sampling Depth to 800 (100ms at 8KHz)
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x04);                        //Enable DCS Mode
+		SPI0WritePageRegByte(0x04, 0xA2, (inverted ? 0x04 : 0x00));    //set the DCS Signaling Polarity
+		SPI0WritePageRegByte(0x04, 0xD4, code & 0xFF);                 //low 8 bits of Octal Code to receive
+		SPI0WritePageRegByte(0x04, 0xD3, ((code >> 4) & 0x10) + 0x03); //High bit of Octal Code to receive  plus sampling depth high nibble
+		SPI0WritePageRegByte(0x04, 0xD2, 0x20);                        //Sampling Depth Low byte to Set Sampling Depth to 800 (100ms at 8KHz)
+#endif // PLATFORM_MD9600
 	}
 	else
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		SPI0WritePageRegByte(0x04, 0xA1, 0x80);					//Disable CTCSS and DCS Mode
+#else // PLATFORM_MD9600
+		SPI0WritePageRegByte(0x04, 0xA1, 0x00);                        //Disable CTCSS and DCS Mode
+#endif // PLATFORM_MD9600
 	}
 }
 
 void HRC6000SetRxCTCSS(uint8_t index)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xA1, 0x88);					    //Enable CTCSS Mode
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xA1, 0x08);					    //Enable CTCSS Mode
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xA7, 0x10);						//Set Detection Threshold (was 0x10)
 	SPI0WritePageRegByte(0x04, 0xD3, 0x07);						//Set Sampling Depth to 2000 (250ms at 8KHz)
 	SPI0WritePageRegByte(0x04, 0xD2, 0xD0);						//
@@ -3159,19 +3432,52 @@ bool HRC6000CheckCSS(void)
 {
 	uint8_t res;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0ReadPageRegByte(0x04,0x93, &res);
+#else // PLATFORM_MD9600
+	SPI0ReadPageRegByte(0x04, 0x93, &res);
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	return (res & 0x01); //register 0x92 bit 0 has the CTCSS or DCS detected flag
+#else // PLATFORM_MD9600
+	return (res & 0x01); //register 0x93 bit 0 has the CTCSS or DCS detected flag
+#endif // PLATFORM_MD9600
 }
 
 void HRC6000SetLineOut(bool isOn)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0ClearPageRegByteWithMask(0x04, 0xE2, 0xFD, isOn ? 0x02 : 0x00);				//Enable or disable the DAC output to Line out
+#else // PLATFORM_MD9600
+	if(isOn)
+	{
+		SPI0ClearPageRegByteWithMask(0x04, 0xE2, 0xFD, 0x02);				//Enable the DAC output to Line out
+		if(voicePromptsIsPlaying())
+		{
+			SPI0WritePageRegByte(0x04, 0x10, 0x6E);							    //Set HRC6000 Rx mode to DMR because the Voice prompts don't work in FM mode.
+		}
+	}
+	else
+	{
+		SPI0ClearPageRegByteWithMask(0x04, 0xE2, 0xFD, 0x00);				//Disable the DAC output to Line out
+		if (trxGetMode() == RADIO_MODE_ANALOG)
+		{
+			SPI0WritePageRegByte(0x04, 0x10, 0x80);							//Set HRC6000 rx mode to FM
+		}
+		else
+		{
+			SPI0WritePageRegByte(0x04, 0x10, 0x6E);							//Set HRC6000 rx mode to DMR
+		}
+
+	}
+#endif // PLATFORM_MD9600
 }
 
 void HRC6000SetMic(bool isOn)
 {
 	SPI0ClearPageRegByteWithMask(0x04, 0xE0, 0xBF, isOn ? 0x40 : 0x00);				//Enable or disable the Mic Input to Line in 1
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 }
 
 void HRC6000SetFmAudio(bool isOn)
@@ -3198,6 +3504,7 @@ void HRC6000MuteFmAudio(bool isMute)
 	{
 		SPI0WritePageRegByte(0x04, 0x36, 0x02);					// Enable the FM audio FeedThrough
 	}
+#endif // PLATFORM_MD9600
 }
 
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
@@ -3216,39 +3523,70 @@ void HRC6000SetDTMF(uint8_t code)
 {
 	uint8_t deviation;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0ReadPageRegByte(0x04, 0xA1, &savedTone1Config.Mode);	//save the current tone mode
 	SPI0WritePageRegByte(0x04, 0xA1, 0x82);						//Enable DTMF Mode
 	SPI0ReadPageRegByte(0x04, 0xA0, &savedTone1Config.Dev);		//save the current tone deviation
 	SPI0ReadPageRegByte(0x04, 0xD1, &savedTone1Config.D1);		//save the current Register D1. (undocumented high order bits are important)
+#else // PLATFORM_MD9600
+	SPI0ReadPageRegByte(0x04, 0xA1, &savedTone1Config.Mode);					//save the current tone mode
+	SPI0WritePageRegByte(0x04, 0xA1, 0x02);					    //Enable DTMF Mode
+	SPI0ReadPageRegByte(0x04, 0xA0, &savedTone1Config.Dev);					//save the current tone deviation
+#endif // PLATFORM_MD9600
 
 	if(trxGetFrequency() > 30000000)
 	{
 		if(trxGetBandwidthIs25kHz())
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x24;														//DTMF Deviation Coefficient for UHF 25KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x3C;														//DTMF Deviation Coefficient for UHF 25KHz Channel Spacing
+#endif // PLATFORM_MD9600
 		}
 		else
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x12;														//DTMF Deviation Coefficient for UHF 12.5KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x1E;														//DTMF Deviation Coefficient for UHF 12.5KHz Channel Spacing
+#endif // PLATFORM_MD9600
 		}
 	}
 	else
 	{
 		if(trxGetBandwidthIs25kHz())
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x75;														//DTMF Deviation Coefficient for VHF 25KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x9A;														//DTMF Deviation Coefficient for VHF 25KHz Channel Spacing
+#endif // PLATFORM_MD9600
 		}
 		else
 		{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			deviation = 0x3A;														//DTMF Deviation Coefficient for VHF 12.5KHz Channel Spacing
+#else // PLATFORM_MD9600
+			deviation = 0x4B;														//DTMF Deviation Coefficient for VHF 12.5KHz Channel Spacing
+#endif // PLATFORM_MD9600
 		}
 	}
 
 	SPI0WritePageRegByte(0x04, 0xA0, deviation);				//set the DTMF deviation
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xA4, 0xFA);				        //set the tone time to FA (this seems to set the tone to be continuous) ( Normally 2ms increments)
 	SPI0WritePageRegByte(0x04, 0xA3, 0x19);				        //set the tone gap  (2ms increments)
 	SPI0WritePageRegByte(0x04, 0xD1, 0x01);				        //set the number of codes to one
 	SPI0WritePageRegByte(0x04, 0xAF, (code << 4));		        //set the code to be sent
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xA4, 0xFF);				        //set the tone time to Max (2ms increments)
+	SPI0WritePageRegByte(0x04, 0xA3, 0x00);				        //set the tone gap to zero  (2ms increments)
+	SPI0WritePageRegByte(0x04, 0xD1, 0x06);				        //set the number of codes to 6
+	SPI0WritePageRegByte(0x04, 0xAF, ((code<<4) | code));		//set the same code to be sent 6 times (2 codes per register)
+	SPI0WritePageRegByte(0x04, 0xAE, ((code<<4) | code));
+	SPI0WritePageRegByte(0x04, 0xAD, ((code<<4) | code));
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0x60, 0x00);		                //Set Analogue Voice Sending mode Off
 	SPI0WritePageRegByte(0x04, 0x60, 0x80);	                    //Set Analogue Voice Sending mode on again to send code
 }
@@ -3257,9 +3595,14 @@ void HRC6000DTMFoff(bool enableMic)
 {
 	HRC6000SetMic(enableMic);									//turn on or mute the mic as required.
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByte(0x04, 0xA0, savedTone1Config.Dev);		//restore the previous tone deviation
 	SPI0WritePageRegByte(0x04, 0xA1, savedTone1Config.Mode);	//restore the previous tone Mode
 	SPI0WritePageRegByte(0x04, 0xD1, savedTone1Config.D1);		//restore the previous D1 Contents. (undocumented but seem to be important)
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByte(0x04, 0xA0, savedTone1Config.Dev);				    //restore the previous tone deviation
+	SPI0WritePageRegByte(0x04, 0xA1, savedTone1Config.Mode);					//restore the previous tone Mode
+#endif // PLATFORM_MD9600
 	SPI0WritePageRegByteExtended(0x01, 0x11B, 0x05);			//restore the DTMF 697 Hz tone in case it has been changed by SetTone
 	SPI0WritePageRegByteExtended(0x01, 0x11A, 0x93);			//
 	SPI0WritePageRegByteExtended(0x01, 0x123, 0x09);			//restore the DTMF 1209 Hz tone in case it has been changed by SetTone
@@ -3272,13 +3615,30 @@ void HRC6000SendTone(int tonefreq)
 
 	tval = (tonefreq * 65536) / 32000;												//calculate the value required to generate this tone
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByteExtended(0x01, 0x11B, (tval >> 8) & 0xFF);				//re-configure the DTMF 697 Hz tone to be this frequency
 	SPI0WritePageRegByteExtended(0x01, 0x11A, tval & 0xFF);						//
+#else // PLATFORM_MD9600
+	uint8_t tH = (tval >> 8) & 0xFF;
+	uint8_t tL = tval & 0xFF;
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	SPI0WritePageRegByteExtended(0x01, 0x123, (tval >> 8) & 0xFF);				//re-configure DTMF 1209 Hz tone to be this frequency
 	SPI0WritePageRegByteExtended(0x01, 0x122, tval & 0xFF);						//
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByteExtended(0x01, 0x11B, tH);// Set  DTMF tone osc 1 to frequency of the required tone
+	SPI0WritePageRegByteExtended(0x01, 0x11A, tL);
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	HRC6000SetDTMF(1);                                                          //send DTMF key 1 to send these 2 tones.
+#else // PLATFORM_MD9600
+	SPI0WritePageRegByteExtended(0x01, 0x123, tH);// Set  DTMF tone osc 2 to frequency of the required tone
+	SPI0WritePageRegByteExtended(0x01, 0x122, tL);
+
+	HRC6000SetDTMF(1); //send DTMF key 1 to send a single
+#endif // PLATFORM_MD9600
 }
 
 void HRC6000InitDTMF(void)
@@ -3304,19 +3664,23 @@ void HRC6000InitDTMF(void)
 
 void HRC6000SetDmrRxGain(int8_t gain)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	HRC6000SetLineOut((gain < -31) ? false : true);
 
+#endif // PLATFORM_MD9600
 	gain = CLAMP(gain, -31, 31);
 	uint8_t val = (0x80 + ((gain > 0) * 0x40)) | (gain & 0x1F);
 	SPI0WritePageRegByte(0x04, 0x37, val);
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void HRC6000SetDmrAGCGain(int8_t gain)
 {
 
 }
 
 
+#endif // PLATFORM_MD9600
 bool HRC6000CCIsHeld(void)
 {
 	return hrc.ccHold;

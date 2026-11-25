@@ -74,11 +74,14 @@ LDFLAGS  := $(MCU_FLAGS) -T$(LDSCRIPT) --specs=nosys.specs --specs=nano.specs \
 # Source roots from .cproject sourceEntries
 SRC_ROOTS := SeggerRTT application Core Middlewares Drivers USB_DEVICE
 
-C_SRCS := $(shell find $(SRC_ROOTS) -name '*.c')
+# application/ is a symlink to the shared tree in MDUV380_firmware (-H follows it)
+C_SRCS := $(shell find -H $(SRC_ROOTS) -name '*.c')
 # Exclusion from .cproject
 C_SRCS := $(filter-out application/include/user_interface/languages/src/languages_builder.c,$(C_SRCS))
+# RT3S / MDUV380 only sources
+C_SRCS := $(filter-out application/source/hardware/AT1846S.c application/source/hardware/HX8353E_display.c application/source/user_interface/menuThemeOptions.c,$(C_SRCS))
 
-S_SRCS := $(shell find $(SRC_ROOTS) -name '*.s' -o -name '*.S')
+S_SRCS := $(shell find -H $(SRC_ROOTS) -name '*.s' -o -name '*.S')
 
 OBJS := $(addprefix $(BUILD_DIR)/,$(C_SRCS:.c=.o) $(S_SRCS:.s=.o))
 OBJS := $(OBJS:.S=.o)

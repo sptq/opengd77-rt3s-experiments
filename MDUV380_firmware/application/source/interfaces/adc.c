@@ -33,6 +33,7 @@
 
 
 const int TEMPERATURE_DECIMAL_RESOLUTION = 1000000;
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 const int CUTOFF_VOLTAGE_UPPER_HYST = 64;
 const int CUTOFF_VOLTAGE_LOWER_HYST = 62;
 const int BATTERY_MAX_VOLTAGE = 82;
@@ -44,6 +45,11 @@ const int POWEROFF_VOLTAGE_THRESHOLD = 55;
 #define BATTERY_ADC_COEFF 37.5f
 #endif
 
+#else // PLATFORM_MD9600
+const int CUTOFF_VOLTAGE_UPPER_HYST = 100;
+const int CUTOFF_VOLTAGE_LOWER_HYST = 80;
+const int BATTERY_MAX_VOLTAGE = 150;
+#endif // PLATFORM_MD9600
 
 //lookup table to convert linear Voltage values between 1 and 255 to dBs relative to 1 with a resolution of 0.2dB.  Values in tabble are dbs * 5 to use all of the available byte range.
 //calculated using dBs= (20 * Log10(index)) * 5
@@ -67,34 +73,93 @@ const uint8_t PointTwodBs[] =
 		238, 238, 238, 239, 239, 239, 239, 239, 239, 240, 240, 240, 240, 240, 240, 241
 };
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 volatile uint16_t adcVal[NUM_ADC_CHANNELS];
 static const int AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW = 1000.0f;
 static int16_t averagedVolume = 0; // value is (* 16) the real value.
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 void adcStartDMA(void)
 {
 	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adcVal, NUM_ADC_CHANNELS);
 	HAL_TIM_Base_Start_IT(&htim3);
 }
+#else // PLATFORM_MD9600
+volatile uint16_t adcVal[NUM_ADC_CHANNELS][NUM_ADC_SAMPLES];
+volatile uint8_t adcIndex = 0;
+volatile uint8_t adcSampleIndex = 0;
+static volatile uint32_t micAvg = 0;
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 //void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){} // Don't need to use the half full callback at the moment
+#else // PLATFORM_MD9600
+static const int AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW = 60.0f;// 120 secs = Sample window * BATTERY_VOLTAGE_TICK_RELOAD in milliseconds
+static const int BATTERY_VOLTAGE_STABILISATION_TIME = 1500;// time in PIT ticks for the battery voltage from the ADC to stabilise
+#endif // PLATFORM_MD9600
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	potLevel = adcVal[0];
 	batteryVoltage = ((int)adcVal[1] / BATTERY_ADC_COEFF) + ((nonVolatileSettings.batteryCalibration & 0x0F) - 5);
 	micLevel = adcVal[2];
 	temperatureLevel = adcVal[3];
+#else // PLATFORM_MD9600
+	if (hadc->Instance == ADC1)
+	{
+		adcVal[adcIndex][adcSampleIndex] = HAL_ADC_GetValue(&hadc1);
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	// Handle switching the power off, using the rotary control.
 	if (batteryVoltage > POWEROFF_VOLTAGE_THRESHOLD)
 	{
 		lastValidBatteryVoltage = batteryVoltage;
-	}
+#else // PLATFORM_MD9600
+		if (adcIndex == 3) // mic
+		{
+			volatile int mAvg = 0;
 
+			for (uint32_t i = 0; i < (NUM_ADC_SAMPLES - 1); i++)
+			{
+				mAvg += adcVal[3][i];
+			}
+
+			micAvg = (mAvg >> 3); // NUM_ADC_SAMPLES == 8
+		}
+
+		adcIndex++;
+		if (adcIndex > (NUM_ADC_CHANNELS - 1))
+		{
+			batteryVoltage = ((int)adcVal[2][adcSampleIndex] / 21.3f) + ((nonVolatileSettings.batteryCalibration & 0x0F) - 5);
+			if (ticksGetMillis() < BATTERY_VOLTAGE_STABILISATION_TIME)
+			{
+				averageBatteryVoltage = batteryVoltage;
+			}
+			else
+			{
+				averageBatteryVoltage = (averageBatteryVoltage * (AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW - 1) + batteryVoltage) / AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW;
+			}
+
+			adcIndex = 0;
+			adcSampleIndex = (adcSampleIndex + 1) % NUM_ADC_SAMPLES;
+		}
+
+		HAL_ADC_Start_IT(&hadc1);
+#endif // PLATFORM_MD9600
+	}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+}
+#endif // PLATFORM_MD9600
+
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	// Fork: the same average without the 0.1 V truncation, for the battery runtime estimate
 	float fineVoltage = (((float)adcVal[1] / BATTERY_ADC_COEFF) + (float)((nonVolatileSettings.batteryCalibration & 0x0F) - 5));
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	if (ticksGetMillis() < (BATTERY_VOLTAGE_STABILISATION_TIME + resumeTicks))
 	{
 		averageBatteryVoltage = batteryVoltage;
@@ -105,6 +170,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 		averageBatteryVoltage = (averageBatteryVoltage * (AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW - 1) + batteryVoltage) / AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW;
 		averageBatteryVoltageFine = (averageBatteryVoltageFine * (AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW - 1) + fineVoltage) / AVERAGE_BATTERY_VOLTAGE_SAMPLE_WINDOW;
 	}
+#else // PLATFORM_MD9600
+int adcGetMicRow(void)
+{
+	return (int) adcVal[0][0];		//doesn't need averaging so just use one of the recent conversions
+}
+
+int adcGetMicCol(void)
+{
+	return (int) adcVal[1][0];		//doesn't need averaging so just use one of the recent conversions
+#endif // PLATFORM_MD9600
 }
 
 int adcGetBatteryVoltage(void)
@@ -112,9 +187,65 @@ int adcGetBatteryVoltage(void)
 	return batteryVoltage;			//doesn't need averaging so just use the most recent conversion
 }
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+#endif // PLATFORM_MD9600
 int adcGetVOX(void)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	return ((micLevel > 255) ? 255 : PointTwodBs[micLevel]);
+#else // PLATFORM_MD9600
+	//	convert to 0.2dB steps relative to 1
+	return (int)PointTwodBs[MIN(255, micAvg)];
+}
+
+int adcGetVHFRSSI(void)
+{
+	int avg = 0;
+
+	for (int i = 0; i < (NUM_ADC_SAMPLES - 1); i++)
+	{
+		avg = avg + adcVal[4][i];
+	}
+
+	return (avg / NUM_ADC_SAMPLES) >> 4;                  //RSSI was 8 bits on at1846s
+}
+
+int adcGetUHFRSSI(void)
+{
+	int avg = 0;
+
+	for (int i = 0; i < (NUM_ADC_SAMPLES - 1); i++)
+	{
+		avg = avg + adcVal[5][i];
+	}
+
+	return (avg / NUM_ADC_SAMPLES) >> 4;                   //RSSI was 8 bits on at1846s
+}
+
+int adcGetVHFNoise(void)
+{
+	int avg = 0;
+
+	for (int i = 0; i < (NUM_ADC_SAMPLES - 1); i++)
+	{
+		avg = avg + adcVal[6][i];
+	}
+
+	return (avg / NUM_ADC_SAMPLES) >> 4;                   //Noise was 8 bits on at1846s. Bring the noise reading into roughly the same range.
+}
+
+int adcGetUHFNoise(void)
+{
+	int avg = 0;
+
+	for (int i = 0; i < (NUM_ADC_SAMPLES - 1); i++)
+	{
+		avg = avg + adcVal[7][i];
+	}
+
+	return (avg / NUM_ADC_SAMPLES) >> 4;                   //Noise was 8 bits on at1846s. Bring the noise reading into roughly the same range.
+#endif // PLATFORM_MD9600
 }
 
 int getTemperature(void)
@@ -122,9 +253,15 @@ int getTemperature(void)
 	const int tV25 = 943;					// ADC Value at 25 degrees from data sheet (0.76V with 12 Bit ADC ref=3V3)
     const int tslope = 31;	                //Slope from datasheet ADC Counts *10
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
     return (((temperatureLevel - tV25) * 100) / tslope) + 250 + (nonVolatileSettings.temperatureCalibration * 5);
+#else // PLATFORM_MD9600
+    return (((adcVal[8][0] - tV25) * 100) / tslope) + 250 + (nonVolatileSettings.temperatureCalibration * 5);
+
+#endif // PLATFORM_MD9600
 }
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #if defined(PLATFORM_RT84_DM1701)
 #define MIN_VOL_ADC_LOW 34 // 29 + 5
 #define MAX_VOL_ADC_VAL 2070 // 2075 - 5
@@ -152,11 +289,15 @@ int getTemperature(void)
 #define VOL_POT_ADC_MID_POINT 317
 #define MIN_VOL_LOW_TO_HIGH_OFFSET 8
 #endif
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #define MIN_VOL_ADC_HIGH (MIN_VOL_ADC_LOW + MIN_VOL_LOW_TO_HIGH_OFFSET)
 #define VOL_LOW_SIDE_DIV ((VOL_POT_ADC_MID_POINT - MIN_VOL_ADC_HIGH) / 31)
 #define VOL_HIGH_SIDE_DIV ((MAX_VOL_ADC_VAL - VOL_POT_ADC_MID_POINT) / 31)
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static int8_t getVolumeControlRaw(void)
 {
 	// volume control is adc[0]. Max value seems to be:
@@ -170,7 +311,9 @@ static int8_t getVolumeControlRaw(void)
 	int vol = potLevel;
 	int pos;
 	static bool minvol;
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	if (vol < VOL_POT_ADC_MID_POINT)
 	{
 		pos = (vol - MIN_VOL_ADC_HIGH) / VOL_LOW_SIDE_DIV; // convert to 0-31
@@ -179,13 +322,17 @@ static int8_t getVolumeControlRaw(void)
 	{
 		pos = 31 + ((vol - VOL_POT_ADC_MID_POINT) / VOL_HIGH_SIDE_DIV); // convert to 31-62
 	}
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	if (minvol ? (vol < MIN_VOL_ADC_HIGH) : (vol < MIN_VOL_ADC_LOW))
 	{
 		minvol = true;
 		return -99; // -99 = volume min (muted)
 	}
+#endif // PLATFORM_MD9600
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	minvol = false;
 	return (int8_t)CLAMP(pos - 31, -31, 31);
 }
@@ -204,3 +351,4 @@ int8_t getVolumeControl(void)
 
 	return (int8_t)CLAMP((averagedVolume >> 4), -31, 31);
 }
+#endif // PLATFORM_MD9600

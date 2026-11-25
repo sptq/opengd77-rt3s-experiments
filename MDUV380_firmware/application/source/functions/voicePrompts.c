@@ -68,7 +68,11 @@ static int currentPromptLength = -1;
 #define PROMPT_TAIL  30
 static volatile uint32_t promptTail = 0; // used within ISR
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static __attribute__((section(".ccmram"))) uint8_t ambeData[AMBE_DATA_BUFFER_SIZE];
+#else // PLATFORM_MD9600
+static __attribute__((section(".data.$RAM2"))) uint8_t ambeData[AMBE_DATA_BUFFER_SIZE];
+#endif // PLATFORM_MD9600
 
 #define VOICE_PROMPTS_SEQUENCE_BUFFER_SIZE 128
 
@@ -79,13 +83,21 @@ typedef struct
 	uint32_t  Length;
 } VoicePromptsSequence_t;
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static __attribute__((section(".ccmram"))) VoicePromptsSequence_t voicePromptsCurrentSequence =
+#else // PLATFORM_MD9600
+static __attribute__((section(".data.$RAM2"))) VoicePromptsSequence_t voicePromptsCurrentSequence =
+#endif // PLATFORM_MD9600
 {
 	.Pos = 0,
 	.Length = 0
 };
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 static __attribute__((section(".ccmram"))) uint32_t tableOfContents[VOICE_PROMPTS_TOC_SIZE];
+#else // PLATFORM_MD9600
+static __attribute__((section(".data.$RAM2"))) uint32_t tableOfContents[VOICE_PROMPTS_TOC_SIZE];
+#endif // PLATFORM_MD9600
 
 static bool temporaryOverride = false;
 

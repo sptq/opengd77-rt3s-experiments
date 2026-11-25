@@ -29,3 +29,25 @@
 
 #include "interfaces/i2c.h"
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+#if defined(USING_EXTERNAL_DEBUGGER)
+#include "SeggerRTT/RTT/SEGGER_RTT.h"
+#endif
+
+volatile int isI2cInUse = 0;
+
+void I2C0aInit(void)
+{
+}
+
+void I2C0bInit(void)
+{
+}
+
+void I2C0Setup(void)
+{
+
+}
+
+
+#endif // PLATFORM_MD9600

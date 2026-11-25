@@ -30,7 +30,12 @@
 
 #include "main.h"
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 bool settingsStorageRead(uint8_t *buf, uint32_t size);
 bool settingsStorageWrite(uint8_t *buf, uint32_t size);
+#else // PLATFORM_MD9600
+bool settingsStorageRead(uint8_t *buf, uint32_t size, bool usePermanentStorage);
+bool settingsStorageWrite(uint8_t *buf, uint32_t size, bool usePermanentStorage);
+#endif // PLATFORM_MD9600
 
 #endif

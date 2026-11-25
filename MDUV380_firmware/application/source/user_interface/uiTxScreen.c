@@ -123,6 +123,7 @@ menuStatus_t menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 #if defined(PLATFORM_MD9600)
 				|| (codeplugChannelGetFlag(currentChannelData, CHANNEL_FLAG_OUT_OF_BAND) != 0)
 #endif
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		))
 		{
 			ticksTimerStart(&nextSecondTimer, PIT_COUNTS_PER_SECOND);
@@ -134,6 +135,19 @@ menuStatus_t menuTxScreen(uiEvent_t *ev, bool isFirstRun)
 				gpsDataInputStartStop(false);
 			}
 #endif
+#else // PLATFORM_MD9600
+		))
+		{
+			ticksTimerStart(&nextSecondTimer, PIT_COUNTS_PER_SECOND);
+			timeInSeconds = currentChannelData->tot * 15;
+
+#if defined(HAS_GPS) && !defined(PLATFORM_MD9600)
+			if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
+			{
+				gpsDataInputStartStop(false);
+			}
+#endif
+#endif // PLATFORM_MD9600
 
 			LedWrite(LED_GREEN, 0);
 			LedWrite(LED_RED, 1);
@@ -466,6 +480,7 @@ static void handleEvent(uiEvent_t *ev)
 				isTransmittingDTMF = false;
 			}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 			if (trxGetMode() == RADIO_MODE_ANALOG)
 			{
 				// In analog mode. Stop transmitting immediately
@@ -477,6 +492,19 @@ static void handleEvent(uiEvent_t *ev)
 					gpsDataInputStartStop(true);
 				}
 #endif
+#else // PLATFORM_MD9600
+			if (trxGetMode() == RADIO_MODE_ANALOG)
+			{
+				// In analog mode. Stop transmitting immediately
+				LedWrite(LED_RED, 0);
+
+#if defined(HAS_GPS) && !defined(PLATFORM_MD9600)
+				if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
+				{
+					gpsDataInputStartStop(true);
+				}
+#endif
+#endif // PLATFORM_MD9600
 
 				// Need to wrap this in Task Critical to avoid bus contention on the I2C bus.
 				trxSetRxCSS(RADIO_DEVICE_PRIMARY, currentChannelData->rxTone);
@@ -506,6 +534,7 @@ static void handleEvent(uiEvent_t *ev)
 			{
 				if ((nonVolatileSettings.beepOptions & BEEP_TX_STOP) && (melody_play == NULL) && (HRC6000GetIsWakingState() != WAKING_MODE_FAILED))
 				{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 					soundSetMelody(MELODY_DMR_TX_STOP_BEEP);
 				}
 
@@ -517,6 +546,19 @@ static void handleEvent(uiEvent_t *ev)
 					gpsDataInputStartStop(true);
 				}
 #endif
+#else // PLATFORM_MD9600
+					soundSetMelody(MELODY_DMR_TX_STOP_BEEP);
+				}
+
+				LedWrite(LED_RED, 0);
+
+#if defined(HAS_GPS) && !defined(PLATFORM_MD9600)
+				if (SETTINGS_GPS_MODE_GET(nonVolatileSettings) > GPS_MODE_OFF)
+				{
+					gpsDataInputStartStop(true);
+				}
+#endif
+#endif // PLATFORM_MD9600
 
 				// If there is a signal, lit the Green LED
 				if ((LedRead(LED_GREEN) == 0) && (trxCarrierDetected(RADIO_DEVICE_PRIMARY) || (audioAmpGetStatus() & AUDIO_AMP_CHANNEL_RF)))

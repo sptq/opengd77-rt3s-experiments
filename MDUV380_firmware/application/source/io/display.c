@@ -28,12 +28,23 @@
  */
 
 #include <FreeRTOS.h>
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include "hardware/HX8353E.h"
+#endif // PLATFORM_MD9600
 #include "io/display.h"
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+#include "hardware/ST7567.h"
+#endif // PLATFORM_MD9600
 #include "functions/settings.h"
 #include "interfaces/gpio.h"
 #include "main.h"
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+#if defined(PLATFORM_MD9600)
+#include "interfaces/remoteHead.h"
+#endif
+#endif // PLATFORM_MD9600
 #include "user_interface/uiGlobals.h"
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 
 uint8_t displayLCD_Type = 1;
 static bool displayIsInverseVideo = false;
@@ -57,7 +68,20 @@ void displayWriteCmds(uint8_t cmd, size_t len, uint8_t opts[])
 	for(volatile int x = 0; x < 1; x++);//Display seems to need a tiny delay to respond to the data
 
 	if (len)
+#else // PLATFORM_MD9600
+
+void displayInit(bool isInverseColour)
+{
+#if defined(PLATFORM_MD9600)
+	if(remoteHeadActive)
 	{
+		osDelay(10);			//Needs the delay to keep the startup timings correct.
+	}
+	else
+#endif
+#endif // PLATFORM_MD9600
+	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		for (size_t i = 0; i < len; i++)
 		{
 			*((volatile uint8_t*) LCD_FSMC_ADDR_DATA) = opts[i];
@@ -165,8 +189,15 @@ void displayInit(bool isInverted, bool SPIFlashAvailable)
 			uint8_t opts[] = { 0x16 };
 			displayWriteCmds(0xff, 1, opts);
 		}
+#else // PLATFORM_MD9600
+		// Init pins
+		HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, 1);
+		HAL_GPIO_WritePin(LCD_Reset_GPIO_Port, LCD_Reset_Pin, 1);
+		HAL_GPIO_WritePin(LCD_RS_GPIO_Port, LCD_RS_Pin, 1);
+#endif // PLATFORM_MD9600
 
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		{
 			uint8_t opts[] = { ((DISPLAYLCD_GET_TYPE(displayLCD_Type) == 3) ? 0x40 : 0x4f) };
 			displayWriteCmds(0xfd, 1, opts);
@@ -357,8 +388,16 @@ void displayInit(bool isInverted, bool SPIFlashAvailable)
 			uint8_t opts[] = { 0x04, 0x16, 0x06, 0x0d, 0x2d, 0x26, 0x23, 0x27, 0x27, 0x25, 0x2d, 0x3b, 0x00, 0x01, 0x04, 0x13 };
 			displayWriteCmds(0xE1, sizeof(opts), opts);
 		}
+#else // PLATFORM_MD9600
+		// Reset LCD
+		HAL_GPIO_WritePin(LCD_Reset_GPIO_Port, LCD_Reset_Pin, 0);
+		osDelay(1);
+		HAL_GPIO_WritePin(LCD_Reset_GPIO_Port, LCD_Reset_Pin, 1);
+		osDelay(5);
+#endif // PLATFORM_MD9600
 	}
 
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	{
 		uint8_t opts[] = {
 				(DISPLAYLCD_GET_TYPE(displayLCD_Type) == 1) ? 0x60 :
@@ -403,7 +442,11 @@ void displayInit(bool isInverted, bool SPIFlashAvailable)
 	displayClearScreenBlankLines(isInverted);
 #endif
 	displayRender();
+#else // PLATFORM_MD9600
+	displayBegin(isInverseColour);
+#endif // PLATFORM_MD9600
 }
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #if defined(PLATFORM_VARIANT_DM1701)
 static void displayClearScreenBlankLines(bool isInverted)
 {
@@ -443,20 +486,55 @@ static void displayClearScreenBlankLines(bool isInverted)
 
 }
 #endif
+#endif // PLATFORM_MD9600
 
 void displayEnableBacklight(bool enable, int displayBacklightPercentageOff)
 {
 	if (enable)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		gpioSetDisplayBacklightIntensityPercentage(nonVolatileSettings.displayBacklightPercentage[DAYTIME_CURRENT]);
+#else // PLATFORM_MD9600
+#if defined(PLATFORM_MD9600)
+		if(remoteHeadActive)
+		{
+			remoteHeadDim(nonVolatileSettings.displayBacklightPercentage[DAYTIME_CURRENT]);
+		}
+		else
+#endif
+		{
+			gpioSetDisplayBacklightIntensityPercentage(nonVolatileSettings.displayBacklightPercentage[DAYTIME_CURRENT]);
+		}
+#endif // PLATFORM_MD9600
 	}
 	else
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		gpioSetDisplayBacklightIntensityPercentage(((nonVolatileSettings.backlightMode == BACKLIGHT_MODE_NONE) ? 0 : displayBacklightPercentageOff));
+#else // PLATFORM_MD9600
+#if defined(PLATFORM_MD9600)
+		if(remoteHeadActive)
+		{
+			remoteHeadDim(((nonVolatileSettings.backlightMode == BACKLIGHT_MODE_NONE) ? 0 : displayBacklightPercentageOff));
+		}
+		else
+#endif
+		{
+			gpioSetDisplayBacklightIntensityPercentage(((nonVolatileSettings.backlightMode == BACKLIGHT_MODE_NONE) ? 0 : displayBacklightPercentageOff));
+		}
+#endif // PLATFORM_MD9600
 	}
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+	//HAL_GPIO_WritePin(Display_Light_GPIO_Port, Display_Light_Pin, enable);//Enable the LCD backlight and mic key backlight leds
+#endif // PLATFORM_MD9600
 }
 
 bool displayIsBacklightLit(void)
 {
 	return (gpioGetDisplayBacklightIntensityPercentage() != nonVolatileSettings.displayBacklightPercentageOff);
 }
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+
+
+#endif // PLATFORM_MD9600

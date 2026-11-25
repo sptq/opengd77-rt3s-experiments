@@ -29,5 +29,88 @@
 #ifndef _OPENGD77_I2C_H_
 #define _OPENGD77_I2C_H_
 
+#if defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
+#include <FreeRTOS.h>
+#include <task.h>
+
+
+#define I2C_BAUDRATE (100000) /* 100K */
+#define AT1846S_I2C_MASTER_SLAVE_ADDR_7BIT (0x71U)
+
+extern volatile int isI2cInUse;
+
+#if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S)
+
+// I2C0a to AT24C512 EEPROM & AT1846S
+// OUT/ON E24 - I2C SCL to AT24C512 EEPROM & AT1846S
+// OUT/ON E25 - I2C SDA to AT24C512 EEPROM & AT1846S
+#define Port_I2C0a_SCL     PORTE
+#define GPIO_I2C0a_SCL     GPIOE
+#define Pin_I2C0a_SCL	   24
+#define Port_I2C0a_SDA     PORTE
+#define GPIO_I2C0a_SDA     GPIOE
+#define Pin_I2C0a_SDA	   25
+
+// I2C0b to ALPU-MP-1413
+// OUT/ON B2 - I2C SCL to ALPU-MP-1413
+// OUT/ON B3 - I2C SDA to ALPU-MP-1413
+#define Port_I2C0b_SCL     PORTB
+#define GPIO_I2C0b_SCL     GPIOB
+#define Pin_I2C0b_SCL	   2
+#define Port_I2C0b_SDA     PORTB
+#define GPIO_I2C0b_SDA     GPIOB
+#define Pin_I2C0b_SDA	   3
+
+#elif defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A)
+
+// I2C0a to AT24C512 EEPROM & AT1846S
+// OUT/ON E24 - I2C SCL to AT24C512 EEPROM & AT1846S
+// OUT/ON E25 - I2C SDA to AT24C512 EEPROM & AT1846S
+#define Port_I2C0a_SCL     PORTE
+#define GPIO_I2C0a_SCL     GPIOE
+#define Pin_I2C0a_SCL	   24
+#define Port_I2C0a_SDA     PORTE
+#define GPIO_I2C0a_SDA     GPIOE
+#define Pin_I2C0a_SDA	   25
+
+// I2C0b to ALPU-MP-1413
+// OUT/ON B2 - I2C SCL to ALPU-MP-1413
+// OUT/ON B3 - I2C SDA to ALPU-MP-1413
+#define Port_I2C0b_SCL     PORTB
+#define GPIO_I2C0b_SCL     GPIOB
+#define Pin_I2C0b_SCL	   2
+#define Port_I2C0b_SDA     PORTB
+#define GPIO_I2C0b_SDA     GPIOB
+#define Pin_I2C0b_SDA	   3
+
+#elif defined(PLATFORM_RD5R)
+
+// I2C0a to AT24C512 EEPROM & AT1846S
+// OUT/ON E24 - I2C SCL to AT24C512 EEPROM & AT1846S
+// OUT/ON E25 - I2C SDA to AT24C512 EEPROM & AT1846S
+#define Port_I2C0a_SCL     PORTE
+#define GPIO_I2C0a_SCL     GPIOE
+#define Pin_I2C0a_SCL	   24
+#define Port_I2C0a_SDA     PORTE
+#define GPIO_I2C0a_SDA     GPIOE
+#define Pin_I2C0a_SDA	   25
+
+// I2C0b to ALPU-MP-1413
+// OUT/ON B2 - I2C SCL to ALPU-MP-1413
+// OUT/ON B3 - I2C SDA to ALPU-MP-1413
+#define Port_I2C0b_SCL     PORTB
+#define GPIO_I2C0b_SCL     GPIOB
+#define Pin_I2C0b_SCL	   2
+#define Port_I2C0b_SDA     PORTB
+#define GPIO_I2C0b_SDA     GPIOB
+#define Pin_I2C0b_SDA	   3
+
+#endif
+
+void I2C0aInit(void);
+void I2C0bInit(void);
+void I2C0Setup(void);
+
+#endif // PLATFORM_MD9600
 
 #endif /* _OPENGD77_I2C_H_ */

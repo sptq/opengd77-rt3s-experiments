@@ -30,11 +30,19 @@
 #define _OPENGD77_PIT_H_
 
 #include <FreeRTOS.h>
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 #include <task.h>
 
 #if !(defined(PLATFORM_MD9600) || defined(PLATFORM_MDUV380)  || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)) 
 #include "fsl_pit.h"
 #endif
+#else // PLATFORM_MD9600
+#include <task.h>
+
+#if !defined(PLATFORM_MD9600)
+#include "fsl_pit.h"
+#endif
+#endif // PLATFORM_MD9600
 
 extern volatile uint32_t timer_maintask;
 extern volatile uint32_t timer_beeptask;

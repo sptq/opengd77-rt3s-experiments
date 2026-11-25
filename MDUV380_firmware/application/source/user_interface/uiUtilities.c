@@ -594,7 +594,11 @@ double courseTo(double lat1, double lon1, double lat2, double lon2)
 
 static double roundPosition(double val)
 {
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	return ((double)((int)((val * 10000) + ((val > 0 ) ? 0.5 : -0.5)))) / 10000;
+#else // PLATFORM_MD9600
+	return ((double)((int)((val * 10000) + ((val > 0 ) ? 0.5:-0.5)))) / 10000;
+#endif // PLATFORM_MD9600
 }
 
 static void decodeGPSPosition(uint8_t *data, double *latitude, double *longitude)
@@ -2421,10 +2425,18 @@ void uiUtilityDrawRSSIBarGraph(void)
 #endif
 
 #if 0 // Commented for now, maybe an option later.
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 	int currentMode = trxGetMode();
+#else // PLATFORM_MD9600
+	int currentRadioDevice->currentMode = trxGetMode();
+#endif // PLATFORM_MD9600
 	for (uint8_t i = 1; ((i < 10) && (xPos <= barWidth)); i += 2)
 	{
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 		if ((i <= 9) || (currentMode == RADIO_MODE_DIGITAL))
+#else // PLATFORM_MD9600
+		if ((i <= 9) || (currentRadioDevice->currentMode == RADIO_MODE_DIGITAL))
+#endif // PLATFORM_MD9600
 		{
 			xPos = rssiMeterHeaderBar[i];
 		}
@@ -4088,7 +4100,11 @@ void dtmfSequenceTick(bool popPreviousMenuOnEnding)
 
 #if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
 				trxSelectVoiceChannel(AT1846_VOICE_CHANNEL_NONE);
+#if ! defined(PLATFORM_MD9600) // upstream PLATFORM_MD9600
 				audioAmpEnable(AUDIO_AMP_CHANNEL_RF);
+#else // PLATFORM_MD9600
+				enableAudioAmp(AUDIO_AMP_CHANNEL_RF);
+#endif // PLATFORM_MD9600
 				GPIO_PinWrite(GPIO_RX_audio_mux, Pin_RX_audio_mux, 1);
 #endif
 
