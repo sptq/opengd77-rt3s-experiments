@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701)
+#if defined(PLATFORM_MDUV380) || defined(PLATFORM_MD380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD9600)
 #define HAS_DMR_SMS
 #define HAS_DMR_SMS_ACK   // acknowledge confirmed private SMS (hardware/HR-C6000.c), remove to receive silently
 #define HAS_DMR_SMS_TX    // send (functions/dmrSms.c, hardware/HR-C6000.c, the inbox screen), remove for receive only

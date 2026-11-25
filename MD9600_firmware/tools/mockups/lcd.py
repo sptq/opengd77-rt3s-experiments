@@ -10,7 +10,7 @@ W, H = 128, 64
 def _load_fonts():
     src = open(CHARSET, encoding='latin-1').read()
     fonts = {}
-    for name in ('font_6x8', 'font_6x8_bold', 'font_8x8', 'font_8x16'):
+    for name in ('font_6x8', 'font_6x8_bold', 'font_8x8', 'font_8x16', 'font_16x32'):
         m = re.search(r'const uint8_t ' + name + r'\[\] = \{(.*?)\};', src, re.S)
         body = re.sub(r'//[^\n]*', '', m.group(1))
         nums = [int(x, 0) for x in re.findall(r'0x[0-9a-fA-F]+|\b\d+\b', body)]
@@ -19,7 +19,7 @@ def _load_fonts():
 
 
 FONTS = _load_fonts()
-F1, F1B, F2, F3 = 'font_6x8', 'font_6x8_bold', 'font_8x8', 'font_8x16'
+F1, F1B, F2, F3, F4 = 'font_6x8', 'font_6x8_bold', 'font_8x8', 'font_8x16', 'font_16x32'
 
 
 class LCD:

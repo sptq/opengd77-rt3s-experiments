@@ -169,6 +169,8 @@ static uiIcon_t menuIcon(int menuNum)
 		case MENU_SSTV:               return UI_ICON_SSTV;
 		case MENU_APRS_RX:            return UI_ICON_APRS;
 		case MENU_DECODERS:           return UI_ICON_DTMF;
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 		case MENU_DMR_SMS:            return UI_ICON_MAIL;
 #endif
 #if defined(HAS_FIELD_TOOLS_MENU)

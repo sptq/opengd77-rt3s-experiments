@@ -158,6 +158,7 @@ static const uint8_t spi_init_values_6[] = { 0x32, 0xef, 0x00, 0x31, 0xef, 0x00,
 #include "interfaces/interrupts.h"
 #include "functions/rxPowerSaving.h"
 #include "functions/ticks.h"
+#include "functions/dmrSms.h" // Fork: DMR SMS (data bursts, ACK, send)
 #include "interfaces/gps.h"
 #if defined(PLATFORM_MD9600) || defined(PLATFORM_MD380) || defined(PLATFORM_MDUV380) || defined(PLATFORM_RT84_DM1701) || defined(PLATFORM_MD2017)
 #include "hardware/radioHardwareInterface.h"

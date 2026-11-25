@@ -1267,6 +1267,18 @@ void applicationMainTask(void)
 			(void) txInhibitCheckAndWarn();
 		}
 
+#if defined(HAS_DMR_SMS_TX)
+		// Fork: no PTT while a DMR SMS data call is keyed (about 2 s)
+		if (dmrSmsTxBusy() && (buttons & BUTTON_PTT))
+		{
+			if (buttons == BUTTON_PTT)
+			{
+				button_event = EVENT_BUTTON_NONE;
+			}
+			buttons &= ~BUTTON_PTT;
+		}
+#endif
+
 		// Lockscreen shouldn't be called on KEY_POWER down event,
 		// otherwise it won't be possible to turn the transceiver OFF without
 		// unlocking the keypad first, pretty annoying.

@@ -112,6 +112,8 @@ menuDataGlobal_t menuDataGlobal =
 #endif
 #if defined(HAS_SSTV_MENU)
 				NULL,// Decoders
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 				NULL,// DMR SMS
 #endif
 				// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
@@ -190,6 +192,8 @@ static menuFunctionData_t menuFunctions[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 		{ menuDecoders,             NULL, NULL, 0 },
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 		{ menuDmrSms,               NULL, NULL, 0 },
 #endif
 		// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***
@@ -728,6 +732,8 @@ const menuItemNewData_t mainMenuItems[] =
 #if defined(HAS_SSTV_MENU)
 	{ 283, MENU_APRS_RX         },// stringOffset 283 = .aprs_rx field (fork)
 	{ MENU_STRING_DECODERS, MENU_DECODERS },// fork: fixed English name, see menuItemName()
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 	{ MENU_STRING_DMR_SMS, MENU_DMR_SMS },// fork: fixed English name, see menuItemName()
 #endif
 #if defined(HAS_GPS)

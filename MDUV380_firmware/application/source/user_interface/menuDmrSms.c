@@ -64,6 +64,11 @@ static uint32_t selectedSeq = 0;   // the message selected, found again when the
 static uint8_t view = VIEW_LIST;
 static bool confirmAll = false;
 static bool showDiag = false;    // '*' on the list: receive diagnostics
+#if defined(EMCOM_UI_MONO)
+static bool diagPage = false;    // 128 x 64: the second page of the diagnostics (registers, last header)
+static uint8_t readTop = 0U;     // 128 x 64: first line of the message text shown (LEFT / RIGHT scroll it)
+static uint32_t readSeq = 0U;    // ... of this message (0: from the list, scroll to the top)
+#endif
 
 #if defined(HAS_DMR_SMS_TX)
 #define PICK_QUICK         3
@@ -126,6 +131,7 @@ static void timeString(uint32_t t, char *buf, size_t size)
 	snprintf(buf, size, "%02d-%02d %02d:%02dZ", (tmv.tm_mon + 1), tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
 }
 
+#if !defined(EMCOM_UI_MONO)
 // "TG 260" for a group message, else "PRIV"; "OUT ..." for one we sent
 static void destString(const dmrSmsMessage_t *m, char *buf, size_t size)
 {
@@ -140,6 +146,7 @@ static void destString(const dmrSmsMessage_t *m, char *buf, size_t size)
 		snprintf(buf, size, "%sPRIV", dir);
 	}
 }
+#endif
 
 // The other end: the sender, or for a message we sent its recipient ("TG 260" for a group one)
 static void peerString(const dmrSmsMessage_t *m, char *buf, size_t size)
@@ -158,6 +165,7 @@ static void peerString(const dmrSmsMessage_t *m, char *buf, size_t size)
 	}
 }
 
+#if !defined(EMCOM_UI_MONO)
 // Word wrap at x 2 from y; returns the number of lines (drawn when 'draw')
 static uint32_t wrapText(const char *str, uint32_t perLine, uint32_t maxLines, int16_t y, int16_t lineH, ucFont_t font, bool draw)
 {
@@ -520,8 +528,10 @@ static void drawMessage(void)
 #endif
 	displayRender();
 }
+#endif // !EMCOM_UI_MONO
 
 #if defined(HAS_DMR_SMS_TX)
+#if !defined(EMCOM_UI_MONO)
 // Title, and the status strip (EMCOM style) / a first line (classic) with 'info'; returns the body y
 static int16_t composeFrame(const char *title, const char *info, themeItem_t infoColour)
 {
@@ -547,6 +557,7 @@ static int16_t composeFrame(const char *title, const char *info, themeItem_t inf
 	}
 	return (int16_t)(LIST_Y + FONT_SIZE_1_HEIGHT + 3);
 }
+#endif
 
 // "TO SP5ABC" / "TO TG 260"
 static void recipientString(char *buf, size_t size)
@@ -564,6 +575,7 @@ static void recipientString(char *buf, size_t size)
 	}
 }
 
+#if !defined(EMCOM_UI_MONO)
 static void drawTo(void)
 {
 	char buf[SCREEN_LINE_BUFFER_SIZE];
@@ -598,6 +610,7 @@ static void drawTo(void)
 	footer("GRN OK *P/G #CH RED BACK", "GREEN next  * priv/group", "# channel contact RED back");
 	displayRender();
 }
+#endif
 
 // Row text of the text choice (0: the typed text)
 static void pickText(uint32_t i, char *text)
@@ -616,6 +629,7 @@ static void pickText(uint32_t i, char *text)
 	}
 }
 
+#if !defined(EMCOM_UI_MONO)
 static void drawPick(void)
 {
 	char buf[32];
@@ -713,7 +727,418 @@ static void drawSend(void)
 	}
 	displayRender();
 }
+#endif // !EMCOM_UI_MONO
 #endif
+
+#if defined(EMCOM_UI_MONO)
+// --- 128 x 64 mono layouts (MD-9600), whatever the screen style ---------------------------------
+#define MONO_LIST_Y    10
+#define MONO_ROW_H     9
+#define MONO_ROWS      5
+#define MONO_CHARS     21      // 6 px font
+#define MONO_CHARS_3   16      // 8 px font
+#define MONO_AGE_X     6
+#define MONO_NAME_X    31
+#define MONO_TEXT_X    76
+#define MONO_READ_Y    20
+#define MONO_READ_ROWS 4
+
+// Word wrap at x 0 from y, the first 'skip' lines left out; returns the number of lines (drawn when 'draw')
+static uint32_t wrapMono(const char *str, uint32_t perLine, uint32_t skip, uint32_t maxLines, int16_t y, int16_t lineH, ucFont_t font, bool draw)
+{
+	char line[MONO_CHARS + 1];
+	uint32_t lines = 0U;
+
+	while (*str)
+	{
+		uint32_t len = strlen(str);
+		uint32_t cut = len;
+
+		if (len > perLine)
+		{
+			cut = perLine;
+			while ((cut > 0U) && (str[cut] != ' '))
+			{
+				cut--;
+			}
+			if (cut == 0U)
+			{
+				cut = perLine;
+			}
+		}
+
+		if (draw && (lines >= skip) && ((lines - skip) < maxLines))
+		{
+			memcpy(line, str, cut);
+			line[cut] = 0;
+			displayPrintCore(0, (int16_t)(y + ((lines - skip) * lineH)), line, font, TEXT_ALIGN_LEFT, false);
+		}
+		lines++;
+		str += cut;
+		while (*str == ' ')
+		{
+			str++;
+		}
+	}
+	return lines;
+}
+
+static void drawDiag(void)
+{
+	char buf[22];
+	volatile dmrSmsDiag_t *d = &dmrSmsDiag;
+	int16_t y = MONO_LIST_Y;
+
+	displayClearBuf();
+	emcomUiTitle("SMS RX diag", (diagPage ? "2/2" : "1/2"));
+	if (diagPage == false)
+	{
+		snprintf(buf, sizeof(buf), "DATA %u CRCX %u", d->dataInt, d->crcBad);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "HDR %u R12 %u R34 %u", d->hdr, d->r12, d->r34);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "OTHER %u SKIP %u", d->other, d->skipped);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "PDU %u DECX %u", d->pduDone, d->decodeFail);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "NOTUS %u DUP %u OK %u", d->notUs, d->dup, d->stored);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "INFO %u", d->infoInt);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "REG 90:%02X 51:%02X", d->last90, d->last51);
+		displayPrintCore(0, y, buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		displayPrintCore(0, y, "LAST HEADER:", FONT_SIZE_1, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "%02X%02X%02X %02X%02X%02X", d->lastHdr[0], d->lastHdr[1], d->lastHdr[2],
+				d->lastHdr[3], d->lastHdr[4], d->lastHdr[5]);
+		displayPrintCore(0, y, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false); y += MONO_ROW_H;
+		snprintf(buf, sizeof(buf), "%02X%02X%02X %02X%02X%02X", d->lastHdr[6], d->lastHdr[7], d->lastHdr[8],
+				d->lastHdr[9], d->lastHdr[10], d->lastHdr[11]);
+		displayPrintCore(0, y, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+	}
+	emcomUiKeyBar("*BACK 0 RESET <> PAGE");
+	displayRender();
+}
+
+static void drawList(void)
+{
+	if (showDiag)
+	{
+		drawDiag();
+		return;
+	}
+
+	char buf[22];
+	char name[SCREEN_LINE_BUFFER_SIZE];
+	dmrSmsMessage_t m;
+	uint32_t count = dmrSmsCount();
+
+	readSeq = 0U;
+	displayClearBuf();
+	if (selected >= count)
+	{
+		selected = ((count > 0U) ? (count - 1U) : 0U);
+	}
+	snprintf(buf, sizeof(buf), "%u/%u", (unsigned)((count > 0U) ? (selected + 1U) : 0U), (unsigned)count);
+	emcomUiTitle(SMS_TITLE, buf);
+
+	if (count == 0U)
+	{
+		selectedSeq = 0U;
+		displayPrintCentered(14, "NO MESSAGES", FONT_SIZE_3);
+		displayPrintCentered(34, "Private and group SMS", FONT_SIZE_1);
+		displayPrintCentered(43, "to your ID show here", FONT_SIZE_1);
+#if defined(HAS_DMR_SMS_TX)
+		emcomUiKeyBar("# NEW  RED EXIT");
+#else
+		emcomUiKeyBar("RED EXIT");
+#endif
+		displayRender();
+		return;
+	}
+
+	uint32_t first = ((selected >= MONO_ROWS) ? (selected - MONO_ROWS + 1U) : 0U);
+
+	for (uint32_t r = 0U; r < MONO_ROWS; r++)
+	{
+		uint32_t idx = (first + r);
+		int16_t y = (int16_t)(MONO_LIST_Y + (r * MONO_ROW_H));
+		bool sel = (idx == selected);
+
+		if ((idx >= count) || (dmrSmsGet(idx, &m) == false))
+		{
+			break;
+		}
+
+		bool outgoing = DMR_SMS_IS_OUTGOING(m.flags);
+		bool failed = (outgoing && ((m.flags & DMR_SMS_FLAG_UNSENT) != 0U));
+		bool unread = ((outgoing == false) && ((m.flags & DMR_SMS_FLAG_UNREAD) != 0U));
+		ucFont_t font = (unread ? FONT_SIZE_1_BOLD : FONT_SIZE_1);
+
+		if (sel)
+		{
+			selectedSeq = m.seq;
+			displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+		}
+		displayPrintCore(0, (y + 1), (failed ? "!" : (outgoing ? ">" : (unread ? "*" : " "))), FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, sel);
+
+		ageString(m.time, buf, sizeof(buf));
+		buf[4] = 0;
+		displayPrintCore(MONO_AGE_X, (y + 1), buf, FONT_SIZE_1, TEXT_ALIGN_LEFT, sel);
+
+		peerString(&m, name, sizeof(name));
+		snprintf(buf, sizeof(buf), "%.7s", name);
+		displayPrintCore(MONO_NAME_X, (y + 1), buf, font, TEXT_ALIGN_LEFT, sel);
+
+		snprintf(buf, sizeof(buf), "%.8s", m.text);
+		displayPrintCore(MONO_TEXT_X, (y + 1), buf, font, TEXT_ALIGN_LEFT, sel);
+	}
+
+	if (confirmAll)
+	{
+		emcomUiConfirmBar("CLEAR?");
+	}
+	else
+	{
+#if defined(HAS_DMR_SMS_TX)
+		emcomUiKeyBar("GRN READ # NEW 0 DEL");
+#else
+		emcomUiKeyBar("GRN READ 0 DEL RED EXIT");
+#endif
+	}
+	displayRender();
+}
+
+static void drawMessage(void)
+{
+	char buf[32];
+	char name[SCREEN_LINE_BUFFER_SIZE];
+	char info[16];
+	char id[12];
+	dmrSmsMessage_t m;
+
+	if (dmrSmsGet(selected, &m) == false)
+	{
+		view = VIEW_LIST;
+		drawList();
+		return;
+	}
+
+	bool outgoing = DMR_SMS_IS_OUTGOING(m.flags);
+
+	selectedSeq = m.seq;
+	if (m.seq != readSeq)
+	{
+		readSeq = m.seq;
+		readTop = 0U;
+	}
+	displayClearBuf();
+	peerString(&m, name, sizeof(name));
+	if (outgoing)
+	{
+		char peer[SCREEN_LINE_BUFFER_SIZE];
+
+		snprintf(peer, sizeof(peer), "%s", name);
+		snprintf(name, sizeof(name), "%s%.14s", ((m.flags & DMR_SMS_FLAG_UNSENT) ? "! " : "> "), peer);
+	}
+	if (m.flags & DMR_SMS_FLAG_GROUP)
+	{
+		snprintf(info, sizeof(info), "TG %u", (unsigned)(m.dst & 0x00FFFFFFU));
+	}
+	else
+	{
+		snprintf(info, sizeof(info), "PRIV");
+	}
+	emcomUiTitle(name, info);
+
+	// Time on the left, the ID (or NOT SENT) on the right; the date goes when both do not fit
+	if (outgoing && (m.flags & DMR_SMS_FLAG_UNSENT))
+	{
+		snprintf(id, sizeof(id), "NOT SENT");
+	}
+	else
+	{
+		snprintf(id, sizeof(id), "%u", (unsigned)((outgoing ? m.dst : m.src) & 0x00FFFFFFU));
+	}
+	timeString(m.time, buf, sizeof(buf));
+	const char *when = buf;
+	if (((strlen(buf) + 1U + strlen(id)) > MONO_CHARS) && (strlen(buf) > 6U) && (m.time != 0U))
+	{
+		when = &buf[6]; // "HH:MMZ"
+	}
+	emcomUiText(0, 10, when, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, false);
+	emcomUiText(DISPLAY_SIZE_X, 10, id, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, true);
+	emcomUiDivider(18);
+
+	// 8x16 when it fits in 2 lines, else 4 lines of the small font from readTop (LEFT / RIGHT)
+	bool scroll = false;
+
+	if (wrapMono(m.text, MONO_CHARS_3, 0U, 0U, 0, 0, FONT_SIZE_3, false) <= 2U)
+	{
+		wrapMono(m.text, MONO_CHARS_3, 0U, 2U, MONO_READ_Y, FONT_SIZE_3_HEIGHT, FONT_SIZE_3, true);
+	}
+	else
+	{
+		uint32_t lines = wrapMono(m.text, MONO_CHARS, 0U, 0U, 0, 0, FONT_SIZE_1, false);
+		uint32_t maxTop = ((lines > MONO_READ_ROWS) ? (lines - MONO_READ_ROWS) : 0U);
+
+		if (readTop > maxTop)
+		{
+			readTop = (uint8_t)maxTop;
+		}
+		wrapMono(m.text, MONO_CHARS, readTop, MONO_READ_ROWS, MONO_READ_Y, MONO_ROW_H, FONT_SIZE_1, true);
+
+		if (maxTop > 0U)
+		{
+			// scroll thumb, x 127, y 20 .. 54
+			int16_t track = 35;
+			int16_t h = (int16_t)((track * MONO_READ_ROWS) / lines);
+
+			if (h < 3)
+			{
+				h = 3;
+			}
+			int16_t ty = (int16_t)(MONO_READ_Y + (((track - h) * readTop) / maxTop));
+			displayFillRect((DISPLAY_SIZE_X - 1), ty, 1, h, false);
+			scroll = true;
+		}
+	}
+
+#if defined(HAS_DMR_SMS_TX)
+	emcomUiKeyBar(scroll ? "<>MORE GRN RPLY 0 DEL" : "GRN REPLY 0 DEL RED BK");
+#else
+	emcomUiKeyBar(scroll ? "<>MORE UP/DN 0 DEL" : "UP/DN  0 DEL  RED BACK");
+#endif
+	displayRender();
+}
+
+#if defined(HAS_DMR_SMS_TX)
+static void drawTo(void)
+{
+	char buf[22];
+
+	displayClearBuf();
+	emcomUiTitle("SMS to", (toGroup ? "GROUP TG" : "PRIVATE ID"));
+	if (toId > 0U)
+	{
+		snprintf(buf, sizeof(buf), "%u_", (unsigned)toId);
+	}
+	else
+	{
+		snprintf(buf, sizeof(buf), "_");
+	}
+	displayPrintCentered(11, buf, FONT_SIZE_3);
+
+	if ((toId > 0U) && (toGroup == false))
+	{
+		dmrSmsPeerName(toId, buf, sizeof(buf));
+		displayPrintCentered(28, buf, FONT_SIZE_1_BOLD);
+	}
+	else if (toId > 0U)
+	{
+		displayPrintCentered(28, "talkgroup", FONT_SIZE_1);
+	}
+	displayPrintCentered(37, "262993 WX  262994 RPT", FONT_SIZE_1);
+	displayPrintCentered(46, "BM 262995 SMSC INBOX", FONT_SIZE_1);
+	emcomUiKeyBar("GRN OK *P/G #CH RED BK");
+	displayRender();
+}
+
+static void drawPick(void)
+{
+	char buf[32];
+	char count[8];
+	char text[DMR_SMS_TEXT_MAX + 1];
+
+	displayClearBuf();
+	recipientString(buf, sizeof(buf));
+	snprintf(count, sizeof(count), "%u/%u", (unsigned)(pickIndex + 1U), (unsigned)PICK_ROWS);
+	emcomUiTitle(buf, count);
+
+	uint32_t first = ((pickIndex >= MONO_ROWS) ? (pickIndex - MONO_ROWS + 1U) : 0U);
+
+	for (uint32_t r = 0U; (r < MONO_ROWS) && ((first + r) < PICK_ROWS); r++)
+	{
+		uint32_t i = (first + r);
+		int16_t y = (int16_t)(MONO_LIST_Y + (r * MONO_ROW_H));
+		bool sel = (i == pickIndex);
+
+		pickText(i, text);
+		if (i == 0U)
+		{
+			snprintf(buf, sizeof(buf), "> %.19s", ((text[0] != 0) ? text : "Type a message..."));
+		}
+		else
+		{
+			snprintf(buf, sizeof(buf), "%.21s", text);
+		}
+		if (sel)
+		{
+			displayFillRect(0, y, DISPLAY_SIZE_X, MONO_ROW_H, false);
+		}
+		displayPrintCore(1, (y + 1), buf, (((i > 0U) && (i <= PICK_QUICK)) ? FONT_SIZE_1_BOLD : FONT_SIZE_1), TEXT_ALIGN_LEFT, sel);
+	}
+
+	emcomUiKeyBar("GRN SEND >EDIT *TO RED");
+	displayRender();
+}
+
+static void drawSend(void)
+{
+	char buf[32];
+	dmrSmsTxResult_t r = (dmrSmsTxResult_t)sendResult;
+	const char *big;
+
+	if (r == DMR_SMS_TX_SENDING)
+	{
+		big = "SENDING...";
+	}
+	else if (r == DMR_SMS_TX_OK)
+	{
+		big = "SENT";
+	}
+	else if ((r == DMR_SMS_TX_NO_REPEATER) || (r == DMR_SMS_TX_TIMEOUT))
+	{
+		big = "FAILED";
+	}
+	else
+	{
+		big = (((r == DMR_SMS_TX_BUSY) || (r == DMR_SMS_TX_BAD_TEXT)) ? "NOT SENT" : "NOT ALLOWED");
+	}
+
+	displayClearBuf();
+	emcomUiTitle(SMS_TITLE, NULL);
+	recipientString(buf, sizeof(buf));
+	buf[MONO_CHARS] = 0;
+	displayPrintCore(0, 10, buf, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+	emcomUiDivider(19);
+
+	int16_t w = (int16_t)(strlen(big) * 8);
+	int16_t x = (int16_t)((DISPLAY_SIZE_X - w) / 2);
+
+	if (r == DMR_SMS_TX_SENDING)
+	{
+		displayPrintCore(x, 24, big, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
+	}
+	else if (r == DMR_SMS_TX_OK)
+	{
+		displayDrawRect((x - 6), 22, (w + 12), 20, true);
+		displayPrintCore(x, 24, big, FONT_SIZE_3, TEXT_ALIGN_LEFT, false);
+	}
+	else
+	{
+		displayFillRect(0, 22, DISPLAY_SIZE_X, 20, false);
+		displayPrintCore(x, 24, big, FONT_SIZE_3, TEXT_ALIGN_LEFT, true);
+		displayPrintCentered(45, dmrSmsTxResultText(r), FONT_SIZE_1);
+	}
+
+	emcomUiKeyBar((r == DMR_SMS_TX_SENDING) ? "TRANSMITTING" : "ANY KEY");
+	displayRender();
+}
+#endif // HAS_DMR_SMS_TX
+#endif // EMCOM_UI_MONO
 
 static void updateScreen(void)
 {
@@ -1090,6 +1515,32 @@ menuStatus_t menuDmrSms(uiEvent_t *ev, bool isFirstRun)
 				}
 				updateScreen();
 			}
+#if defined(EMCOM_UI_MONO)
+			else if (KEYCHECK_PRESS(ev->keys, KEY_LEFT) || KEYCHECK_PRESS(ev->keys, KEY_RIGHT))
+			{
+				// C / B or the knob: the diagnostics page, the lines of a long message
+				if ((view == VIEW_LIST) && showDiag)
+				{
+					diagPage = !diagPage;
+					drawList();
+				}
+				else if (view == VIEW_READ)
+				{
+					if (KEYCHECK_PRESS(ev->keys, KEY_RIGHT))
+					{
+						if (readTop < 255U)
+						{
+							readTop++;
+						}
+					}
+					else if (readTop > 0U)
+					{
+						readTop--;
+					}
+					drawMessage();
+				}
+			}
+#endif
 			else if (KEYCHECK_PRESS(ev->keys, KEY_DOWN))
 			{
 				if ((selected + 1U) < dmrSmsCount())

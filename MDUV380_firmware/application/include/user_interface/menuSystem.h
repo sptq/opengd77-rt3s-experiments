@@ -347,8 +347,10 @@ enum MENU_SCREENS
 #define HAS_SSTV_MENU
 #define HAS_APRS_RX_MENU
 #define HAS_FIELD_TOOLS_MENU
-#elif defined(PLATFORM_MD9600) // no FM audio capture: the field tools only
+#define HAS_DMR_SMS_MENU
+#elif defined(PLATFORM_MD9600) // no FM audio capture: the field tools and DMR SMS
 #define HAS_FIELD_TOOLS_MENU
+#define HAS_DMR_SMS_MENU
 #endif
 #if defined(HAS_SSTV_MENU)
 	MENU_SSTV,// Fork: SSTV picture receive
@@ -366,6 +368,8 @@ enum MENU_SCREENS
 #endif
 #if defined(HAS_SSTV_MENU)
 	MENU_DECODERS,// Fork: DTMF / CW / STQC decoders
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 	MENU_DMR_SMS,// Fork: DMR SMS inbox
 #endif
 	// *** Add new menus to be accessed using quickkey (ID: 0..31) above this line ***

@@ -4,6 +4,7 @@
  * Use of this source code or binary releases for commercial purposes is
  * strictly forbidden (see license.txt).
  */
+#include "user_interface/uiEmcom.h"
 #include "user_interface/uiTextEdit.h"
 #include "user_interface/menuSystem.h"
 #include "user_interface/uiUtilities.h"
@@ -13,7 +14,11 @@
 #if !defined(PLATFORM_GD77S)
 
 #define EDIT_X          4
+#if defined(EMCOM_UI_MONO)
+#define EDIT_PER_LINE   20 // 128 x 64: 6x8 font lines (uiTextEditDraw)
+#else
 #define EDIT_PER_LINE   ((DISPLAY_SIZE_X - (2 * EDIT_X)) / 8) // FONT_SIZE_3: 8 px wide
+#endif
 #define EDIT_FOOTER_H   10
 
 // CCM (main RAM is full); not zeroed at boot, every field is set by uiTextEditStart()
@@ -191,6 +196,70 @@ textEditResult_t uiTextEditHandleEvent(uiEvent_t *ev)
 	return TEXT_EDIT_CHANGED;
 }
 
+#if defined(EMCOM_UI_MONO)
+// Fork: 128 x 64: title with the length, the label, four 20 character lines of 6x8, the key bar
+#define MONO_PER_LINE  EDIT_PER_LINE
+#define MONO_LINES     4
+void uiTextEditDraw(const char *title, const char *label)
+{
+	char line[MONO_PER_LINE + 1];
+	char count[12];
+	uint32_t len = strlen(editBuf);
+	int16_t y = 10;
+
+	editKeepAlpha();
+	displayClearBuf();
+	snprintf(count, sizeof(count), "%u/%u", (unsigned)len, (unsigned)editMax);
+	emcomUiTitle(title, count);
+
+	if (label)
+	{
+		displayPrintCore(0, y, label, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, false);
+		y += 9;
+	}
+
+	uint32_t lines = (uint32_t)(label ? (MONO_LINES - 1) : MONO_LINES);
+	uint32_t cursorLine = (editPos / MONO_PER_LINE);
+	uint32_t first = ((cursorLine >= lines) ? (cursorLine - lines + 1) : 0);
+
+	displayDrawRect(0, (y - 1), DISPLAY_SIZE_X, (int16_t)((lines * 9) + 2), true);
+	for (uint32_t l = 0; l < lines; l++)
+	{
+		uint32_t start = ((first + l) * MONO_PER_LINE);
+		int16_t ly = (int16_t)(y + 1 + (l * 9));
+
+		line[0] = 0;
+		if (start < len)
+		{
+			uint32_t n = (((len - start) > MONO_PER_LINE) ? MONO_PER_LINE : (len - start));
+
+			memcpy(line, &editBuf[start], n);
+			line[n] = 0;
+		}
+		displayPrintCore(3, ly, line, FONT_SIZE_1, TEXT_ALIGN_LEFT, false);
+
+		if ((first + l) == cursorLine)
+		{
+			int16_t cx = (int16_t)(3 + ((editPos % MONO_PER_LINE) * 6));
+
+			if (editPreview)
+			{
+				char c[2] = { editBuf[editPos], 0 };
+
+				displayFillRect((cx - 1), (ly - 1), 7, 9, false);
+				displayPrintCore(cx, ly, c, FONT_SIZE_1_BOLD, TEXT_ALIGN_LEFT, true);
+			}
+			else
+			{
+				displayFillRect(cx, (ly + 7), 6, 1, false);
+			}
+		}
+	}
+
+	emcomUiKeyBar("GRN OK  # DEL  RED BACK");
+	displayRender();
+}
+#else
 void uiTextEditDraw(const char *title, const char *label)
 {
 	char line[EDIT_PER_LINE + 1];
@@ -271,5 +340,6 @@ void uiTextEditDraw(const char *title, const char *label)
 	displayThemeResetToDefault();
 	displayRender();
 }
+#endif
 
 #endif

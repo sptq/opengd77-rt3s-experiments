@@ -37,6 +37,7 @@
 #include "io/keyboard.h"
 #include "io/buttons.h"
 #include "hardware/HR-C6000.h"
+#include "functions/dmrSms.h"
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
 #endif
@@ -46,12 +47,6 @@
 #define W               DISPLAY_SIZE_X
 #define H               DISPLAY_SIZE_Y
 #define HEADER_H        9
-#define ZONE_Y          11
-#define HERO_Y          19
-#define FREQ_Y          36
-#define DIV_Y           45
-#define ROW_Y           47
-#define FOOT_Y          56
 
 typedef enum
 {
@@ -90,6 +85,7 @@ static struct
 	uint32_t lastFull;
 	int16_t  rxDbm;
 	uint32_t rxSecs;
+	uint32_t smsUnread;
 } drawn;
 
 // SOS
@@ -204,6 +200,7 @@ static void levelBar(int16_t x, int16_t y, int16_t w, int16_t h, int permille, i
 static const uint8_t ICON_SAT[7]  = { 0x38, 0x44, 0x92, 0xBA, 0x92, 0x44, 0x38 };
 static const uint8_t ICON_PLUG[7] = { 0x50, 0x50, 0xF8, 0xF8, 0x70, 0x20, 0x20 };
 static const uint8_t ICON_LOCK[7] = { 0x70, 0x88, 0x88, 0xF8, 0xD8, 0xF8, 0x00 };
+static const uint8_t ICON_MAIL[7] = { 0x00, 0xFE, 0xC6, 0xAA, 0x92, 0x82, 0xFE };
 
 static void icon7(int16_t x, int16_t y, const uint8_t *rows, bool on)
 {
@@ -561,6 +558,21 @@ static void drawStatusBar(emcomState_t st)
 		icon7(r, 1, ICON_LOCK, false);
 		r -= 2;
 	}
+#if defined(HAS_DMR_SMS)
+	uint32_t unread = dmrSmsUnreadCount();
+	if (unread > 0U)
+	{
+		// unread DMR SMS: envelope and the count, as a light chip on the dark bar
+		snprintf(buf, sizeof(buf), "%u", (unsigned)((unread > 9U) ? 9U : unread));
+		int16_t cw = (int16_t)(7 + 1 + (strlen(buf) * 6) + 3);
+
+		r -= cw;
+		box(r, 0, cw, HEADER_H, false);
+		icon7((r + 1), 1, ICON_MAIL, true);
+		txt((r + 9), 1, buf, FONT_SIZE_1_BOLD, false, AL_L);
+		r -= 2;
+	}
+#endif
 
 	// Left: state and mode
 	const char *prefix = ((st == ST_RX) ? "RX " : ((st == ST_SCAN) ? "SCAN " : ""));
@@ -606,7 +618,28 @@ void emcomRenderStatusBar(bool forceBatteryDisplay)
 	drawStatusBar(currentState());
 }
 
-// --- level bar (header updates during RX) -------------------------------------------------------
+// --- level meter --------------------------------------------------------------------------------
+// Segmented S-meter: 3 px bars every 4 px rising to the right, the unlit ones a baseline dot
+static void smeter(int16_t x, int16_t y, int16_t w, int permille)
+{
+	int n = (w / 4);
+	int lit = ((n * CLAMP(permille, 0, 1000)) + 500) / 1000;
+
+	for (int i = 0; i < n; i++)
+	{
+		int16_t h = (int16_t)(2 + ((i * 5) / ((n > 1) ? (n - 1) : 1)));
+
+		if (i < lit)
+		{
+			box((int16_t)(x + (i * 4)), (int16_t)(y + 7 - h), 3, h, true);
+		}
+		else
+		{
+			displaySetPixel((int16_t)(x + (i * 4) + 1), (y + 6), true);
+		}
+	}
+}
+
 void emcomDrawBar(int barWidth, bool isTx)
 {
 	UNUSED_PARAMETER(barWidth);
@@ -617,60 +650,92 @@ void emcomDrawRssi(int dBm)
 {
 	if ((inRender == false) && barVisible && emcomScreenActive())
 	{
-		box(barX, barY, barW, 7, false);
-		levelBar(barX, barY, barW, 7, rssiPermille(dBm), 6);
-		displayRenderRows((barY / 8), ((barY + 7) / 8) + 1);
+		box(barX, barY, barW, 8, false);
+		smeter(barX, barY, barW, rssiPermille(dBm));
+		displayRenderRows((barY / 8), (((barY + 7) / 8) + 1));
 	}
 }
 
-// --- main screen ----------------------------------------------------------------------------
-static void drawBottomRow(emcomState_t st)
+// --- main screen, layout "A" ------------------------------------------------------------------------
+//   0..8    status bar (inverse)
+//  10..33   big channel number (16x32) | zone, channel name (8x16)    VFO: big letter | VFO row, frequency
+//  35       line
+//  37       frequency, offset ; tone / contact
+//  46       last heard, tones / squelch, or the S-meter
+//  55..63   bottom bar (inverse): clock and date ; locator / state
+#define A_TOP_Y     11
+#define A_NAME_Y    20
+#define A_LINE_Y    35
+#define A_FREQ_Y    37
+#define A_INFO_Y    46
+#define A_BAR_Y     55
+
+// Bottom bar: 'left' text (NULL: clock and date) and the state / locator on the right
+static void drawBottomBar(emcomState_t st, const char *left, const char *right)
 {
 	char buf[24];
-	char clock[16];
-	int16_t r = (W - 1);
+	int16_t r = (W - 2);
+	int16_t leftEnd;
 
-	dotted(0, (FOOT_Y - 1), W);
-	clockString(clock, sizeof(clock));
-	int16_t leftEnd = txt(0, FOOT_Y, clock, FONT_SIZE_1_BOLD, false, AL_L);
-	if ((uiDataGlobal.dateTimeSecs > 86400U) && (strlen(clock) <= 6))
+	box(0, A_BAR_Y, W, (H - A_BAR_Y), true);
+
+	if (left)
 	{
-		static const char *months[] = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
-		struct tm t;
-		time_t_custom secs = uiDataGlobal.dateTimeSecs;
-
-		if ((nonVolatileSettings.timezone & 0x80) != 0)
-		{
-			secs = (time_t_custom)((int64_t)secs + ((((nonVolatileSettings.timezone & 0x7F) - 64) * (15 * 60))));
-		}
-		gmtime_r_Custom(&secs, &t);
-		snprintf(buf, sizeof(buf), "%02d%s", t.tm_mday, months[CLAMP(t.tm_mon, 0, 11)]);
-		leftEnd = (int16_t)(leftEnd + 6 + txt((int16_t)(leftEnd + 6), FOOT_Y, buf, FONT_SIZE_1, false, AL_L));
+		leftEnd = (int16_t)(1 + txt(1, (A_BAR_Y + 1), left, FONT_SIZE_1, true, AL_L));
 	}
+	else
+	{
+		clockString(buf, sizeof(buf));
+		leftEnd = (int16_t)(1 + txt(1, (A_BAR_Y + 1), buf, FONT_SIZE_1_BOLD, true, AL_L));
+		if ((uiDataGlobal.dateTimeSecs > 86400U) && (strlen(buf) <= 6))
+		{
+			static const char *months[] = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+			struct tm t;
+			time_t_custom secs = uiDataGlobal.dateTimeSecs;
+
+			if ((nonVolatileSettings.timezone & 0x80) != 0)
+			{
+				secs = (time_t_custom)((int64_t)secs + ((((nonVolatileSettings.timezone & 0x7F) - 64) * (15 * 60))));
+			}
+			gmtime_r_Custom(&secs, &t);
+			snprintf(buf, sizeof(buf), "%02d%s", t.tm_mday, months[CLAMP(t.tm_mon, 0, 11)]);
+			leftEnd = (int16_t)(leftEnd + 6 + txt((int16_t)(leftEnd + 6), (A_BAR_Y + 1), buf, FONT_SIZE_1, true, AL_L));
+		}
+	}
+
+	if (right)
+	{
+		txt(r, (A_BAR_Y + 1), right, FONT_SIZE_1_BOLD, true, AL_R);
+		return;
+	}
+
+	// states first, the locator when there is room
+	const char *state = NULL;
 
 	if (sosOn)
 	{
-		int16_t w = (int16_t)((3 * 6) + 3);
-
-		box((r - w + 1), (FOOT_Y - 1), w, 9, true);
-		txt((r - 1), FOOT_Y, "SOS", FONT_SIZE_1_BOLD, true, AL_R);
-		r -= (w + 3);
+		state = "SOS";
 	}
 	else if (st == ST_SCAN)
 	{
-		r -= txt(r, FOOT_Y, "SCAN", FONT_SIZE_1_BOLD, false, AL_R) + 4;
+		state = "SCAN";
 	}
 	else if (settingsIsOptionBitSet(BIT_TX_INHIBIT))
 	{
-		int16_t w = (int16_t)((6 * 6) + 3);
-
-		box((r - w + 1), (FOOT_Y - 1), w, 9, true);
-		txt((r - 1), FOOT_Y, "TX OFF", FONT_SIZE_1_BOLD, true, AL_R);
-		r -= (w + 3);
+		state = "TX OFF";
 	}
 	else if (keypadLocked || PTTLocked)
 	{
-		r -= txt(r, FOOT_Y, ((keypadLocked && PTTLocked) ? "LOCK" : (keypadLocked ? "KEYL" : "PTTL")), FONT_SIZE_1_BOLD, false, AL_R) + 4;
+		state = ((keypadLocked && PTTLocked) ? "LOCK" : (keypadLocked ? "KEYL" : "PTTL"));
+	}
+	if (state)
+	{
+		// a light chip on the dark bar: the state stands out from the clock / locator
+		int16_t w = (int16_t)((strlen(state) * 6) + 3);
+
+		box((r - w + 2), (A_BAR_Y + 1), w, 8, false);
+		txt(r, (A_BAR_Y + 1), state, FONT_SIZE_1_BOLD, false, AL_R);
+		r -= (w + 3);
 	}
 
 	double lat, lon;
@@ -682,68 +747,15 @@ static void drawBottomRow(emcomState_t st)
 		loc[6] = 0;
 		if ((r - (int16_t)(strlen(loc) * 6)) > (leftEnd + 3))
 		{
-			r -= txt(r, FOOT_Y, loc, (gpsHasFix() ? FONT_SIZE_1_BOLD : FONT_SIZE_1), false, AL_R) + 4;
+			txt(r, (A_BAR_Y + 1), loc, (gpsHasFix() ? FONT_SIZE_1_BOLD : FONT_SIZE_1), true, AL_R);
 		}
 	}
 #if defined(HAS_GPS)
 	else if ((SETTINGS_GPS_MODE_GET(nonVolatileSettings) >= GPS_MODE_ON) && ((r - (6 * 6)) > (leftEnd + 3)))
 	{
-		r -= txt(r, FOOT_Y, "NO FIX", FONT_SIZE_1, false, AL_R) + 4;
+		txt(r, (A_BAR_Y + 1), "NO FIX", FONT_SIZE_1, true, AL_R);
 	}
 #endif
-}
-
-// zone / VFO row
-static void drawZoneRow(const emcomMainInfo_t *info)
-{
-	char buf[24];
-
-	if (info->isVFO)
-	{
-		char chip[8];
-
-		snprintf(chip, sizeof(chip), "VFO %c", info->vfoLetter);
-		box(0, (ZONE_Y - 1), (int16_t)((strlen(chip) * 6) + 3), 9, true);
-		int16_t x = (int16_t)(txt(2, ZONE_Y, chip, FONT_SIZE_1_BOLD, true, AL_L) + 6);
-		if (info->freqEntry)
-		{
-			snprintf(buf, sizeof(buf), "ENTER %s", (info->entryTx ? "TX" : "RX"));
-		}
-		else
-		{
-			snprintf(buf, sizeof(buf), "%s", (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"));
-		}
-		txt(x, ZONE_Y, buf, FONT_SIZE_1, false, AL_L);
-
-		if (trxGetMode() == RADIO_MODE_ANALOG)
-		{
-			uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
-
-			snprintf(buf, sizeof(buf), "SQL %d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
-			txt((W - 1), ZONE_Y, buf, FONT_SIZE_1, false, AL_R);
-		}
-		return;
-	}
-
-	char zone[24];
-	snprintf(zone, sizeof(zone), "%s", (info->zoneName ? info->zoneName : ""));
-	if (info->channelCount > 0)
-	{
-		snprintf(buf, sizeof(buf), "CH%d/%d", info->channelNumber, info->channelCount);
-	}
-	else
-	{
-		snprintf(buf, sizeof(buf), "CH%d", info->channelNumber);
-	}
-	int16_t rw = (int16_t)((strlen(buf) * 6) + 3);
-	box((W - rw), (ZONE_Y - 1), rw, 9, true);
-	txt((W - 2), ZONE_Y, buf, FONT_SIZE_1_BOLD, true, AL_R);
-	size_t maxChars = (size_t)((W - rw - 6) / 6);
-	if (strlen(zone) > maxChars)
-	{
-		zone[maxChars] = 0;
-	}
-	txt(0, ZONE_Y, zone, FONT_SIZE_1, false, AL_L);
 }
 
 // Talk group / contact name of the channel (DMR)
@@ -762,38 +774,86 @@ static void contactName(char *buf, size_t size, uint32_t *id)
 	*id = PCorTG;
 }
 
-static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
+static uint8_t squelchPercent(void)
+{
+	uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
+
+	return (uint8_t)((sql > 0) ? (5 * (sql - 1)) : 0);
+}
+
+// Text cut to the pixels available at x (6 or 8 px font)
+static void fitText(int16_t x, int16_t y, const char *str, ucFont_t font, bool inv)
 {
 	char buf[24];
-	char ofs[12];
+	int16_t cw = fontW(font);
+	size_t maxChars = (size_t)(((W - x) > 0) ? ((W - x) / cw) : 0);
+
+	snprintf(buf, sizeof(buf), "%s", str);
+	if (strlen(buf) > maxChars)
+	{
+		buf[maxChars] = 0;
+	}
+	txt(x, y, buf, font, inv, AL_L);
+}
+
+// The big block: channel number or VFO letter (16x32), a rule, the two lines beside it.
+// Returns the x of the text beside it.
+static int16_t drawBigBlock(const char *big, const char *line1, const char *line2)
+{
+	int16_t bw = (int16_t)(strlen(big) * 16);
+	int16_t tx;
+
+	txt(-1, 4, big, FONT_SIZE_4, false, AL_L); // glyph rows 10..28
+	vline((bw + 1), A_TOP_Y, 22);
+	tx = (int16_t)(bw + 5);
+	if (line1)
+	{
+		fitText(tx, A_TOP_Y, line1, FONT_SIZE_1, false);
+	}
+	if (line2)
+	{
+		fitText(tx, A_NAME_Y, line2, FONT_SIZE_3, false);
+	}
+	return tx;
+}
+
+static void drawTones(int16_t y)
+{
+	char rx[10];
+	char tx[10];
+	uint16_t rxT = currentChannelData->rxTone;
+	uint16_t txT = currentChannelData->txTone;
+
+	toneString(rxT, rx, sizeof(rx));
+	toneString(txT, tx, sizeof(tx));
+	if ((rxT == CODEPLUG_CSS_TONE_NONE) && (txT == CODEPLUG_CSS_TONE_NONE))
+	{
+		kv(0, y, "TONE", "off");
+	}
+	else if (rxT == txT)
+	{
+		kv(0, y, ((codeplugGetCSSType(txT) & CSS_TYPE_DCS) ? "DCS" : "CTCSS"), tx);
+	}
+	else
+	{
+		int16_t w = kv(0, y, "RX", rx);
+		kv((int16_t)(w + 6), y, "TX", tx);
+	}
+}
+
+static void rightKv(int16_t y, const char *label, const char *value)
+{
+	kv((int16_t)(W - ((strlen(label) + strlen(value)) * 6) - 3), y, label, value);
+}
+
+// Channel / VFO screen, standby or FM reception
+static void drawMain(const emcomMainInfo_t *info, emcomState_t st)
+{
+	char buf[28];
+	char big[8];
+	char line1[24];
+	char line2[24];
 	bool digital = (trxGetMode() == RADIO_MODE_DIGITAL);
-
-	// VFO frequency being typed: 3 + 5 digits, the next one underlined
-	if (info->isVFO && info->freqEntry)
-	{
-		const char *d = info->freqEntry;
-		int idx = info->freqEntryIndex;
-
-		snprintf(buf, sizeof(buf), "%c%c%c.%c%c%c%c%c", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
-		txt(0, HERO_Y, buf, FONT_SIZE_3, false, AL_L);
-		txt((W - 1), (HERO_Y + 8), "MHz", FONT_SIZE_1, false, AL_R);
-		if (idx < 8)
-		{
-			box((int16_t)(((idx + ((idx > 2) ? 1 : 0)) * 8)), (HERO_Y + 16), 7, 1, true);
-		}
-		txt(0, FREQ_Y, "GRN OK  RED CANCEL", FONT_SIZE_1, false, AL_L);
-		return;
-	}
-
-	// channel number being typed
-	if ((info->isVFO == false) && (info->gotoChannel > 0))
-	{
-		snprintf(buf, sizeof(buf), "CH %d", info->gotoChannel);
-		txt(0, HERO_Y, buf, FONT_SIZE_3, false, AL_L);
-		txt(0, FREQ_Y, "GRN GO  RED CANCEL", FONT_SIZE_1, false, AL_L);
-		return;
-	}
-
 	uint32_t rxFreq = currentChannelData->rxFreq;
 	uint32_t txFreq = currentChannelData->txFreq;
 
@@ -808,98 +868,194 @@ static void drawHero(const emcomMainInfo_t *info, emcomState_t st)
 		txFreq = rxFreq;
 	}
 
+	// --- big block
 	if (info->isVFO)
 	{
-		formatFreq((info->entryTx ? txFreq : rxFreq), buf, sizeof(buf));
-		int16_t w = txt(0, HERO_Y, buf, FONT_SIZE_3, false, AL_L);
-		txt((w + 2), (HERO_Y + 8), (info->entryTx ? "TX" : "MHz"), FONT_SIZE_1, false, AL_L);
+		snprintf(big, sizeof(big), "%c", info->vfoLetter);
+		snprintf(line1, sizeof(line1), "VFO  %s", (info->freqEntry ? (info->entryTx ? "ENTER TX" : "ENTER RX") : (trxGetBandwidthIs25kHz() ? "25k" : "12.5k")));
+		if (info->freqEntry)
+		{
+			const char *d = info->freqEntry;
+			snprintf(line2, sizeof(line2), "%c%c%c.%c%c%c%c%c", d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]);
+		}
+		else
+		{
+			formatFreq((info->entryTx ? txFreq : rxFreq), line2, sizeof(line2));
+		}
+		int16_t tx = drawBigBlock(big, line1, line2);
 
-		// TX frequency, or RX when the TX one is selected
-		formatFreq((info->entryTx ? rxFreq : txFreq), ofs, sizeof(ofs));
-		snprintf(buf, sizeof(buf), "%s %s", (info->entryTx ? "RX" : "TX"), ofs);
-		txt(0, FREQ_Y, buf, FONT_SIZE_1, false, AL_L);
-		offsetString(buf, sizeof(buf));
+		if ((info->freqEntry == NULL) && (digital == false))
+		{
+			snprintf(buf, sizeof(buf), "%d", (int)squelchPercent());
+			rightKv(A_TOP_Y, "SQL", buf);
+		}
+		if (info->freqEntry && (info->freqEntryIndex < 8))
+		{
+			int idx = info->freqEntryIndex;
+			box((int16_t)(tx + ((idx + ((idx > 2) ? 1 : 0)) * 8)), (A_NAME_Y + 14), 7, 1, true);
+		}
+	}
+	else if (info->gotoChannel > 0)
+	{
+		snprintf(big, sizeof(big), "%d", info->gotoChannel);
+		drawBigBlock(big, "GO TO CHANNEL", "GRN go");
+	}
+	else
+	{
+		// channel number, 1-3 digits in the big font (the name keeps at least 8 characters)
+		snprintf(big, sizeof(big), "%02d", info->channelNumber);
+		if (strlen(big) > 3)
+		{
+			big[0] = 0;
+		}
+		snprintf(line1, sizeof(line1), "%s", (info->zoneName ? info->zoneName : ""));
+		if (digital)
+		{
+			uint32_t id;
+			char name[24];
+
+			contactName(name, sizeof(name), &id);
+			snprintf(line2, sizeof(line2), "%s %u", (((id >> 24) == PC_CALL_FLAG) ? "PC" : "TG"), (unsigned)(id & 0xFFFFFF));
+		}
+		else
+		{
+			codeplugUtilConvertBufToString(currentChannelData->name, line2, 16);
+		}
+		if (big[0])
+		{
+			drawBigBlock(big, line1, line2);
+		}
+		else
+		{
+			// 4+ digit channel numbers: the number in the zone row, the name full width
+			snprintf(buf, sizeof(buf), "%d %s", info->channelNumber, line1);
+			fitText(0, A_TOP_Y, buf, FONT_SIZE_1, false);
+			fitText(0, A_NAME_Y, line2, FONT_SIZE_3, false);
+		}
+	}
+
+	hline(0, A_LINE_Y, W);
+
+	if (info->freqEntry || (info->gotoChannel > 0))
+	{
+		txt(0, A_FREQ_Y, "GRN OK   A CANCEL", FONT_SIZE_1, false, AL_L);
+		drawBottomBar(st, NULL, NULL);
+		return;
+	}
+
+	// --- frequency row
+	if (info->isVFO)
+	{
+		formatFreq((info->entryTx ? rxFreq : txFreq), line1, sizeof(line1));
+		kv(0, A_FREQ_Y, (info->entryTx ? "RX" : "TX"), line1);
 		if (digital)
 		{
 			snprintf(buf, sizeof(buf), "CC%u TS%d", (unsigned)trxGetDMRColourCode(), (trxGetDMRTimeSlot() + 1));
 		}
-		txt((W - 1), FREQ_Y, buf, FONT_SIZE_1, false, AL_R);
+		else
+		{
+			offsetString(buf, sizeof(buf));
+		}
+		txt((W - 1), A_FREQ_Y, buf, FONT_SIZE_1, false, AL_R);
+	}
+	else
+	{
+		formatFreq(((st == ST_TX) ? txFreq : rxFreq), buf, sizeof(buf));
+		int16_t w = txt(0, A_FREQ_Y, buf, FONT_SIZE_1_BOLD, false, AL_L);
+		char ofs[12];
+
+		offsetString(ofs, sizeof(ofs));
+		if (ofs[0] && (uiDataGlobal.talkaround == false))
+		{
+			w = (int16_t)(w + 5 + txt((int16_t)(w + 5), A_FREQ_Y, ofs, FONT_SIZE_1, false, AL_L));
+		}
+
+		buf[0] = 0;
+		if (digital)
+		{
+			uint32_t id;
+			char name[24];
+
+			contactName(name, sizeof(name), &id);
+			snprintf(buf, sizeof(buf), "%s", (uiDataGlobal.talkaround ? "TA" : (uiDataGlobal.reverseRepeaterChannel ? "REV" : name)));
+		}
+		else if (currentChannelData->rxTone != CODEPLUG_CSS_TONE_NONE)
+		{
+			char t[10];
+
+			toneString(currentChannelData->rxTone, t, sizeof(t));
+			snprintf(buf, sizeof(buf), "%s%s", ((codeplugGetCSSType(currentChannelData->rxTone) & CSS_TYPE_DCS) ? "" : "T"), t);
+		}
+		size_t maxChars = (size_t)(((W - 1 - w - 6) > 0) ? ((W - 1 - w - 6) / 6) : 0);
+		if (strlen(buf) > maxChars)
+		{
+			buf[maxChars] = 0;
+		}
+		txt((W - 1), A_FREQ_Y, buf, FONT_SIZE_1, false, AL_R);
+	}
+
+	// --- info row
+	if ((st == ST_RX) && (digital == false))
+	{
+		int dBm = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
+
+		sUnits(dBm, buf, sizeof(buf));
+		int16_t w = txt(0, A_INFO_Y, buf, FONT_SIZE_1_BOLD, false, AL_L);
+		barX = (int16_t)(w + 4);
+		barY = A_INFO_Y;
+		barW = (int16_t)(W - barX);
+		smeter(barX, barY, barW, rssiPermille(dBm));
+		barVisible = true;
+
+		mmss((int)((ticksGetMillis() - rxSinceMs) / 1000U), line1, sizeof(line1));
+		snprintf(line2, sizeof(line2), "RX %s", line1);
+		snprintf(buf, sizeof(buf), "%ddBm", dBm);
+		drawBottomBar(st, line2, buf);
 		return;
 	}
 
-	// Channel: the name (FM) or the talk group (DMR) in the large font
-	if (digital)
+	if (digital && (uiDataGlobal.lastHeardCount > 0) && (LinkHead != NULL))
 	{
-		uint32_t id;
-		char name[24];
+		char call[SCREEN_LINE_BUFFER_SIZE];
+		char age[8];
 
-		contactName(name, sizeof(name), &id);
-		snprintf(buf, sizeof(buf), "%s %u", (((id >> 24) == PC_CALL_FLAG) ? "PC" : "TG"), (unsigned)(id & 0xFFFFFF));
-		int16_t w = txt(0, HERO_Y, buf, FONT_SIZE_3, false, AL_L);
-		size_t maxChars = (size_t)((W - w - 4) / 6);
-		if ((name[0] != 0) && (strcmp(name, buf) != 0) && (maxChars >= 3))
-		{
-			if (strlen(name) > maxChars)
-			{
-				name[maxChars] = 0;
-			}
-			txt((w + 4), (HERO_Y + 8), name, FONT_SIZE_1, false, AL_L);
-		}
+		getCallsignOnly(call, (((LinkHead->talkerAlias[0] != 0) && (strncmp(LinkHead->contact, "ID:", 3) == 0)) ? LinkHead->talkerAlias : LinkHead->contact));
+		call[10] = 0;
+		ageString((ticksGetMillis() - LinkHead->time), age, sizeof(age));
+		kv(0, A_INFO_Y, "LH", call);
+		txt((W - 1), A_INFO_Y, age, FONT_SIZE_1, false, AL_R);
+	}
+	else if (digital)
+	{
+		snprintf(buf, sizeof(buf), "%u", (unsigned)trxGetDMRColourCode());
+		int16_t w = kv(0, A_INFO_Y, "CC", buf);
+		snprintf(buf, sizeof(buf), "%d", (trxGetDMRTimeSlot() + 1));
+		kv((int16_t)(w + 8), A_INFO_Y, "TS", buf);
+		txt((W - 1), A_INFO_Y, "no calls yet", FONT_SIZE_1, false, AL_R);
 	}
 	else
 	{
-		char name[20];
-
-		codeplugUtilConvertBufToString(currentChannelData->name, name, 16);
-		name[16] = 0;
-		txt(0, HERO_Y, name, FONT_SIZE_3, false, AL_L);
-	}
-
-	// frequency, offset, tone / TA
-	bool txShown = (st == ST_TX);
-	formatFreq((txShown ? txFreq : rxFreq), buf, sizeof(buf));
-	int16_t w = txt(0, FREQ_Y, buf, FONT_SIZE_1_BOLD, false, AL_L);
-	offsetString(ofs, sizeof(ofs));
-	if (ofs[0] && (uiDataGlobal.talkaround == false))
-	{
-		txt((w + 6), FREQ_Y, ofs, FONT_SIZE_1, false, AL_L);
-	}
-
-	if (digital)
-	{
-		buf[0] = 0;
-		if (uiDataGlobal.talkaround)
+		drawTones(A_INFO_Y);
+		if (info->isVFO)
 		{
-			snprintf(buf, sizeof(buf), "TA");
-		}
-		else if (uiDataGlobal.reverseRepeaterChannel)
-		{
-			snprintf(buf, sizeof(buf), "REV");
-		}
-	}
-	else
-	{
-		uint16_t tone = ((st == ST_RX) ? currentChannelData->rxTone : currentChannelData->txTone);
-		char t[10];
-
-		if (tone != CODEPLUG_CSS_TONE_NONE)
-		{
-			toneString(tone, t, sizeof(t));
-			snprintf(buf, sizeof(buf), "%s%s", ((st == ST_RX) ? "CTC " : "T"), t);
-			if (codeplugGetCSSType(tone) & CSS_TYPE_DCS)
+			if (currentChannelData->tot != 0)
 			{
-				snprintf(buf, sizeof(buf), "%s", t);
+				uint32_t secs = (currentChannelData->tot * 15U);
+				snprintf(buf, sizeof(buf), "%u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
+				rightKv(A_INFO_Y, "TOT", buf);
 			}
 		}
 		else
 		{
-			buf[0] = 0;
+			snprintf(buf, sizeof(buf), "%d", (int)squelchPercent());
+			rightKv(A_INFO_Y, "SQL", buf);
 		}
 	}
-	txt((W - 1), FREQ_Y, buf, FONT_SIZE_1, false, AL_R);
+
+	drawBottomBar(st, NULL, NULL);
 }
 
-// SK1 held: RX / TX frequencies with their tones (FM) or CC / TS (DMR), over the lower rows
+// SK1 held: RX / TX frequencies with their tones (FM) or CC / TS (DMR) under the line
 static void drawDetails(void)
 {
 	char f[16];
@@ -907,118 +1063,27 @@ static void drawDetails(void)
 	char buf[28];
 	bool digital = (trxGetMode() == RADIO_MODE_DIGITAL);
 
-	box(0, (FREQ_Y - 1), W, (H - FREQ_Y + 1), false);
+	box(0, (A_LINE_Y + 1), W, (H - A_LINE_Y - 1), false);
 	formatFreq(currentChannelData->rxFreq, f, sizeof(f));
 	toneString(currentChannelData->rxTone, t, sizeof(t));
-	snprintf(buf, sizeof(buf), "RX %s %s", f, (digital ? "" : t));
-	txt(0, FREQ_Y, buf, FONT_SIZE_1, false, AL_L);
+	snprintf(buf, sizeof(buf), "%s %s", f, (digital ? "" : t));
+	kv(0, A_FREQ_Y, "RX", buf);
 	formatFreq(currentChannelData->txFreq, f, sizeof(f));
 	toneString(currentChannelData->txTone, t, sizeof(t));
-	snprintf(buf, sizeof(buf), "TX %s %s", f, (digital ? "" : t));
-	txt(0, (FREQ_Y + 9), buf, FONT_SIZE_1, false, AL_L);
+	snprintf(buf, sizeof(buf), "%s %s", f, (digital ? "" : t));
+	kv(0, A_INFO_Y, "TX", buf);
 	if (digital)
 	{
 		snprintf(buf, sizeof(buf), "CC%u TS%d", (unsigned)trxGetDMRColourCode(), (trxGetDMRTimeSlot() + 1));
 	}
 	else
 	{
-		uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
-		snprintf(buf, sizeof(buf), "%s SQL%d", (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"), (int)((sql > 0) ? (5 * (sql - 1)) : 0));
+		snprintf(buf, sizeof(buf), "%s SQL%d", (trxGetBandwidthIs25kHz() ? "25k" : "12.5k"), (int)squelchPercent());
 	}
-	txt(0, FOOT_Y, buf, FONT_SIZE_1, false, AL_L);
+	drawBottomBar(ST_STBY, buf, "SK1");
 }
 
-// Lower row in standby: DMR last heard, else the tones and squelch
-static void drawInfoRow(bool isVFO)
-{
-	char buf[28];
-
-	if ((trxGetMode() == RADIO_MODE_DIGITAL) && (uiDataGlobal.lastHeardCount > 0) && (LinkHead != NULL))
-	{
-		char call[SCREEN_LINE_BUFFER_SIZE];
-		char age[8];
-
-		getCallsignOnly(call, (((LinkHead->talkerAlias[0] != 0) && (strncmp(LinkHead->contact, "ID:", 3) == 0)) ? LinkHead->talkerAlias : LinkHead->contact));
-		call[12] = 0;
-		ageString((ticksGetMillis() - LinkHead->time), age, sizeof(age));
-		snprintf(buf, sizeof(buf), "LH %s %s", call, age);
-		txt(0, ROW_Y, buf, FONT_SIZE_1, false, AL_L);
-		return;
-	}
-
-	if (trxGetMode() == RADIO_MODE_DIGITAL)
-	{
-		uint32_t id;
-		char name[24];
-
-		contactName(name, sizeof(name), &id);
-		txt(0, ROW_Y, name, FONT_SIZE_1, false, AL_L);
-		return;
-	}
-
-	char rx[10];
-	char tx[10];
-	uint16_t rxT = currentChannelData->rxTone;
-	uint16_t txT = currentChannelData->txTone;
-
-	toneString(rxT, rx, sizeof(rx));
-	toneString(txT, tx, sizeof(tx));
-	if ((rxT == CODEPLUG_CSS_TONE_NONE) && (txT == CODEPLUG_CSS_TONE_NONE))
-	{
-		kv(0, ROW_Y, "TONE", "off");
-	}
-	else if (rxT == txT)
-	{
-		kv(0, ROW_Y, ((codeplugGetCSSType(txT) & CSS_TYPE_DCS) ? "DCS" : "CTCSS"), tx);
-	}
-	else
-	{
-		int16_t w = kv(0, ROW_Y, "RX", rx);
-		kv((int16_t)(w + 6), ROW_Y, "TX", tx);
-	}
-
-	if (isVFO)
-	{
-		if (currentChannelData->tot != 0)
-		{
-			uint32_t secs = (currentChannelData->tot * 15U);
-			snprintf(buf, sizeof(buf), "%u%c", (unsigned)((secs < 60U) ? secs : ((secs + 30U) / 60U)), ((secs < 60U) ? 's' : 'm'));
-			kv((int16_t)(W - 1 - ((strlen(buf) + 4) * 6) + 3), ROW_Y, "TOT", buf);
-		}
-	}
-	else
-	{
-		uint8_t sql = ((currentChannelData->sql == 0) ? nonVolatileSettings.squelchDefaults[currentRadioDevice->trxCurrentBand[TRX_RX_FREQ_BAND]] : currentChannelData->sql);
-
-		snprintf(buf, sizeof(buf), "%d", (int)((sql > 0) ? (5 * (sql - 1)) : 0));
-		kv((int16_t)(W - 1 - ((strlen(buf) + 4) * 6) + 3), ROW_Y, "SQL", buf);
-	}
-}
-
-// FM reception: S-meter, the time on the channel and dBm under the frequency
-static void drawFmRx(void)
-{
-	char buf[16];
-	int dBm = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
-
-	sUnits(dBm, buf, sizeof(buf));
-	int16_t w = txt(0, ROW_Y, buf, FONT_SIZE_1_BOLD, false, AL_L);
-	barX = (int16_t)(w + 3);
-	barY = ROW_Y;
-	barW = (int16_t)(W - barX);
-	levelBar(barX, barY, barW, 7, rssiPermille(dBm), 6);
-	barVisible = true;
-
-	dotted(0, (FOOT_Y - 1), W);
-	mmss((int)((ticksGetMillis() - rxSinceMs) / 1000U), buf, sizeof(buf));
-	char rxt[20];
-	snprintf(rxt, sizeof(rxt), "RX %s", buf);
-	txt(0, FOOT_Y, rxt, FONT_SIZE_1, false, AL_L);
-	snprintf(buf, sizeof(buf), "%ddBm", dBm);
-	txt((W - 1), FOOT_Y, buf, FONT_SIZE_1, false, AL_R);
-}
-
-// DMR caller: callsign in an inverse band, name, place, S-meter
+// DMR caller: call sign, name and place, S-meter; talk group and the time on air in the bottom bar
 static void drawDmrCaller(void)
 {
 	char buf[40];
@@ -1029,12 +1094,11 @@ static void drawDmrCaller(void)
 					(strncmp(LinkHead->contact, "ID:", 3) == 0)));
 	const char *src = (useTA ? LinkHead->talkerAlias : LinkHead->contact);
 
-	box(0, 10, W, 20, true);
 	getCallsignOnly(call, src);
 	call[16] = 0;
-	txt(0, 12, call, FONT_SIZE_3, true, AL_C);
+	txt(0, 11, call, FONT_SIZE_3, false, AL_C);
 
-	// the rest of the contact / TA text: name, then the place
+	// the rest of the contact / TA text: name and place on one line
 	const char *rest = src;
 	while (*rest && (*rest != ' '))
 	{
@@ -1044,35 +1108,34 @@ static void drawDmrCaller(void)
 	{
 		rest++;
 	}
+	snprintf(buf, sizeof(buf), "%s", rest);
+	buf[21] = 0;
+	txt(0, 27, buf, FONT_SIZE_1_BOLD, false, AL_C);
 
-	char line1[22];
-	char line2[22];
-	const char *sp = strchr(rest, ' ');
-	size_t n1 = (sp ? (size_t)(sp - rest) : strlen(rest));
-
-	n1 = MIN(n1, (sizeof(line1) - 1));
-	memcpy(line1, rest, n1);
-	line1[n1] = 0;
-	snprintf(line2, sizeof(line2), "%s", (sp ? (sp + 1) : ""));
-	if ((LinkHead->talkGroupOrPcId >> 24) == PC_CALL_FLAG)
-	{
-		snprintf(buf, sizeof(buf), "%s PRIVATE", line1);
-		txt(0, 32, buf, FONT_SIZE_1_BOLD, false, AL_C);
-	}
-	else
-	{
-		txt(0, 32, line1, FONT_SIZE_1_BOLD, false, AL_C);
-	}
-	txt(0, 41, line2, FONT_SIZE_1, false, AL_C);
+	hline(0, A_LINE_Y, W);
 
 	int dBm = trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
 	sUnits(dBm, buf, sizeof(buf));
-	txt(0, 51, buf, FONT_SIZE_1, false, AL_L);
-	barX = 34;
-	barY = 51;
-	barW = (W - barX);
-	levelBar(barX, barY, barW, 7, rssiPermille(dBm), 6);
+	int16_t w = txt(0, (A_LINE_Y + 4), buf, FONT_SIZE_1_BOLD, false, AL_L);
+	barX = (int16_t)(w + 4);
+	barY = (A_LINE_Y + 4);
+	barW = (int16_t)(W - barX);
+	smeter(barX, barY, barW, rssiPermille(dBm));
 	barVisible = true;
+
+	char tg[24];
+	uint32_t id = LinkHead->talkGroupOrPcId;
+
+	if ((id >> 24) == PC_CALL_FLAG)
+	{
+		snprintf(tg, sizeof(tg), "PRIVATE CALL");
+	}
+	else
+	{
+		snprintf(tg, sizeof(tg), "TG %u", (unsigned)(id & 0xFFFFFF));
+	}
+	mmss((int)((ticksGetMillis() - rxSinceMs) / 1000U), buf, sizeof(buf));
+	drawBottomBar(ST_RX, tg, buf);
 }
 
 // TX: inverse band with the timer, power and mode; the time-out bar; tone or talk group
@@ -1095,7 +1158,7 @@ static void drawTx(const emcomMainInfo_t *info)
 	txt((W - 2), 3, buf, FONT_SIZE_1_BOLD, true, AL_R);
 	txt((W - 2), 13, (digital ? "DMR" : (trxGetBandwidthIs25kHz() ? "FM" : "FMN")), FONT_SIZE_1, true, AL_R);
 
-	uint32_t txFreq = (uiDataGlobal.talkaround ? currentChannelData->rxFreq : (uiDataGlobal.reverseRepeaterChannel ? currentChannelData->rxFreq : currentChannelData->txFreq));
+	uint32_t txFreq = ((uiDataGlobal.talkaround || uiDataGlobal.reverseRepeaterChannel) ? currentChannelData->rxFreq : currentChannelData->txFreq);
 	formatFreq(txFreq, f, sizeof(f));
 	if (info->isVFO)
 	{
@@ -1112,28 +1175,26 @@ static void drawTx(const emcomMainInfo_t *info)
 	txt(2, 21, buf, FONT_SIZE_1, true, AL_L);
 
 	// time-out timer
-	txt(0, 34, "TOT", FONT_SIZE_1, false, AL_L);
+	txt(0, 33, "TOT", FONT_SIZE_1, false, AL_L);
 	if (remaining < 0)
 	{
-		txt(22, 34, "off", FONT_SIZE_1, false, AL_L);
+		txt(22, 33, "off", FONT_SIZE_1, false, AL_L);
 	}
 	else
 	{
-		bool last = (remaining <= 10);
-
-		levelBar(22, 34, (W - 22), 7, ((total > 0) ? ((remaining * 1000) / total) : 0), 0);
+		levelBar(22, 33, (W - 22), 7, ((total > 0) ? ((remaining * 1000) / total) : 0), 0);
 		mmss(remaining, f, sizeof(f));
 		snprintf(buf, sizeof(buf), "%s left", f);
-		if (last)
+		if (remaining <= 10)
 		{
 			int16_t w = (int16_t)((strlen(buf) * 6) + 3);
 
-			box(0, 44, w, 9, true);
-			txt(1, 45, buf, FONT_SIZE_1_BOLD, true, AL_L);
+			box(0, 43, w, 9, true);
+			txt(1, 44, buf, FONT_SIZE_1_BOLD, true, AL_L);
 		}
 		else
 		{
-			txt(0, 45, buf, FONT_SIZE_1, false, AL_L);
+			txt(0, 44, buf, FONT_SIZE_1, false, AL_L);
 		}
 	}
 
@@ -1144,10 +1205,9 @@ static void drawTx(const emcomMainInfo_t *info)
 
 		contactName(name, sizeof(name), &id);
 		snprintf(buf, sizeof(buf), "%s%u", (((id >> 24) == PC_CALL_FLAG) ? "PC" : "TG"), (unsigned)(id & 0xFFFFFF));
-		txt((W - 1), 45, buf, FONT_SIZE_1, false, AL_R);
-		dotted(0, 55, W);
-		name[21] = 0;
-		txt(0, 56, name, FONT_SIZE_1, false, AL_L);
+		txt((W - 1), 44, buf, FONT_SIZE_1, false, AL_R);
+		name[20] = 0;
+		drawBottomBar(ST_TX, name, NULL);
 	}
 	else
 	{
@@ -1157,10 +1217,9 @@ static void drawTx(const emcomMainInfo_t *info)
 
 			toneString(currentChannelData->txTone, tn, sizeof(tn));
 			snprintf(buf, sizeof(buf), "T%s", tn);
-			txt((W - 1), 45, buf, FONT_SIZE_1, false, AL_R);
+			txt((W - 1), 44, buf, FONT_SIZE_1, false, AL_R);
 		}
-		dotted(0, 55, W);
-		txt(0, 56, "SK2 1750  0-9 DTMF", FONT_SIZE_1, false, AL_L);
+		drawBottomBar(ST_TX, "SK2 1750  0-9 DTMF", "");
 	}
 }
 
@@ -1205,25 +1264,10 @@ void emcomRenderMain(const emcomMainInfo_t *info)
 		}
 		else
 		{
-			drawZoneRow(info);
-			drawHero(info, st);
-
+			drawMain(info, st);
 			if (details)
 			{
 				drawDetails();
-			}
-			else if ((info->freqEntry == NULL) && (info->gotoChannel == 0))
-			{
-				dotted(0, DIV_Y, W);
-				if ((st == ST_RX) && (trxGetMode() == RADIO_MODE_ANALOG))
-				{
-					drawFmRx();
-				}
-				else
-				{
-					drawInfoRow(info->isVFO);
-					drawBottomRow(st);
-				}
 			}
 		}
 	}
@@ -1249,6 +1293,9 @@ void emcomRenderMain(const emcomMainInfo_t *info)
 	drawn.lastFull = ticksGetMillis();
 	drawn.rxDbm = (int16_t)trxGetRSSIdBm(RADIO_DEVICE_PRIMARY);
 	drawn.rxSecs = ((ticksGetMillis() - rxSinceMs) / 1000U);
+#if defined(HAS_DMR_SMS)
+	drawn.smsUnread = dmrSmsUnreadCount();
+#endif
 }
 
 bool emcomNeedsFullRedraw(uint32_t now)
@@ -1273,6 +1320,12 @@ bool emcomNeedsFullRedraw(uint32_t now)
 	{
 		return true;
 	}
+#if defined(HAS_DMR_SMS)
+	if (dmrSmsUnreadCount() != drawn.smsUnread)
+	{
+		return true;
+	}
+#endif
 	if (sosOn && ((((now / 600U) & 1U) == 0U) != drawn.sosPhase))
 	{
 		return true;
@@ -1327,8 +1380,8 @@ void emcomThemePreset(bool night, uint16_t *items)
 // APRS beacon on air: an inverse band over the frequency rows
 void emcomDrawTxBanner(const char *str)
 {
-	box(0, (FREQ_Y - 2), W, 20, true);
-	txt(0, (FREQ_Y + 1), str, FONT_SIZE_3, true, AL_C);
+	box(0, (A_LINE_Y + 1), W, 19, true);
+	txt(0, (A_LINE_Y + 2), str, FONT_SIZE_3, true, AL_C);
 }
 
 // --- message boxes / notifications ----------------------------------------------------------

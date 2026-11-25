@@ -90,7 +90,11 @@ static const uint16_t quickkeyChoices[] =
 #endif
 #if defined(HAS_SSTV_MENU)
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_DECODERS),
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 	QUICKKEY_ACTIONVALUE(QUICKKEY_ACTION_MENU_DMR_SMS),
+#endif
+#if defined(HAS_SSTV_MENU)
 	QUICKKEY_MENUVALUE_CHECKED(MENU_SSTV, 0, 0),
 #endif
 };
@@ -140,6 +144,8 @@ const char *quickkeyActionGetName(quickkeyAction_t action)
 #if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:
 			return "Decoders";
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 		case QUICKKEY_ACTION_MENU_DMR_SMS:
 			return "DMR SMS";
 #endif
@@ -165,6 +171,8 @@ static int quickkeyActionMenu(quickkeyAction_t action)
 #endif
 #if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:     return MENU_DECODERS;
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 		case QUICKKEY_ACTION_MENU_DMR_SMS:      return MENU_DMR_SMS;
 #endif
 		default:                                return -1;
@@ -272,6 +280,8 @@ bool quickkeyActionExecute(quickkeyAction_t action, bool isChannelMode)
 		case QUICKKEY_ACTION_MENU_SKED:
 #if defined(HAS_SSTV_MENU)
 		case QUICKKEY_ACTION_MENU_DECODERS:
+#endif
+#if defined(HAS_DMR_SMS_MENU)
 		case QUICKKEY_ACTION_MENU_DMR_SMS:
 #endif
 			// called from the Channel / VFO screen only (applicationMain.c), as the menu quickkeys
