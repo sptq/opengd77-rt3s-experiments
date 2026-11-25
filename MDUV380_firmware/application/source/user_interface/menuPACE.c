@@ -186,7 +186,23 @@ static void updateScreenMono(void)
 			emcomUiText(MONO_TEXT_X, (y + 1), name, FONT_SIZE_1_BOLD, THEME_ITEM_FG_DEFAULT, false);
 			if (state != NULL)
 			{
-				emcomUiChip((DISPLAY_SIZE_X - 1), (y + 1), state, THEME_ITEM_FG_DEFAULT, (exists ? EMCOM_CHIP_SOLID : EMCOM_CHIP_OUTLINE), true);
+				if (exists)
+				{
+					emcomUiChip((DISPLAY_SIZE_X - 1), (y + 1), state, THEME_ITEM_FG_DEFAULT, EMCOM_CHIP_SOLID, true);
+				}
+				else
+				{
+					// empty / deleted: plain lower case text, the solid chip stays for ON
+					char low[10];
+					size_t n = 0;
+
+					for (; state[n] && (n < (sizeof(low) - 1)); n++)
+					{
+						low[n] = (char)(((state[n] >= 'A') && (state[n] <= 'Z')) ? (state[n] + ('a' - 'A')) : state[n]);
+					}
+					low[n] = 0;
+					emcomUiText((DISPLAY_SIZE_X - 1), (y + 1), low, FONT_SIZE_1, THEME_ITEM_FG_DECORATION, true);
+				}
 			}
 			y += MONO_ROW_H;
 		}

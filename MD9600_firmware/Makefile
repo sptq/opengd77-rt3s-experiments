@@ -38,7 +38,8 @@ DEFS := \
 # DEFS += -DLANGUAGE_BUILD_JAPANESE
 
 # GITVERSION matches what STM32CubeIDE injects in .cproject
-GITVERSION := $(shell git -C $(CURDIR) rev-parse --short HEAD 2>/dev/null || echo UNKNOWN)
+# the container build gets it from the host (a worktree .git points outside the container)
+GITVERSION ?= $(shell git -C $(CURDIR) rev-parse --short HEAD 2>/dev/null || echo UNKNOWN)
 DEFS += -DGITVERSION=\"$(GITVERSION)\"
 
 INCLUDES := \
@@ -153,6 +154,7 @@ CONTAINER_RUN = $(CONTAINER_ENGINE) run --rm \
                 -v $(SRC_DIR):/src:Z \
                 -w /src/MD9600_firmware \
                 -e HW=$(HW) \
+                -e GITVERSION=$(shell git -C $(CURDIR) rev-parse --short HEAD 2>/dev/null || echo UNKNOWN) \
                 $(IMG_TAG)
 
 .PHONY: image build rebuild help

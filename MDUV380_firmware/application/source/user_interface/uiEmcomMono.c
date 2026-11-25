@@ -46,7 +46,7 @@
 #define W               DISPLAY_SIZE_X
 #define H               DISPLAY_SIZE_Y
 #define HEADER_H        9
-#define ZONE_Y          10
+#define ZONE_Y          11
 #define HERO_Y          19
 #define FREQ_Y          36
 #define DIV_Y           45
@@ -633,6 +633,20 @@ static void drawBottomRow(emcomState_t st)
 	dotted(0, (FOOT_Y - 1), W);
 	clockString(clock, sizeof(clock));
 	int16_t leftEnd = txt(0, FOOT_Y, clock, FONT_SIZE_1_BOLD, false, AL_L);
+	if ((uiDataGlobal.dateTimeSecs > 86400U) && (strlen(clock) <= 6))
+	{
+		static const char *months[] = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+		struct tm t;
+		time_t_custom secs = uiDataGlobal.dateTimeSecs;
+
+		if ((nonVolatileSettings.timezone & 0x80) != 0)
+		{
+			secs = (time_t_custom)((int64_t)secs + ((((nonVolatileSettings.timezone & 0x7F) - 64) * (15 * 60))));
+		}
+		gmtime_r_Custom(&secs, &t);
+		snprintf(buf, sizeof(buf), "%02d%s", t.tm_mday, months[CLAMP(t.tm_mon, 0, 11)]);
+		leftEnd = (int16_t)(leftEnd + 6 + txt((int16_t)(leftEnd + 6), FOOT_Y, buf, FONT_SIZE_1, false, AL_L));
+	}
 
 	if (sosOn)
 	{
@@ -677,7 +691,6 @@ static void drawBottomRow(emcomState_t st)
 		r -= txt(r, FOOT_Y, "NO FIX", FONT_SIZE_1, false, AL_R) + 4;
 	}
 #endif
-	UNUSED_PARAMETER(buf);
 }
 
 // zone / VFO row
