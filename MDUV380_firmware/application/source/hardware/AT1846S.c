@@ -30,6 +30,7 @@
 
 #include "hardware/AT1846S.h"
 #include "hardware/radioHardwareInterface.h"
+#include "interfaces/adc.h"
 
 
 #define DCS_PACKED_DATA_NUM          83
@@ -64,6 +65,7 @@ typedef struct
 
 static RegCache_t registerCache[RADIO_DEVICE_MAX][127];// all values will be initialised to false,0,0 because its a global
 static uint8_t currentRegisterBank[RADIO_DEVICE_MAX] = { 0 }; // offset in cached page array
+static bool fmRxAudioCaptureActive = false;
 
 //
 // NOTE: register 0xFF is used for osDelay, values are concatenated for the delay value (in ms).
@@ -244,9 +246,20 @@ void AT1846sPostInit(void)
 
 void AT1846sSetMode(int mode)
 {
+	if (mode != RADIO_MODE_ANALOG)
+	{
+		// I2S capture is only valid in analogue FM; avoid carrying the capture
+		// override into the next analogue mode after a DMR mode change.
+		fmRxAudioCaptureActive = false;
+	}
+
 	if (mode == RADIO_MODE_ANALOG)
 	{
 		I2C_AT1846S_send_Settings(AT1846FMSettings, sizeof(AT1846FMSettings) / AT1846_BYTES_PER_COMMAND);
+#if defined(PLATFORM_MDUV380)
+		// FM settings reload the stock gain; restore the knob's quiet-range value.
+		radioSetFMRxAudioGain(getVolumeControl());
+#endif
 	}
 	else
 	{
@@ -323,6 +336,54 @@ bool radioWriteReg2byte(uint8_t reg, uint8_t val1, uint8_t val2)
 	}
 
 	return ret;
+}
+
+// Add extra attenuation to the AT1846S FM audio path over the lower half of
+// the volume knob. The normal C6000 line-out gain bottoms out at -31; reducing
+// this chip's output as well makes the quiet end useful for close listening.
+// The stock 0xCC register value is restored at volume 0 and above. The exact
+// gain represented by the register nibbles is undocumented.
+void radioSetFMRxAudioGain(int8_t volume)
+{
+	uint8_t nibble;
+
+	if (volume == -99) // muted sentinel from getVolumeControl()
+	{
+		return;
+	}
+
+	// The AT1846S feeds the HR-C6000 before its I2S decoder input. Keep the
+	// source at stock gain while APRS, tone or SSTV capture is active; otherwise
+	// a volume change could make the decoder input too quiet.
+	if (fmRxAudioCaptureActive)
+	{
+		volume = 0;
+	}
+
+	if (volume >= 0)
+	{
+		nibble = 0x0C; // stock low byte: 0xCC
+	}
+	else
+	{
+		int gain = ((volume < -31) ? -31 : (int) volume);
+
+		// Map -31..0 onto nibble values 2..12, reaching stock level at zero.
+		nibble = (uint8_t)(2 + (((gain + 31) * 10) / 31));
+	}
+
+	(void)radioWriteReg2byte(0x44, 0x06, (uint8_t)((nibble << 4) | nibble));
+}
+
+void radioSetFMRxAudioCaptureActive(bool active)
+{
+	if (fmRxAudioCaptureActive == active)
+	{
+		return;
+	}
+
+	fmRxAudioCaptureActive = active;
+	radioSetFMRxAudioGain(active ? 0 : getVolumeControl());
 }
 
 bool radioReadReg2byte(uint8_t reg, uint8_t *val1, uint8_t *val2)

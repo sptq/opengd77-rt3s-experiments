@@ -650,6 +650,12 @@ bars are drawn dim at full height). The pop-up bar shown while
 turning the knob is the upstream *Options → Display → Visual volume*
 option.
 
+On RT3S / MDUV380, analogue FM also uses the AT1846S's internal audio gain
+over the lower half of the knob range, making the quietest settings quieter.
+The existing C6000 gain control remains in place; DMR volume behavior is
+unchanged. The AT1846S remains at its stock gain while APRS RX, the tone
+decoders or SSTV are capturing audio for the HR-C6000 I2S input.
+
 ### GPS log to GPX
 
 With the GPS mode set to *On+Log* the firmware records NMEA into the last

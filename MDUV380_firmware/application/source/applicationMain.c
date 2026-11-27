@@ -38,6 +38,9 @@
 #include "hardware/SPI_Flash.h"
 #include "interfaces/adc.h"
 #include "hardware/radioHardwareInterface.h"
+#if defined(PLATFORM_MDUV380)
+#include "hardware/AT1846S.h"
+#endif
 
 #include "io/buttons.h"
 #include "usb/usb_com.h"
@@ -308,6 +311,14 @@ static void settingsUpdateAudioAlert(void)
 static void updateVolumeGain(int menuScreen)
 {
 	HRC6000SetDmrRxGain(lastVolume);
+	// The AT1846S is in the analogue FM receive path on MDUV380/RT3S, but not
+	// DMR. Stack its attenuation under the C6000 line-out gain for quiet FM.
+#if defined(PLATFORM_MDUV380)
+	if ((trxGetMode() == RADIO_MODE_ANALOG) && (lastVolume != -99))
+	{
+		radioSetFMRxAudioGain(lastVolume);
+	}
+#endif
 
 #if defined(HAS_SOFT_VOLUME)
 	if (settingsIsOptionBitSet(BIT_VISUAL_VOLUME) &&

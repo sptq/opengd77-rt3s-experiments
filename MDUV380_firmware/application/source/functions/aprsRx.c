@@ -28,6 +28,10 @@
 #if defined(HAS_GPS)
 #include "interfaces/gps.h"
 #endif
+#if defined(PLATFORM_MDUV380)
+#include "hardware/AT1846S.h"
+#include "interfaces/adc.h"
+#endif
 
 #if defined(I2S_APRS_RX)
 
@@ -106,6 +110,15 @@ static uint32_t lastNoClockTime;
 static uint32_t levelTime;
 static uint8_t levelPercent;
 
+static void setFMRxAudioCaptureActive(bool active)
+{
+#if defined(PLATFORM_MDUV380)
+	radioSetFMRxAudioCaptureActive(active);
+#else
+	UNUSED_PARAMETER(active);
+#endif
+}
+
 // IRQ context
 static void frameReceived(const uint8_t *frame, uint16_t len)
 {
@@ -164,6 +177,7 @@ void aprsRxSetSstv(bool on, sstvRxPixelCallback_t pixelCallback)
 	}
 
 	i2sAprsRxStop(); // no IRQ while the shared memory changes hands; aprsRxTick() restarts the capture
+	setFMRxAudioCaptureActive(false);
 	state = APRS_RX_STATE_PAUSED;
 
 	if (on)
@@ -387,6 +401,7 @@ static void updateEnabled(void)
 
 	enabled = enable;
 	i2sAprsRxStop();
+	setFMRxAudioCaptureActive(false);
 	sstvOn = false;
 
 	if (enable)
@@ -985,14 +1000,20 @@ void aprsRxTick(void)
 	if (captureAllowed() == false)
 	{
 		i2sAprsRxStop();
+		setFMRxAudioCaptureActive(false);
 		state = APRS_RX_STATE_PAUSED;
 	}
 	else if (i2sAprsRxIsActive())
 	{
+		setFMRxAudioCaptureActive(true);
 		state = APRS_RX_STATE_LISTENING;
 	}
 	else if ((state != APRS_RX_STATE_NO_CLOCK) || ((now - lastNoClockTime) >= NO_CLOCK_RETRY_MS))
 	{
+		// Set the AT1846S to stock gain before starting I2S. The AT1846S is
+		// upstream of the HR-C6000, so decoder input must not use the quiet
+		// speaker-volume attenuation.
+		setFMRxAudioCaptureActive(true);
 		switch (i2sAprsRxStart())
 		{
 			case I2S_APRS_RX_STARTED:
@@ -1000,10 +1021,12 @@ void aprsRxTick(void)
 				state = APRS_RX_STATE_LISTENING;
 				break;
 			case I2S_APRS_RX_NO_CLOCK:
+				setFMRxAudioCaptureActive(false);
 				state = APRS_RX_STATE_NO_CLOCK;
 				lastNoClockTime = now;
 				break;
 			case I2S_APRS_RX_BUSY:
+				setFMRxAudioCaptureActive(false);
 				state = APRS_RX_STATE_PAUSED;
 				break;
 		}
